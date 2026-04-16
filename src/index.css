@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Fraunces", serif;
+  
+  --color-bg: #f4f7f5;
+  --color-surface: #ffffff;
+  --color-surface-2: #eef3f0;
+  --color-border: #d8e6de;
+  --color-text-main: #1a2e22;
+  --color-text-muted: #4a6357;
+  --color-text-dim: #7a9488;
+  --color-accent: #2d7a5a;
+  --color-accent-hover: #4db389;
+  --color-accent-light: #d4ede3;
+  
+  --radius-xl: 1.5rem;
+  --radius-lg: 1rem;
+  --radius-md: 0.75rem;
+  --radius-sm: 0.5rem;
+}
+
+[data-theme='dark'] {
+  --color-bg: #0d1511;
+  --color-surface: #15221b;
+  --color-surface-2: #1c2e25;
+  --color-border: #243b2f;
+  --color-text-main: #eef3f0;
+  --color-text-muted: #a3b8ad;
+  --color-text-dim: #7a9488;
+  --color-accent: #4db389;
+  --color-accent-hover: #6cd1a8;
+  --color-accent-light: #1c3d2f;
+}
+
+@layer base {
+  body {
+    @apply bg-bg text-text-main font-sans antialiased;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif;
+  }
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,400;0,500;0,700;1,300;1,400&family=Inter:wght@300;400;500;600;700&display=swap');
+
+.chart-container {
+  @apply relative w-full h-[250px];
+}
+
+.glass-card {
+  @apply bg-surface/80 backdrop-blur-sm border border-border shadow-sm hover:shadow-md transition-all duration-300;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out forwards;
+}

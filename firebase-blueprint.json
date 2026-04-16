@@ -1,0 +1,113 @@
+{
+  "entities": {
+    "users": {
+      "title": "User",
+      "description": "Application users (parents, teachers, clinicians)",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["parent", "teacher", "clinician"] },
+        "organization": { "type": "string" }
+      },
+      "required": ["uid", "name", "email", "role"]
+    },
+    "children": {
+      "title": "Child",
+      "description": "Children being monitored",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "parentId": { "type": "string" },
+        "name": { "type": "string" },
+        "age": { "type": "number" },
+        "grade": { "type": "string" },
+        "avatar": { "type": "string" },
+        "notes": { "type": "string" },
+        "riskLevel": { "type": "string", "enum": ["low", "medium", "high"] },
+        "lastMoodScore": { "type": "number" },
+        "lastStressLevel": { "type": "string" }
+      },
+      "required": ["parentId", "name", "age"]
+    },
+    "assessments": {
+      "title": "Assessment",
+      "description": "Mental health check-ins",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "childId": { "type": "string" },
+        "submittedBy": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "scores": {
+          "type": "object",
+          "properties": {
+            "mood": { "type": "number" },
+            "energy": { "type": "number" },
+            "sleep": { "type": "number" },
+            "social": { "type": "number" },
+            "stress": { "type": "number" }
+          }
+        },
+        "totalScore": { "type": "number" },
+        "aiInsight": { "type": "string" }
+      },
+      "required": ["childId", "submittedBy", "timestamp", "scores"]
+    },
+    "alerts": {
+      "title": "Alert",
+      "description": "System-generated alerts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "childId": { "type": "string" },
+        "parentId": { "type": "string" },
+        "type": { "type": "string", "enum": ["critical", "warning", "info"] },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["active", "dismissed"] }
+      },
+      "required": ["childId", "parentId", "type", "title", "timestamp"]
+    },
+    "schoolSchedules": {
+      "title": "School Schedule",
+      "description": "Academic events and schedules",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "childId": { "type": "string" },
+        "type": { "type": "string", "enum": ["class", "exam", "activity", "deadline"] },
+        "title": { "type": "string" },
+        "day": { "type": "string", "enum": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] },
+        "time": { "type": "string" },
+        "subject": { "type": "string" },
+        "difficulty": { "type": "string", "enum": ["low", "medium", "high"] }
+      },
+      "required": ["childId", "type", "title", "day", "time"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "users",
+      "description": "User profiles"
+    },
+    "/children/{childId}": {
+      "schema": "children",
+      "description": "Child records"
+    },
+    "/assessments/{assessmentId}": {
+      "schema": "assessments",
+      "description": "Assessment history"
+    },
+    "/alerts/{alertId}": {
+      "schema": "alerts",
+      "description": "Active and past alerts"
+    },
+    "/schoolSchedules/{scheduleId}": {
+      "schema": "schoolSchedules",
+      "description": "School related events"
+    }
+  }
+}
