@@ -279,11 +279,19 @@ export default function Dashboard({ user, children, alerts, onViewProfile }: Das
 
           <div className="grid grid-cols-1 gap-4">
             {children.map(child => (
-              <button 
+              <div 
                 key={child.id}
                 onClick={() => onViewProfile(child)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onViewProfile(child);
+                  }
+                }}
                 className={cn(
-                  "group relative flex items-center gap-4 p-5 rounded-2xl border border-border hover:border-accent hover:bg-accent-light/10 transition-all text-left",
+                  "group relative flex items-center gap-4 p-5 rounded-2xl border border-border hover:border-accent hover:bg-accent-light/10 transition-all text-left cursor-pointer",
                   child.riskLevel === 'high' && "border-red-200 shadow-sm shadow-red-100"
                 )}
               >
@@ -341,7 +349,7 @@ export default function Dashboard({ user, children, alerts, onViewProfile }: Das
                   </div>
                 </div>
                 <ChevronRight size={18} className="text-text-dim group-hover:text-accent group-hover:translate-x-1 transition-all" />
-              </button>
+              </div>
             ))}
           </div>
         </div>

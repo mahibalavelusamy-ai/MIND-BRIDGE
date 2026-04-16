@@ -13,6 +13,7 @@ export interface Child {
   streak?: number;
   level?: number;
   consentToSchoolSharing?: boolean;
+  connectedPlatforms?: string[];
 }
 
 export interface SchoolClass {

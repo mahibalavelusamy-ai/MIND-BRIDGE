@@ -20,7 +20,8 @@ import {
   Users,
   Shield,
   LineChart,
-  Lightbulb
+  Lightbulb,
+  Link
 } from 'lucide-react';
 import { cn } from './lib/utils';
 import { Child, Alert } from './types';
@@ -50,9 +51,10 @@ import SchoolDashboard from './components/SchoolDashboard';
 import PrivacyEthics from './components/PrivacyEthics';
 import Forecasts from './components/Forecasts';
 import Recommendations from './components/Recommendations';
+import SchoolSync from './components/SchoolSync';
 
 type Page = 'landing' | 'user-type' | 'login' | 'app';
-type Tab = 'home' | 'profile' | 'assessment' | 'reports' | 'alerts' | 'privacy' | 'forecasts' | 'recommendations';
+type Tab = 'home' | 'profile' | 'assessment' | 'reports' | 'alerts' | 'privacy' | 'forecasts' | 'recommendations' | 'sync';
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>('landing');
@@ -306,13 +308,19 @@ export default function App() {
               </nav>
             </div>
             <div>
-              <p className="text-[10px] font-bold text-text-dim uppercase tracking-wider mb-2 px-3">Compliance</p>
+              <p className="text-[10px] font-bold text-text-dim uppercase tracking-wider mb-2 px-3">Compliance & Integrations</p>
               <nav className="space-y-1">
                 <SidebarLink 
                   icon={<Shield size={18} />} 
                   label="Privacy & Ethics" 
                   active={activeTab === 'privacy'} 
                   onClick={() => setActiveTab('privacy')} 
+                />
+                <SidebarLink 
+                  icon={<Link size={18} />} 
+                  label="School Sync" 
+                  active={activeTab === 'sync'} 
+                  onClick={() => setActiveTab('sync')} 
                 />
               </nav>
             </div>
@@ -392,7 +400,10 @@ export default function App() {
               {activeTab === 'recommendations' && (
                 <Recommendations children={children} />
               )}
-              {!selectedChild && activeTab !== 'home' && activeTab !== 'reports' && activeTab !== 'alerts' && activeTab !== 'privacy' && activeTab !== 'forecasts' && activeTab !== 'recommendations' && (
+              {activeTab === 'sync' && (
+                <SchoolSync children={children} />
+              )}
+              {!selectedChild && activeTab !== 'home' && activeTab !== 'reports' && activeTab !== 'alerts' && activeTab !== 'privacy' && activeTab !== 'forecasts' && activeTab !== 'recommendations' && activeTab !== 'sync' && (
                 <div className="text-center py-20">
                   <p className="text-text-muted">Please add a child first from the dashboard.</p>
                   <button onClick={() => setActiveTab('home')} className="text-accent font-medium mt-2">Go to Dashboard</button>
