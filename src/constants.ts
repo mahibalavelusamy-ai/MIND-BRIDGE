@@ -27,7 +27,7 @@ export const MOCK_CHILDREN: Child[] = [
   }
 ];
 
-export const ASSESSMENT_QUESTIONS: AssessmentQuestion[] = [
+export const PEDIATRIC_QUESTIONS: AssessmentQuestion[] = [
   { id: '1', category: 'Mood', question: "How has your child been feeling overall this week?", options: ["🌟 Very happy and positive", "😊 Generally good", "😐 Mixed — some good, some bad", "😔 Mostly sad or low", "😫 Very upset or distressed"] },
   { id: '2', category: 'Energy', question: "How has your child's energy and motivation been?", options: ["⚡ Full of energy every day", "💪 Usually energetic", "😴 Some days tired", "📉 Often tired or low energy", "🛑 Exhausted most of the time"] },
   { id: '3', category: 'Sleep', question: "How well has your child been sleeping?", options: ["💤 Sleeping very well", "🌙 Mostly good sleep", "⏰ Occasional bad nights", "🔦 Frequently waking up", "🚫 Very poor sleep most nights"] },
@@ -35,6 +35,18 @@ export const ASSESSMENT_QUESTIONS: AssessmentQuestion[] = [
   { id: '5', category: 'Stress', question: "Have you noticed signs of stress or anxiety?", options: ["🧘 No signs at all", "🍃 Very mild occasionally", "🌪️ Moderate — manageable", "🌩️ Quite stressed frequently", "🌋 Severely stressed or anxious"] },
   { id: '6', category: 'Behavior', question: "How has your child's behavior been (e.g., tantrums, cooperation)?", options: ["✨ Very cooperative and calm", "👍 Generally well-behaved", "🗯️ Occasional outbursts", "💥 Frequent behavioral issues", "🔥 Very difficult to manage"] }
 ];
+
+export const ADULT_QUESTIONS: AssessmentQuestion[] = [
+  { id: '1', category: 'Mood', question: "How have you been feeling overall this week?", options: ["🌟 Thriving and positive", "😊 Generally fine", "😐 Just going through the motions", "😔 Feeling burned out", "😫 Deeply overwhelmed or distressed"] },
+  { id: '2', category: 'Energy', question: "How has your energy and focus been for academics?", options: ["⚡ Highly productive", "💪 Usually focused", "😴 Experiencing brain fog", "📉 Noticeable burnout", "🛑 Completely drained"] },
+  { id: '3', category: 'Sleep', question: "How would you rate your sleep debt and restfulness?", options: ["💤 Getting 8+ hours consistently", "🌙 Mostly adequate rest", "⏰ Relying heavily on naps/caffeine", "🔦 Experiencing insomnia", "🚫 Severe sleep deprivation"] },
+  { id: '4', category: 'Social', question: "How connected do you feel to your peers and support system?", options: ["🤝 Very connected", "👋 Engaging normally", "🚶 Withdrawing slightly", "🏠 Frequently isolating", "🚪 Complete social withdrawal"] },
+  { id: '5', category: 'Stress', question: "How is your academic and personal workload affecting you?", options: ["🧘 Completely manageable", "🍃 Mild stress", "🌪️ Borderline overwhelming", "🌩️ Frequent panic/anxiety", "🌋 Severe chronic anxiety"] },
+  { id: '6', category: 'Behavior', question: "Are you engaging in any negative coping mechanisms?", options: ["✨ Healthy coping only", "👍 Mostly fine", "🗯️ Occasional procrastination/avoidance", "💥 Unhealthy habits forming", "🔥 Highly destructive behaviors"] }
+];
+
+// Keep for backwards compatibility if needed elsewhere
+export const ASSESSMENT_QUESTIONS = PEDIATRIC_QUESTIONS;
 
 export const MOCK_ALERTS: Alert[] = [
   {

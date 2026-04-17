@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Child } from '../types';
-import { db, doc, updateDoc, collection, addDoc, OperationType, handleFirestoreError } from '../lib/firebase';
+import { db, doc, updateDoc, collection, addDoc, auth, getDocs, query, where } from '../lib/firebase';
+import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { Link, CheckCircle, School, AlertCircle, RefreshCw, Smartphone } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -23,11 +24,93 @@ export default function SchoolSync({ children }: SchoolSyncProps) {
     setConnectingPlatform({ childId: child.id, platformId });
     setSyncStatus(null);
 
+    if (platformId === 'google_classroom') {
+      try {
+        const provider = new GoogleAuthProvider();
+        provider.addScope('https://www.googleapis.com/auth/classroom.courses.readonly');
+        provider.addScope('https://www.googleapis.com/auth/classroom.coursework.me.readonly');
+        
+        // Explicitly set the client ID requested by the user
+        provider.setCustomParameters({
+          client_id: '317821077581-pa2mfthll307vvd0g4bld8q7k591kmgl.apps.googleusercontent.com'
+        });
+
+        const result = await signInWithPopup(auth, provider);
+        const credential = GoogleAuthProvider.credentialFromResult(result);
+        const token = credential?.accessToken;
+
+        if (!token) {
+          throw new Error('No access token received from Google.');
+        }
+
+        // 1. Update Child Document with connected platform
+        const childRef = doc(db, 'children', child.id);
+        const currentPlatforms = child.connectedPlatforms || [];
+        if (!currentPlatforms.includes(platformId)) {
+          await updateDoc(childRef, {
+            connectedPlatforms: [...currentPlatforms, platformId]
+          });
+        }
+
+        // 2. Fetch real data from Google Classroom API
+        const coursesRes = await fetch('https://classroom.googleapis.com/v1/courses?courseStates=ACTIVE', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        if (!coursesRes.ok) throw new Error('Failed to fetch courses');
+        const coursesData = await coursesRes.json();
+        const courses = coursesData.courses || [];
+
+        // Fetch existing schedules to deduplicate
+        const existingSchedulesQuery = query(
+          collection(db, 'schoolSchedules'),
+          where('childId', '==', child.id),
+          where('source', '==', platformId)
+        );
+        const existingSchedulesSnap = await getDocs(existingSchedulesQuery);
+        const existingTitles = new Set(existingSchedulesSnap.docs.map(d => d.data().title));
+
+        const newCourses = courses.filter((course: any) => {
+          if (!course) return false;
+          const courseName = course.name || 'Untitled Course';
+          return !existingTitles.has(`Course: ${courseName}`);
+        });
+
+        let addedCount = 0;
+        // Add a sync record for each active course found
+        for (const course of newCourses) {
+          const courseName = course.name || 'Untitled Course';
+          const title = `Course: ${courseName}`;
+          const section = course.section || 'General';
+
+          await addDoc(collection(db, 'schoolSchedules'), {
+            childId: child.id,
+            title,
+            type: 'class',
+            day: 'Monday', // Simplified for demo
+            time: 'TBD', // Replaced placeholder with TBD as per requirements
+            subject: section,
+            difficulty: 'medium',
+            source: platformId
+          });
+          addedCount++;
+        }
+
+        setSyncStatus({ childId: child.id, status: 'success', message: `Successfully connected to Google Classroom and synced ${addedCount} new courses.` });
+        setTimeout(() => setSyncStatus(null), 5000);
+      } catch (error) {
+        console.error("Error syncing Google Classroom:", error);
+        setSyncStatus({ childId: child.id, status: 'error', message: 'Failed to sync data from Google Classroom.' });
+      } finally {
+        setConnectingPlatform(null);
+      }
+      return;
+    }
+
+    // Simulation for MyCamu and Canvas
     try {
-      // Simulate OAuth / API Connection Delay
       await new Promise(resolve => setTimeout(resolve, 2500));
 
-      // 1. Update Child Document with connected platform
       const childRef = doc(db, 'children', child.id);
       const currentPlatforms = child.connectedPlatforms || [];
       if (!currentPlatforms.includes(platformId)) {
@@ -36,7 +119,15 @@ export default function SchoolSync({ children }: SchoolSyncProps) {
         });
       }
 
-      // 2. Simulate fetching and saving schedule data from the platform
+      // Pre-fetch DB existing events to avoid mock duplication
+      const existingSchedulesQuery = query(
+        collection(db, 'schoolSchedules'),
+        where('childId', '==', child.id),
+        where('source', '==', platformId)
+      );
+      const existingSchedulesSnap = await getDocs(existingSchedulesQuery);
+      const existingTitles = new Set(existingSchedulesSnap.docs.map(d => d.data().title));
+
       const mockSchedules = [
         {
           childId: child.id,
@@ -57,26 +148,30 @@ export default function SchoolSync({ children }: SchoolSyncProps) {
           subject: 'Science',
           difficulty: 'medium',
           source: platformId
-        },
-        {
-          childId: child.id,
-          title: 'Parent-Teacher Meeting',
-          type: 'event',
-          day: 'Monday',
-          time: '04:00 PM',
-          subject: 'General',
-          difficulty: 'low',
-          source: platformId
         }
       ];
 
+      let addedCount = 0;
       for (const schedule of mockSchedules) {
-        await addDoc(collection(db, 'schoolSchedules'), schedule);
+        const safeTitle = schedule.title || 'TBD';
+        const safeDay = schedule.day || 'TBD';
+        const safeTime = schedule.time || 'TBD';
+        const safeSubject = schedule.subject || 'TBD';
+
+        if (!existingTitles.has(safeTitle)) {
+          await addDoc(collection(db, 'schoolSchedules'), {
+            ...schedule,
+            title: safeTitle,
+            day: safeDay,
+            time: safeTime,
+            subject: safeSubject
+          });
+          existingTitles.add(safeTitle);
+          addedCount++;
+        }
       }
 
-      setSyncStatus({ childId: child.id, status: 'success', message: `Successfully connected to ${PLATFORMS.find(p => p.id === platformId)?.name} and synced 3 new items.` });
-      
-      // Clear status after 5 seconds
+      setSyncStatus({ childId: child.id, status: 'success', message: `Successfully connected to ${PLATFORMS.find(p => p.id === platformId)?.name} and synced ${addedCount} new items.` });
       setTimeout(() => setSyncStatus(null), 5000);
 
     } catch (error) {

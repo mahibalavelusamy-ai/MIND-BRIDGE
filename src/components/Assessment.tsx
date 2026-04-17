@@ -16,7 +16,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { Child } from '../types';
-import { ASSESSMENT_QUESTIONS } from '../constants';
+import { PEDIATRIC_QUESTIONS, ADULT_QUESTIONS } from '../constants';
 import { cn } from '../lib/utils';
 import { db, auth, collection, addDoc, updateDoc, doc, Timestamp, OperationType, handleFirestoreError, query, where, getDocs, orderBy, limit } from '../lib/firebase';
 import { GoogleGenAI } from "@google/genai";
@@ -27,8 +27,9 @@ import { performRootCauseAnalysis } from '../lib/rootCauseService';
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 interface AssessmentProps {
-  child: Child;
-  onComplete: (level?: number) => void;
+  childrenList: Child[];
+  initialSelectedChildId?: string;
+  onComplete: (level?: number, childName?: string) => void;
 }
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
@@ -40,7 +41,9 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   'Behavior': <Activity size={20} />
 };
 
-export default function Assessment({ child, onComplete }: AssessmentProps) {
+export default function Assessment({ childrenList, initialSelectedChildId, onComplete }: AssessmentProps) {
+  const [selectedChildId, setSelectedChildId] = useState<string>(initialSelectedChildId || '');
+  const [hasStarted, setHasStarted] = useState(false);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [direction, setDirection] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
@@ -49,9 +52,11 @@ export default function Assessment({ child, onComplete }: AssessmentProps) {
   const [schedule, setSchedule] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
 
+  const child = childrenList.find(c => c.id === selectedChildId);
+
   useEffect(() => {
     const fetchData = async () => {
-      if (!auth.currentUser) return;
+      if (!auth.currentUser || !child) return;
       try {
         // Fetch Schedule
         const qSchedule = query(collection(db, 'schoolSchedules'), where('childId', '==', child.id));
@@ -74,18 +79,23 @@ export default function Assessment({ child, onComplete }: AssessmentProps) {
         console.error("Error fetching assessment data:", error);
       }
     };
-    fetchData();
-  }, [child.id]);
+    
+    if (hasStarted && child) {
+      fetchData();
+    }
+  }, [hasStarted, child?.id]);
 
-  const currentQuestion = ASSESSMENT_QUESTIONS[currentIdx];
-  const progress = ((currentIdx + 1) / ASSESSMENT_QUESTIONS.length) * 100;
+  const activeQuestions = child?.age >= 18 ? ADULT_QUESTIONS : PEDIATRIC_QUESTIONS;
+  const currentQuestion = activeQuestions[currentIdx];
+  const progress = ((currentIdx + 1) / activeQuestions.length) * 100;
 
   const handleSelect = (optionIdx: number) => {
     setAnswers({ ...answers, [currentQuestion.id]: optionIdx });
   };
 
   const handleNext = async () => {
-    if (currentIdx < ASSESSMENT_QUESTIONS.length - 1) {
+    if (!child) return;
+    if (currentIdx < activeQuestions.length - 1) {
       setDirection(1);
       setCurrentIdx(currentIdx + 1);
     } else {
@@ -94,7 +104,7 @@ export default function Assessment({ child, onComplete }: AssessmentProps) {
   };
 
   const handleSubmit = async () => {
-    if (!auth.currentUser) return;
+    if (!auth.currentUser || !child) return;
     setIsSubmitting(true);
     
     try {
@@ -137,8 +147,14 @@ export default function Assessment({ child, onComplete }: AssessmentProps) {
           `,
         });
         insight = response.text || insight;
-      } catch (aiError) {
-        console.error("AI Insight generation failed:", aiError);
+      } catch (aiError: any) {
+        const errMsg = aiError instanceof Error ? aiError.message : JSON.stringify(aiError);
+        if (errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('RESOURCE_EXHAUSTED') || aiError?.status === 429 || aiError?.status === 'RESOURCE_EXHAUSTED') {
+          console.warn("AI Quota Exceeded. Using default insight.");
+          insight = "AI analysis is currently unavailable (rate limit exceeded). Please continue to monitor wellness patterns.";
+        } else {
+          console.error("AI Insight generation failed:", aiError);
+        }
       }
 
       // 3. Perform Root-Cause Analysis
@@ -181,13 +197,13 @@ export default function Assessment({ child, onComplete }: AssessmentProps) {
         for (const alert of alerts) {
           await addDoc(collection(db, 'alerts'), {
             ...alert,
-            parentId: auth.currentUser.uid
+            parentId: child.parentId || auth.currentUser.uid
           });
         }
       }
 
       setIsFinished(true);
-      setTimeout(() => onComplete(newLevel), 3000);
+      setTimeout(() => onComplete(newLevel, child.name), 3000);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'assessments');
     } finally {
@@ -214,12 +230,12 @@ export default function Assessment({ child, onComplete }: AssessmentProps) {
         </motion.div>
         <h2 className="text-4xl font-serif mb-4">You're a Star! 🌟</h2>
         <p className="text-text-muted max-w-sm mb-8">
-          Amazing job completing your check-in, {child.name}! You've earned some rewards for your wellness garden.
+          Amazing job completing your check-in, {child.name}! You've earned some rewards for your {child.age >= 18 ? 'habit tracker' : 'wellness garden'}.
         </p>
         
         <div className="flex gap-4 mb-8">
           <div className="bg-surface border border-border p-4 rounded-2xl shadow-sm">
-            <p className="text-[10px] font-bold text-text-dim uppercase mb-1">Gems Earned</p>
+            <p className="text-[10px] font-bold text-text-dim uppercase mb-1">{child.age >= 18 ? 'Credits' : 'Gems'} Earned</p>
             <div className="flex items-center gap-2 text-2xl font-bold text-accent">
               <Sparkles size={20} /> +50
             </div>
@@ -254,6 +270,46 @@ export default function Assessment({ child, onComplete }: AssessmentProps) {
       scale: 0.95
     })
   };
+
+  if (!hasStarted) {
+    return (
+      <div className="max-w-xl mx-auto py-12 px-4 animate-fade-in flex flex-col items-center text-center">
+        <h1 className="text-3xl md:text-4xl font-serif mb-4">Start Assessment</h1>
+        <p className="text-text-muted mb-8">Who is taking this check-in today?</p>
+        
+        <div className="grid grid-cols-2 gap-4 w-full mb-8">
+          {childrenList.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => setSelectedChildId(c.id)}
+              className={cn(
+                "p-6 rounded-3xl border-2 transition-all flex flex-col items-center gap-4 bg-surface",
+                selectedChildId === c.id 
+                  ? "border-accent shadow-md bg-accent/5 ring-4 ring-accent/10" 
+                  : "border-border hover:border-text-dim hover:bg-surface-2"
+              )}
+            >
+              <div className="w-16 h-16 rounded-full bg-accent-light flex items-center justify-center text-3xl">
+                {c.avatar}
+              </div>
+              <span className="font-bold text-lg">{c.name}</span>
+            </button>
+          ))}
+        </div>
+
+        <button 
+          onClick={() => setHasStarted(true)}
+          disabled={!selectedChildId}
+          className="w-full md:w-auto px-12 py-4 bg-accent text-white rounded-xl font-bold hover:bg-accent-hover transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg disabled:hover:shadow-none"
+        >
+          Begin Check-in
+        </button>
+      </div>
+    );
+  }
+
+  // Add null check for child in case compilation requires it (though covered by disabled button)
+  if (!child) return null;
 
   return (
     <div className="max-w-3xl mx-auto py-8 px-4 animate-fade-in min-h-[80vh] flex flex-col">
@@ -395,7 +451,7 @@ export default function Assessment({ child, onComplete }: AssessmentProps) {
         </button>
 
         <div className="hidden md:flex gap-2">
-          {ASSESSMENT_QUESTIONS.map((_, i) => (
+          {activeQuestions.map((_, i) => (
             <div 
               key={i} 
               className={cn(
@@ -414,7 +470,7 @@ export default function Assessment({ child, onComplete }: AssessmentProps) {
             isSubmitting && "animate-pulse"
           )}
         >
-          {isSubmitting ? "Analyzing..." : currentIdx === ASSESSMENT_QUESTIONS.length - 1 ? "Complete Check-in" : <>Next Step <ChevronRight size={20} /></>}
+          {isSubmitting ? "Analyzing..." : currentIdx === activeQuestions.length - 1 ? "Complete Check-in" : <>Next Step <ChevronRight size={20} /></>}
         </button>
       </div>
       {/* AI Disclaimer */}

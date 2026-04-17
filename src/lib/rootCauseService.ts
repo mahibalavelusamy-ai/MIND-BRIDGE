@@ -91,8 +91,13 @@ export async function performRootCauseAnalysis(
       confidence: aiResult.confidence || 0.7
     };
 
-  } catch (error) {
-    console.error("Root Cause AI Analysis failed:", error);
+  } catch (error: any) {
+    const errMsg = error instanceof Error ? error.message : JSON.stringify(error);
+    if (errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('RESOURCE_EXHAUSTED') || error?.status === 429 || error?.status === 'RESOURCE_EXHAUSTED') {
+      console.warn("AI Quota Exceeded for Root Cause Analysis.");
+    } else {
+      console.error("Root Cause AI Analysis failed:", error);
+    }
     return {
       childId: child.id,
       timestamp: new Date().toISOString(),

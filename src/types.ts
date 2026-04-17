@@ -1,9 +1,11 @@
 export interface Child {
   id: string;
+  parentId?: string;
   name: string;
   age: number;
   grade: string;
   avatar: string;
+  gender?: 'male' | 'female' | 'other';
   riskLevel: 'low' | 'medium' | 'high';
   lastCheckIn: string;
   moodScore: number;
@@ -14,6 +16,8 @@ export interface Child {
   level?: number;
   consentToSchoolSharing?: boolean;
   connectedPlatforms?: string[];
+  pin?: string;
+  privacyLevel?: 'full' | 'summary';
 }
 
 export interface SchoolClass {

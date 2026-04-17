@@ -39,6 +39,14 @@ service cloud.firestore {
       return isAuthenticated() && get(/databases/$(database)/documents/children/$(childId)).data.parentId == request.auth.uid;
     }
 
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isTeacherOrClinician() {
+      return isAuthenticated() && getUserRole() in ['teacher', 'clinician'];
+    }
+
     function isValidUser(data) {
       return data.keys().hasAll(['uid', 'name', 'email', 'role']) &&
              data.uid == request.auth.uid &&
@@ -51,15 +59,59 @@ service cloud.firestore {
       return data.keys().hasAll(['parentId', 'name', 'age']) &&
              data.parentId == request.auth.uid &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             data.age is number && data.age > 0 && data.age < 20;
+             data.age is number && data.age > 0 && data.age < 20 &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() < 2000)) &&
+             (!('grade' in data) || (data.grade is string && data.grade.size() < 50)) &&
+             (!('avatar' in data) || (data.avatar is string && data.avatar.size() < 500)) &&
+             (!('riskLevel' in data) || data.riskLevel in ['low', 'medium', 'high']) &&
+             (!('lastMoodScore' in data) || data.lastMoodScore is number) &&
+             (!('lastStressLevel' in data) || data.lastStressLevel is string) &&
+             (!('connectedPlatforms' in data) || data.connectedPlatforms is list);
     }
 
     function isValidAssessment(data) {
-      return data.keys().hasAll(['childId', 'submittedBy', 'timestamp', 'scores']) &&
+      return data.keys().hasAll(['childId', 'submittedBy', 'timestamp', 'scores', 'totalScore']) &&
              data.submittedBy == request.auth.uid &&
              data.scores is map &&
+             data.scores.keys().hasAll(['mood', 'energy', 'sleep', 'social', 'stress']) &&
              data.scores.mood is number &&
-             data.scores.stress is number;
+             data.scores.stress is number &&
+             data.totalScore is number &&
+             (!('aiInsight' in data) || (data.aiInsight is string && data.aiInsight.size() < 5000));
+    }
+
+    function isValidAlert(data) {
+      return data.keys().hasAll(['childId', 'parentId', 'type', 'title', 'timestamp']) &&
+             data.type in ['critical', 'warning', 'info'] &&
+             data.title is string && data.title.size() < 200 &&
+             (!('description' in data) || (data.description is string && data.description.size() < 2000)) &&
+             (!('status' in data) || data.status in ['active', 'dismissed']);
+    }
+
+    function isValidSchoolSchedule(data) {
+      return data.keys().hasAll(['childId', 'type', 'title', 'day', 'time']) &&
+             data.type in ['class', 'exam', 'activity', 'deadline', 'assignment', 'event'] &&
+             data.title is string && data.title.size() < 200 &&
+             data.day in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] &&
+             data.time is string && data.time.size() < 50 &&
+             (!('subject' in data) || (data.subject is string && data.subject.size() < 100)) &&
+             (!('difficulty' in data) || data.difficulty in ['low', 'medium', 'high']) &&
+             (!('source' in data) || (data.source is string && data.source.size() < 100));
+    }
+
+    function isValidSelfCheck(data) {
+      return data.keys().hasAll(['childId', 'timestamp', 'mood']) &&
+             data.mood is number &&
+             (!('tags' in data) || (data.tags is list && data.tags.size() < 20)) &&
+             (!('note' in data) || (data.note is string && data.note.size() < 1000)) &&
+             (!('interventionUsed' in data) || (data.interventionUsed is string && data.interventionUsed.size() < 100));
+    }
+
+    function isValidRootCauseAnalysis(data) {
+      return data.keys().hasAll(['childId', 'timestamp', 'primaryDriver']) &&
+             data.primaryDriver is string && data.primaryDriver.size() < 500 &&
+             (!('contributingFactors' in data) || (data.contributingFactors is list && data.contributingFactors.size() < 20)) &&
+             (!('recommendedFocus' in data) || (data.recommendedFocus is string && data.recommendedFocus.size() < 1000));
     }
 
     // ===============================================================
@@ -69,30 +121,46 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isOwner(userId);
       allow create: if isOwner(userId) && isValidUser(request.resource.data);
-      allow update: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role == resource.data.role;
     }
 
     match /children/{childId} {
-      allow read: if isAuthenticated() && (resource.data.parentId == request.auth.uid || request.auth.token.role in ['teacher', 'clinician']);
+      allow read: if isAuthenticated() && (resource.data.parentId == request.auth.uid || isTeacherOrClinician());
       allow create: if isAuthenticated() && isValidChild(request.resource.data);
-      allow update: if isAuthenticated() && (resource.data.parentId == request.auth.uid) && isValidChild(request.resource.data);
+      allow update: if isAuthenticated() && (resource.data.parentId == request.auth.uid) && isValidChild(request.resource.data) && request.resource.data.parentId == resource.data.parentId;
       allow delete: if isAuthenticated() && (resource.data.parentId == request.auth.uid);
     }
 
     match /assessments/{assessmentId} {
-      allow read: if isAuthenticated() && (isParentOf(resource.data.childId) || request.auth.token.role in ['teacher', 'clinician']);
-      allow create: if isAuthenticated() && isValidAssessment(request.resource.data) && isParentOf(request.resource.data.childId);
+      allow read: if isAuthenticated() && (isParentOf(resource.data.childId) || isTeacherOrClinician());
+      allow create: if isAuthenticated() && isValidAssessment(request.resource.data) && (isParentOf(request.resource.data.childId) || isTeacherOrClinician());
+      allow update: if isAuthenticated() && isParentOf(resource.data.childId) && isValidAssessment(request.resource.data) && request.resource.data.childId == resource.data.childId;
     }
 
     match /alerts/{alertId} {
-      allow read: if isAuthenticated() && (resource.data.parentId == request.auth.uid || request.auth.token.role in ['teacher', 'clinician']);
-      allow create: if isAuthenticated() && (request.resource.data.parentId == request.auth.uid || request.auth.token.role == 'teacher');
-      allow update: if isAuthenticated() && (resource.data.parentId == request.auth.uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+      allow read: if isAuthenticated() && (resource.data.parentId == request.auth.uid || isTeacherOrClinician());
+      allow create: if isAuthenticated() && isValidAlert(request.resource.data) && (request.resource.data.parentId == request.auth.uid || getUserRole() == 'teacher');
+      allow update: if isAuthenticated() && (resource.data.parentId == request.auth.uid) && isValidAlert(request.resource.data) && request.resource.data.parentId == resource.data.parentId && request.resource.data.childId == resource.data.childId;
+      allow delete: if isAuthenticated() && (resource.data.parentId == request.auth.uid || getUserRole() == 'teacher');
     }
 
     match /schoolSchedules/{scheduleId} {
-      allow read: if isAuthenticated() && (isParentOf(resource.data.childId) || request.auth.token.role in ['teacher', 'clinician']);
-      allow write: if isAuthenticated() && (isParentOf(request.resource.data.childId) || request.auth.token.role == 'teacher');
+      allow read: if isAuthenticated() && (isParentOf(resource.data.childId) || isTeacherOrClinician());
+      allow create: if isAuthenticated() && isValidSchoolSchedule(request.resource.data) && (isParentOf(request.resource.data.childId) || getUserRole() == 'teacher');
+      allow update: if isAuthenticated() && (isParentOf(resource.data.childId) || getUserRole() == 'teacher') && isValidSchoolSchedule(request.resource.data) && request.resource.data.childId == resource.data.childId;
+      allow delete: if isAuthenticated() && (isParentOf(resource.data.childId) || getUserRole() == 'teacher');
+    }
+
+    match /selfChecks/{checkId} {
+      allow read: if isAuthenticated() && (isParentOf(resource.data.childId) || isTeacherOrClinician());
+      allow create: if isAuthenticated() && isValidSelfCheck(request.resource.data) && (isParentOf(request.resource.data.childId) || isTeacherOrClinician());
+      allow update: if isAuthenticated() && isParentOf(resource.data.childId) && isValidSelfCheck(request.resource.data) && request.resource.data.childId == resource.data.childId;
+    }
+
+    match /rootCauseAnalyses/{analysisId} {
+      allow read: if isAuthenticated() && (isParentOf(resource.data.childId) || isTeacherOrClinician());
+      allow create: if isAuthenticated() && isValidRootCauseAnalysis(request.resource.data) && (isParentOf(request.resource.data.childId) || isTeacherOrClinician());
+      allow update: if isAuthenticated() && isParentOf(resource.data.childId) && isValidRootCauseAnalysis(request.resource.data) && request.resource.data.childId == resource.data.childId;
     }
   }
 }

@@ -66,8 +66,13 @@ export async function predictFutureRisk(
       horizonDays: 7,
       timestamp: new Date().toISOString()
     };
-  } catch (error) {
-    console.error("Predictive model error:", error);
+  } catch (error: any) {
+    const errMsg = error instanceof Error ? error.message : JSON.stringify(error);
+    if (errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('RESOURCE_EXHAUSTED') || error?.status === 429 || error?.status === 'RESOURCE_EXHAUSTED') {
+      console.warn("AI Quota Exceeded for Predictive Modeling.");
+    } else {
+      console.error("Predictive model error:", error);
+    }
     return null;
   }
 }

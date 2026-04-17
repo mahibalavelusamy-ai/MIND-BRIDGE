@@ -38,9 +38,9 @@ import {
 } from 'lucide-react';
 import { Child, BehavioralPattern, Anomaly } from '../types';
 import { cn } from '../lib/utils';
-import { db, collection, query, where, getDocs, orderBy } from '../lib/firebase';
+import { db, auth, collection, query, where, getDocs, orderBy, addDoc, handleFirestoreError, OperationType } from '../lib/firebase';
 import { detectBehavioralPatterns } from '../lib/patternService';
-import { Activity, AlertTriangle, Fingerprint } from 'lucide-react';
+import { Activity, AlertTriangle, Fingerprint, Lock } from 'lucide-react';
 
 interface ReportsProps {
   children: Child[];
@@ -117,6 +117,29 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
     fetchData();
   }, [selectedChild?.id, timeframe]);
 
+  const handleSetReminder = async () => {
+    try {
+      if ('Notification' in window) {
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          // You could potentially schedule a real browser notification here if you had a service worker
+        }
+      }
+
+      await addDoc(collection(db, 'alerts'), {
+        type: 'info',
+        title: 'Check-in Reminder',
+        description: `Recommended morning check-in for ${selectedChild?.name || 'child'} to track sleep patterns.`,
+        childId: selectedChild?.id || 'unknown_child',
+        parentId: auth.currentUser?.uid || '',
+        timestamp: new Date().toISOString()
+      });
+      alert('Reminder set successfully!');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'alerts');
+    }
+  };
+
   if (!selectedChild) {
     return (
       <div className="space-y-8 animate-fade-in pb-12">
@@ -136,11 +159,11 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
             >
               <div className="flex items-center gap-4 mb-6">
                 <div className="w-16 h-16 rounded-full bg-accent-light flex items-center justify-center text-3xl">
-                  {child.avatar}
+                  {child.age >= 18 ? <span className="font-serif">{child.name ? child.name.charAt(0).toUpperCase() : '👤'}</span> : child.avatar}
                 </div>
                 <div>
                   <h3 className="text-xl font-serif font-bold group-hover:text-accent transition-colors">{child.name}</h3>
-                  <p className="text-xs text-text-dim uppercase font-bold tracking-widest">{child.grade}</p>
+                  <p className="text-xs text-text-dim uppercase font-bold tracking-widest">{child.age >= 18 ? 'College / University' : child.grade}</p>
                 </div>
               </div>
 
@@ -184,14 +207,28 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
     { subject: 'Sleep', A: 6 - latestAssessment.scores.sleep, fullMark: 5 },
     { subject: 'Social', A: 6 - latestAssessment.scores.social, fullMark: 5 },
     { subject: 'Stress', A: 6 - latestAssessment.scores.stress, fullMark: 5 },
-  ] : [];
+  ] : [
+    { subject: 'Mood', A: 0, fullMark: 5 },
+    { subject: 'Energy', A: 0, fullMark: 5 },
+    { subject: 'Sleep', A: 0, fullMark: 5 },
+    { subject: 'Social', A: 0, fullMark: 5 },
+    { subject: 'Stress', A: 0, fullMark: 5 },
+  ];
 
-  const trendData = assessments.slice(0, 7).reverse().map(a => ({
+  const trendData = assessments.length > 0 ? assessments.slice(0, 7).reverse().map(a => ({
     date: new Date(a.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
     wellness: 6 - a.totalScore,
     mood: 6 - a.scores.mood,
     stress: a.scores.stress
-  }));
+  })) : [
+    { date: 'Mon', wellness: 0, mood: 0, stress: 0 },
+    { date: 'Tue', wellness: 0, mood: 0, stress: 0 },
+    { date: 'Wed', wellness: 0, mood: 0, stress: 0 },
+    { date: 'Thu', wellness: 0, mood: 0, stress: 0 },
+    { date: 'Fri', wellness: 0, mood: 0, stress: 0 },
+    { date: 'Sat', wellness: 0, mood: 0, stress: 0 },
+    { date: 'Sun', wellness: 0, mood: 0, stress: 0 }
+  ];
 
   return (
     <div className="space-y-8 animate-fade-in pb-12">
@@ -201,7 +238,7 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
           <p className="text-text-muted mt-1">Deep dive into behavioral patterns and AI-driven insights.</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex bg-surface border border-border rounded-2xl p-1 shadow-sm">
+          <div className="no-print flex bg-surface border border-border rounded-2xl p-1 shadow-sm">
             {(['7d', '30d', 'all'] as const).map((t) => (
               <button
                 key={t}
@@ -217,8 +254,11 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
               </button>
             ))}
           </div>
-          <button className="flex items-center gap-2 px-6 py-3 bg-surface border border-border rounded-2xl text-sm font-bold hover:bg-surface-2 transition-all shadow-sm">
-            <Download size={18} /> Export PDF
+          <button 
+            onClick={() => window.print()}
+            className="no-print flex items-center gap-2 px-6 py-3 bg-white/20 backdrop-blur-md border border-white/40 rounded-2xl text-sm font-bold shadow-[0_8px_32px_rgba(45,122,90,0.1)] hover:bg-white/30 hover:border-white/50 transition-all text-text-main"
+          >
+            <Download size={18} /> Export Report (PDF)
           </button>
         </div>
       </div>
@@ -265,22 +305,17 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
               </div>
             </div>
             <div className="prose prose-sm max-w-none text-text-muted leading-relaxed bg-surface-2 p-6 rounded-3xl border border-border">
-              {latestAssessment?.aiInsight || "No assessment data available yet. Complete a check-in to see AI insights."}
-            </div>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8">
-              <div className="p-6 bg-accent-light/10 rounded-3xl border border-accent/10">
-                <h4 className="font-bold text-accent text-sm mb-2 flex items-center gap-2">
-                  <TrendingUp size={16} /> Key Trend
-                </h4>
-                <p className="text-sm text-text-muted">Mood has stabilized over the last 3 days despite increased academic load.</p>
-              </div>
-              <div className="p-6 bg-amber-50 rounded-3xl border border-amber-100">
-                <h4 className="font-bold text-amber-700 text-sm mb-2 flex items-center gap-2">
-                  <Info size={16} /> Recommendation
-                </h4>
-                <p className="text-sm text-text-muted">Consider a 15-minute 'unstructured play' session after school to lower cortisol.</p>
-              </div>
+              <ul className="space-y-4">
+                {(latestAssessment?.aiInsight || "No assessment data available yet. Complete a check-in to see AI insights.")
+                  .split('\n')
+                  .filter((line: string) => line.trim().length > 0)
+                  .map((line: string, i: number) => (
+                    <li key={i} className="flex items-start gap-3">
+                      <span className="w-1.5 h-1.5 rounded-full bg-accent mt-2 shrink-0" />
+                      <span>{line.replace(/^- /, '')}</span>
+                    </li>
+                  ))}
+              </ul>
             </div>
           </div>
 
@@ -300,7 +335,10 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
               <div className="relative z-10">
                 <h3 className="text-lg font-serif mb-2">Next Check-in</h3>
                 <p className="text-sm text-text-muted mb-6">Recommended for tomorrow morning to track sleep patterns.</p>
-                <button className="w-full py-4 bg-accent text-white rounded-2xl text-xs font-bold uppercase tracking-widest hover:bg-accent-hover transition-all shadow-lg shadow-accent/20">
+                <button 
+                  onClick={handleSetReminder}
+                  className="w-full py-4 bg-accent text-white rounded-2xl text-xs font-bold uppercase tracking-widest hover:bg-accent-hover transition-all shadow-lg shadow-accent/20"
+                >
                   Set Reminder
                 </button>
               </div>
@@ -407,6 +445,12 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
                 </div>
               </div>
 
+              {selectedChild.privacyLevel === 'summary' ? (
+                <div className="flex items-center gap-3 text-purple-400 bg-purple-900/20 p-4 rounded-xl border border-purple-500/20">
+                  <Lock size={20} />
+                  <p className="text-sm font-medium">Detailed behavioral patterns are hidden due to privacy settings.</p>
+                </div>
+              ) : (
               <div className="space-y-4">
                 {patterns.length > 0 ? patterns.map((p) => (
                   <div key={p.id} className="p-6 bg-surface-2 rounded-3xl border border-border group hover:border-accent/30 transition-all">
@@ -436,6 +480,7 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
                   </div>
                 )}
               </div>
+              )}
             </div>
 
             {/* Anomalies Section */}
@@ -450,6 +495,12 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
                 </div>
               </div>
 
+              {selectedChild.privacyLevel === 'summary' ? (
+                <div className="flex items-center gap-3 text-purple-400 bg-purple-900/20 p-4 rounded-xl border border-purple-500/20">
+                  <Lock size={20} />
+                  <p className="text-sm font-medium">Anomaly detection data is hidden due to privacy settings.</p>
+                </div>
+              ) : (
               <div className="space-y-4">
                 {anomalies.length > 0 ? anomalies.map((a) => (
                   <div key={a.id} className="p-6 bg-red-50/30 border border-red-100 rounded-3xl">
@@ -474,6 +525,7 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
                   </div>
                 )}
               </div>
+              )}
             </div>
           </div>
         </div>

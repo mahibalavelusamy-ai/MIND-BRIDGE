@@ -38,7 +38,6 @@ export async function generateRecommendations(
       CURRENT STATE:
       - Latest Scores (1-5, 5 is worst): ${JSON.stringify(latest.scores)}
       - School Schedule: ${JSON.stringify(schedule)}
-      - Recent Trends: ${assessments.length > 1 ? "Mood is " + (assessments[0].scores.mood < assessments[1].scores.mood ? "improving" : "declining") : "Baseline established"}
       
       RECOMMENDATION RULES:
       1. CONTEXT-AWARE: If an exam is coming up, suggest a study-break or relaxation technique.
@@ -87,8 +86,13 @@ export async function generateRecommendations(
       ...r
     }));
 
-  } catch (error) {
-    console.error("Recommendation generation failed:", error);
+  } catch (error: any) {
+    const errMsg = error instanceof Error ? error.message : JSON.stringify(error);
+    if (errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('RESOURCE_EXHAUSTED') || error?.status === 429 || error?.status === 'RESOURCE_EXHAUSTED') {
+      console.warn("AI Quota Exceeded for Recommendations.");
+    } else {
+      console.error("Recommendation generation failed:", error);
+    }
     return [];
   }
 }

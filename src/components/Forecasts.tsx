@@ -11,23 +11,34 @@ interface ForecastsProps {
 
 export default function Forecasts({ children }: ForecastsProps) {
   const [forecasts, setForecasts] = useState<Record<string, PredictiveRisk>>({});
+  const [childAssessments, setChildAssessments] = useState<Record<string, any[]>>({});
   const [isLoading, setIsLoading] = useState(true);
+
+  const calculateDisplayScore = (assessments: any[]) => {
+    if (!assessments || assessments.length === 0) return 0;
+    const sum = assessments.reduce((acc, curr) => acc + (curr.totalScore || curr.score || 0), 0);
+    return Math.round(sum / assessments.length);
+  };
 
   useEffect(() => {
     const fetchAllForecasts = async () => {
       setIsLoading(true);
       const newForecasts: Record<string, PredictiveRisk> = {};
+      const newAssessments: Record<string, any[]> = {};
       
       for (const child of children) {
         try {
           const qA = query(
             collection(db, 'assessments'), 
-            where('childId', '==', child.id),
-            orderBy('timestamp', 'desc'),
-            limit(7)
+            where('childId', '==', child.id)
           );
           const snapA = await getDocs(qA);
-          const assessments = snapA.docs.map(d => d.data());
+          const assessments = snapA.docs
+            .map(d => d.data())
+            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+            .slice(0, 7);
+          
+          newAssessments[child.id] = assessments;
 
           const qS = query(collection(db, 'schoolSchedules'), where('childId', '==', child.id));
           const snapS = await getDocs(qS);
@@ -43,6 +54,7 @@ export default function Forecasts({ children }: ForecastsProps) {
       }
       
       setForecasts(newForecasts);
+      setChildAssessments(newAssessments);
       setIsLoading(false);
     };
 
@@ -86,9 +98,13 @@ export default function Forecasts({ children }: ForecastsProps) {
                   <div className="w-16 h-16 rounded-full bg-accent-light flex items-center justify-center text-3xl">
                     {child.avatar}
                   </div>
-                  <div>
+                  <div className="flex-1">
                     <h2 className="text-2xl font-serif font-bold">{child.name}</h2>
                     <p className="text-sm text-text-muted">7-Day Outlook</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-bold text-text-dim uppercase mb-1">Avg Score</p>
+                    <p className="text-2xl font-serif font-bold text-accent">{calculateDisplayScore(childAssessments[child.id])}</p>
                   </div>
                 </div>
 

@@ -15,7 +15,8 @@ import {
   deleteDoc,
   Timestamp,
   orderBy,
-  limit
+  limit,
+  increment
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -62,6 +63,13 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     path
   }
   console.error('Firestore Error: ', JSON.stringify(errInfo));
+  
+  // Dispatch custom event for global error handling (e.g., to show a toast)
+  if (typeof window !== 'undefined') {
+    const event = new CustomEvent('firestore-error', { detail: errInfo });
+    window.dispatchEvent(event);
+  }
+  
   throw new Error(JSON.stringify(errInfo));
 }
 
@@ -94,6 +102,7 @@ export {
   Timestamp,
   orderBy,
   limit,
+  increment,
   onAuthStateChanged
 };
 export type { User };

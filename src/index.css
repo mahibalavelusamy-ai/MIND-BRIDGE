@@ -4,10 +4,10 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Fraunces", serif;
   
-  --color-bg: #f4f7f5;
-  --color-surface: #ffffff;
-  --color-surface-2: #eef3f0;
-  --color-border: #d8e6de;
+  --color-bg: #fdfbf7;
+  --color-surface: rgba(255, 255, 255, 0.4);
+  --color-surface-2: rgba(255, 255, 255, 0.6);
+  --color-border: rgba(255, 255, 255, 0.5);
   --color-text-main: #1a2e22;
   --color-text-muted: #4a6357;
   --color-text-dim: #7a9488;
@@ -22,10 +22,10 @@
 }
 
 [data-theme='dark'] {
-  --color-bg: #0d1511;
-  --color-surface: #15221b;
-  --color-surface-2: #1c2e25;
-  --color-border: #243b2f;
+  --color-bg: #0b0c10;
+  --color-surface: rgba(25, 25, 30, 0.4);
+  --color-surface-2: rgba(35, 35, 45, 0.5);
+  --color-border: rgba(255, 255, 255, 0.1);
   --color-text-main: #eef3f0;
   --color-text-muted: #a3b8ad;
   --color-text-dim: #7a9488;
@@ -36,7 +36,13 @@
 
 @layer base {
   body {
-    @apply bg-bg text-text-main font-sans antialiased;
+    @apply bg-bg text-text-main font-sans antialiased relative min-h-screen;
+    background-image: 
+      radial-gradient(at 0% 0%, rgba(45, 122, 90, 0.15) 0px, transparent 50%),
+      radial-gradient(at 100% 0%, rgba(77, 179, 137, 0.15) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, rgba(192, 57, 43, 0.1) 0px, transparent 50%),
+      radial-gradient(at 0% 100%, rgba(196, 122, 30, 0.1) 0px, transparent 50%);
+    background-attachment: fixed;
   }
   
   h1, h2, h3, h4, h5, h6 {
@@ -51,8 +57,22 @@
 }
 
 .glass-card {
-  @apply bg-surface/80 backdrop-blur-sm border border-border shadow-sm hover:shadow-md transition-all duration-300;
+  @apply bg-surface backdrop-blur-md border border-border shadow-[0_8px_32px_rgba(0,0,0,0.05)] hover:shadow-[0_8px_32px_rgba(45,122,90,0.15)] transition-all duration-500 rounded-[2rem] relative overflow-hidden;
 }
+
+.glass-card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0) 100%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
@@ -61,4 +81,57 @@
 
 .animate-fade-in {
   animation: fadeIn 0.4s ease-out forwards;
+}
+
+@media print {
+  /* Hide sidebar and navigation */
+  aside, nav, .no-print {
+    display: none !important;
+  }
+  
+  /* Override variables for clean printing regardless of light/dark mode */
+  :root, [data-theme='dark'] {
+    --color-bg: #fff !important;
+    --color-surface: #fff !important;
+    --color-surface-2: #f9f9f9 !important;
+    --color-border: #e5e5e5 !important;
+    --color-text-main: #111 !important;
+    --color-text-muted: #444 !important;
+    --color-text-dim: #666 !important;
+  }
+
+  body {
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  /* Fix absolute positioning of content area since navbar and sidebar are hidden */
+  .pt-16 {
+    padding-top: 0 !important;
+  }
+
+  /* Remove glass effects */
+  .glass-card {
+    background: #fff !important;
+    backdrop-filter: none !important;
+    box-shadow: none !important;
+    border: 1px solid #e5e5e5 !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    margin-bottom: 24px !important;
+  }
+  
+  .glass-card::before {
+    display: none !important;
+  }
+
+  /* Recharts overrides to preserve stroke visibility and ensure a white background */
+  .recharts-wrapper {
+    background: #fff !important;
+  }
+
+  @page {
+    size: A4;
+    margin: 1.5cm;
+  }
 }

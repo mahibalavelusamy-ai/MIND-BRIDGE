@@ -22,12 +22,13 @@ export default function Recommendations({ children }: RecommendationsProps) {
         try {
           const qA = query(
             collection(db, 'assessments'),
-            where('childId', '==', child.id),
-            orderBy('timestamp', 'desc'),
-            limit(5)
+            where('childId', '==', child.id)
           );
           const snapA = await getDocs(qA);
-          const assessments = snapA.docs.map(d => d.data());
+          const assessments = snapA.docs
+            .map(d => d.data())
+            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+            .slice(0, 5);
 
           const qS = query(collection(db, 'schoolSchedules'), where('childId', '==', child.id));
           const snapS = await getDocs(qS);

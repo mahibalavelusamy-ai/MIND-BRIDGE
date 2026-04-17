@@ -12,6 +12,7 @@ import {
   Moon, 
   Sun,
   ChevronRight,
+  ChevronDown,
   Plus,
   AlertCircle,
   TrendingUp,
@@ -38,6 +39,7 @@ import {
   doc,
   getDoc,
   setDoc,
+  deleteDoc,
   OperationType,
   handleFirestoreError
 } from './lib/firebase';
@@ -70,8 +72,39 @@ export default function App() {
   const [children, setChildren] = useState<Child[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [selectedChild, setSelectedChild] = useState<Child | null>(null);
+  const [pinModalProfile, setPinModalProfile] = useState<Child | null>(null);
+  const [enteredPin, setEnteredPin] = useState('');
+  const [pinError, setPinError] = useState('');
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [levelUpToast, setLevelUpToast] = useState<{ show: boolean; level: number; childName: string }>({ show: false, level: 0, childName: '' });
+  const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
+  const [errorToast, setErrorToast] = useState<{ show: boolean; message: string }>({ show: false, message: '' });
+
+  useEffect(() => {
+    const handleGlobalError = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      let errorMessage = "An unexpected error occurred.";
+      
+      if (customEvent.detail && customEvent.detail.error) {
+        const errStr = customEvent.detail.error;
+        if (errStr.includes('Missing or insufficient permissions') || errStr.includes('permission-denied')) {
+          errorMessage = "You don't have permission to access this data.";
+        } else if (errStr.includes('offline') || errStr.includes('network')) {
+          errorMessage = "You appear to be offline. Please check your internet connection.";
+        } else if (errStr.includes('quota')) {
+          errorMessage = "The application has reached its usage limit. Please try again later.";
+        } else {
+          errorMessage = errStr;
+        }
+      }
+      
+      setErrorToast({ show: true, message: errorMessage });
+      setTimeout(() => setErrorToast({ show: false, message: '' }), 6000);
+    };
+
+    window.addEventListener('firestore-error', handleGlobalError);
+    return () => window.removeEventListener('firestore-error', handleGlobalError);
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -103,9 +136,7 @@ export default function App() {
       setChildren(childrenData);
       
       if (childrenData.length > 0) {
-        if (!selectedChild) {
-          setSelectedChild(childrenData[0]);
-        } else {
+        if (selectedChild) {
           const updatedSelected = childrenData.find(c => c.id === selectedChild.id);
           if (updatedSelected) {
             setSelectedChild(updatedSelected);
@@ -129,7 +160,7 @@ export default function App() {
       unsubscribeChildren();
       unsubscribeAlerts();
     };
-  }, [user, children.length]);
+  }, [user, selectedChild?.id]);
 
   useEffect(() => {
     if (isDarkMode) {
@@ -161,6 +192,27 @@ export default function App() {
     await setDoc(doc(db, 'users', auth.currentUser.uid), userData);
     setUser(userData);
     setCurrentPage('app');
+  };
+
+  const handleProfileSelect = (child: Child) => {
+    if (child.pin) {
+      setPinModalProfile(child);
+      setEnteredPin('');
+      setPinError('');
+    } else {
+      setSelectedChild(child);
+    }
+  };
+
+  const handlePinSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (pinModalProfile && enteredPin === pinModalProfile.pin) {
+      setSelectedChild(pinModalProfile);
+      setPinModalProfile(null);
+      setEnteredPin('');
+    } else {
+      setPinError('Incorrect PIN');
+    }
   };
 
   const handleLogout = async () => {
@@ -236,6 +288,102 @@ export default function App() {
     );
   }
 
+  // PREMIUM GATEWAY UI
+  if (currentPage === 'app' && !selectedChild && user?.role !== 'teacher') {
+    return (
+      <div className="min-h-screen bg-[#0f0f13] flex flex-col items-center justify-center text-white p-6 relative overflow-hidden animate-fade-in">
+        {/* Subtle background glow */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-accent/20 blur-[120px] rounded-full pointer-events-none opacity-50"></div>
+        
+        <div className="relative z-10 w-full max-w-4xl flex flex-col items-center">
+          <div className="text-accent mb-12 flex justify-center">
+             <div className="text-3xl font-serif font-bold text-white">Mind<span className="text-accent">Bridge</span></div>
+          </div>
+          
+          <h1 className="text-4xl md:text-5xl font-serif mb-16 text-center tracking-tight text-white shadow-sm">
+            Who's exploring today?
+          </h1>
+          
+          <div className="flex flex-wrap items-center justify-center gap-8 md:gap-12">
+            {children.map(child => (
+              <motion.button
+                key={child.id}
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => handleProfileSelect(child)}
+                className="flex flex-col items-center group cursor-pointer"
+              >
+                <div className="w-32 h-32 md:w-40 md:h-40 rounded-3xl bg-gradient-to-br from-gray-800 to-gray-900 border-2 border-transparent group-hover:border-accent shadow-2xl flex items-center justify-center text-6xl mb-4 transition-all duration-300 relative overflow-hidden">
+                  <div className="absolute inset-0 bg-accent/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  {child.age >= 18 ? <span className="font-serif text-white">{child.name ? child.name.charAt(0).toUpperCase() : '👤'}</span> : (child.avatar || '👧')}
+                </div>
+                <span className="text-gray-300 font-medium text-xl group-hover:text-white transition-colors">{child.name}</span>
+              </motion.button>
+            ))}
+            
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                // If they add a child, for now we can just route them to home 
+                // where the empty state shows the 'Add Child' form or similar
+                setActiveTab('home');
+                setSelectedChild({ id: 'temp_new', name: 'New Profile', age: 0, avatar: '➕', parentId: user.uid } as any); // Hack to bypass gateway temporarily to reach dashboard
+              }}
+              className="flex flex-col items-center group cursor-pointer opacity-70 hover:opacity-100"
+            >
+              <div className="w-32 h-32 md:w-40 md:h-40 rounded-3xl bg-gray-900 border-2 border-dashed border-gray-600 group-hover:border-white shadow-2xl flex items-center justify-center text-4xl mb-4 transition-all duration-300">
+                <Plus className="text-gray-400 group-hover:text-white" size={48} />
+              </div>
+              <span className="text-gray-400 font-medium text-xl group-hover:text-white transition-colors">Add Profile</span>
+            </motion.button>
+          </div>
+          
+          <div className="mt-24 space-x-6">
+            <button onClick={handleLogout} className="px-6 py-2 rounded-full border border-gray-700 text-gray-400 hover:text-white hover:border-gray-500 transition-all font-medium text-sm">
+              Sign Out
+            </button>
+          </div>
+        </div>
+
+        {pinModalProfile && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-fade-in">
+            <div className="bg-gradient-to-b from-gray-800 to-gray-900 p-8 rounded-[2rem] border border-gray-700 shadow-2xl max-w-sm w-full mx-4 backdrop-blur-xl relative overflow-hidden">
+              <div className="absolute inset-0 bg-accent/5 opacity-50 blur-3xl rounded-full"></div>
+              <div className="relative z-10">
+                <div className="text-center mb-6">
+                  <div className="w-20 h-20 mx-auto rounded-2xl bg-gray-800 border-2 border-gray-700 flex items-center justify-center text-4xl mb-4 shadow-inner">
+                    {pinModalProfile.age >= 18 ? <span className="font-serif text-white">{pinModalProfile.name.charAt(0).toUpperCase()}</span> : pinModalProfile.avatar}
+                  </div>
+                  <h3 className="text-2xl font-serif text-white">Enter PIN</h3>
+                  <p className="text-sm text-gray-400 mt-1">Unlock {pinModalProfile.name}'s profile</p>
+                </div>
+                <form onSubmit={handlePinSubmit} className="space-y-4">
+                  <div>
+                    <input 
+                      type="password" 
+                      value={enteredPin}
+                      onChange={(e) => setEnteredPin(e.target.value)}
+                      className="w-full bg-gray-950/50 border border-gray-700 rounded-xl px-4 py-3 text-center text-2xl tracking-[0.5em] text-white shadow-inner focus:outline-none focus:border-accent transition-colors"
+                      placeholder="••••"
+                      maxLength={4}
+                      autoFocus
+                    />
+                    {pinError && <p className="text-red-400 text-xs mt-2 text-center font-bold animate-pulse">{pinError}</p>}
+                  </div>
+                  <div className="flex gap-3">
+                    <button type="button" onClick={() => setPinModalProfile(null)} className="flex-1 py-3 px-4 rounded-xl text-gray-400 font-bold hover:text-white hover:bg-gray-800 transition-colors">Cancel</button>
+                    <button type="submit" className="flex-1 py-3 px-4 rounded-xl bg-accent text-white font-bold hover:bg-accent-hover transition-colors shadow-lg shadow-accent/20">Unlock</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-bg">
       {/* Top Nav */}
@@ -244,7 +392,76 @@ export default function App() {
           <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="lg:hidden p-2 hover:bg-surface-2 rounded-lg">
             {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
-          <div className="text-xl font-serif font-bold text-accent">Mind<span className="text-text-main">Bridge</span></div>
+          <div className="text-xl font-serif font-bold text-accent hidden md:block">Mind<span className="text-text-main">Bridge</span></div>
+          
+          {selectedChild && user?.role !== 'teacher' && (
+            <div className="relative">
+              <button 
+                onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
+                className="flex items-center gap-2 pl-2 pr-3 py-1.5 bg-surface-2 hover:bg-surface border border-border rounded-full transition-colors group"
+              >
+                <div className="w-8 h-8 rounded-full bg-accent text-white flex items-center justify-center text-sm font-bold">
+                  {selectedChild.age >= 18 ? selectedChild.name.charAt(0).toUpperCase() : selectedChild.avatar}
+                </div>
+                <span className="font-medium text-sm text-text-main hidden sm:block">{selectedChild.name}</span>
+                <ChevronDown size={16} className={cn("text-text-dim transition-transform duration-200", isProfileDropdownOpen ? "rotate-180" : "group-hover:text-text-main")} />
+              </button>
+
+              <AnimatePresence>
+                {isProfileDropdownOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setIsProfileDropdownOpen(false)} />
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      className="absolute top-full mt-2 left-0 w-64 bg-surface backdrop-blur-xl border border-border rounded-2xl shadow-xl z-50 overflow-hidden"
+                    >
+                      <div className="p-3 border-b border-border bg-surface-2/50">
+                        <p className="text-[10px] font-bold text-text-dim uppercase tracking-widest">Switch Profile</p>
+                      </div>
+                      <div className="p-2 max-h-64 overflow-y-auto">
+                        {children.filter(c => c.id !== selectedChild.id).length === 0 ? (
+                           <p className="p-3 text-sm text-text-muted text-center">No other profiles.</p>
+                        ) : (
+                          children.filter(c => c.id !== selectedChild.id).map(child => (
+                            <button
+                              key={child.id}
+                              onClick={() => {
+                                handleProfileSelect(child);
+                                setIsProfileDropdownOpen(false);
+                              }}
+                              className="w-full flex items-center gap-3 p-3 hover:bg-surface-2 rounded-xl transition-colors text-left"
+                            >
+                              <div className="w-10 h-10 rounded-full bg-accent-light flex items-center justify-center text-lg text-accent border border-accent/20">
+                                {child.age >= 18 ? child.name.charAt(0).toUpperCase() : child.avatar}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm text-text-main truncate">{child.name}</p>
+                                <p className="text-[10px] text-text-dim truncate">{child.age >= 18 ? 'Adult Profile' : child.grade}</p>
+                              </div>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                      <div className="p-2 border-t border-border bg-surface-2/30">
+                        <button 
+                          onClick={() => {
+                            setSelectedChild(null);
+                            setActiveTab('home');
+                            setIsProfileDropdownOpen(false);
+                          }}
+                          className="w-full flex items-center justify-center gap-2 py-2 text-sm text-text-muted hover:text-text-main transition-colors"
+                        >
+                          <LayoutDashboard size={16} /> View All Profiles
+                        </button>
+                      </div>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-4">
           <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 hover:bg-surface-2 rounded-full transition-colors">
@@ -324,6 +541,18 @@ export default function App() {
                 />
               </nav>
             </div>
+            
+            {user?.role !== 'teacher' && selectedChild && (
+              <div className="pt-8 w-full">
+                 <button 
+                  onClick={() => setSelectedChild(null)} 
+                  className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl border-2 border-accent text-accent font-bold hover:bg-accent hover:text-white transition-all shadow-sm"
+                >
+                   <Users size={18} />
+                   Switch Profile
+                 </button>
+              </div>
+            )}
           </div>
         </aside>
 
@@ -339,7 +568,7 @@ export default function App() {
         <main className="flex-1 p-4 md:p-8 overflow-y-auto">
           <AnimatePresence mode="wait">
             <motion.div
-              key={activeTab}
+              key={`${selectedChild?.id || 'none'}-${activeTab}`}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
@@ -351,8 +580,8 @@ export default function App() {
                 ) : (
                   <Dashboard 
                     user={user} 
-                    children={children} 
-                    alerts={alerts} 
+                    children={selectedChild && selectedChild.id !== 'temp_new' ? [selectedChild] : []} 
+                    alerts={selectedChild && selectedChild.id !== 'temp_new' ? alerts.filter(a => a.childId === selectedChild.id || a.childId === 'all') : alerts} 
                     onViewProfile={(child) => { setSelectedChild(child); setActiveTab('profile'); }}
                   />
                 )
@@ -368,13 +597,14 @@ export default function App() {
                   />
                 )
               )}
-              {activeTab === 'assessment' && selectedChild && (
+              {activeTab === 'assessment' && (
                 <Assessment 
-                  child={selectedChild} 
-                  onComplete={(newLevel) => {
-                    const currentLevel = selectedChild.level || 1;
+                  childrenList={children} 
+                  initialSelectedChildId={selectedChild?.id}
+                  onComplete={(newLevel, childName) => {
+                    const currentLevel = selectedChild?.level || 1;
                     if (newLevel && newLevel > currentLevel) {
-                      setLevelUpToast({ show: true, level: newLevel, childName: selectedChild.name });
+                      setLevelUpToast({ show: true, level: newLevel, childName: childName || 'Child' });
                       setTimeout(() => setLevelUpToast({ show: false, level: 0, childName: '' }), 5000);
                     }
                     setActiveTab('reports');
@@ -385,25 +615,31 @@ export default function App() {
                 user?.role === 'teacher' ? (
                   <SchoolDashboard user={user} initialTab="analytics" />
                 ) : (
-                  <Reports children={children} selectedChild={selectedChild} />
+                  <Reports children={selectedChild ? [selectedChild] : []} selectedChild={selectedChild} />
                 )
               )}
               {activeTab === 'alerts' && (
-                <Alerts alerts={alerts} onDismiss={(id) => setAlerts(alerts.filter(a => a.id !== id))} />
+                <Alerts alerts={selectedChild ? alerts.filter(a => a.childId === selectedChild.id || a.childId === 'all') : alerts} onDismiss={async (id) => {
+                  try {
+                    await deleteDoc(doc(db, 'alerts', id));
+                  } catch (error) {
+                    handleFirestoreError(error, OperationType.DELETE, 'alerts');
+                  }
+                }} />
               )}
               {activeTab === 'privacy' && (
                 <PrivacyEthics user={user} />
               )}
               {activeTab === 'forecasts' && (
-                <Forecasts children={children} />
+                <Forecasts children={selectedChild ? [selectedChild] : []} />
               )}
               {activeTab === 'recommendations' && (
-                <Recommendations children={children} />
+                <Recommendations children={selectedChild ? [selectedChild] : []} />
               )}
               {activeTab === 'sync' && (
-                <SchoolSync children={children} />
+                <SchoolSync children={selectedChild ? [selectedChild] : []} />
               )}
-              {!selectedChild && activeTab !== 'home' && activeTab !== 'reports' && activeTab !== 'alerts' && activeTab !== 'privacy' && activeTab !== 'forecasts' && activeTab !== 'recommendations' && activeTab !== 'sync' && (
+              {!selectedChild && activeTab !== 'home' && activeTab !== 'reports' && activeTab !== 'alerts' && activeTab !== 'privacy' && activeTab !== 'forecasts' && activeTab !== 'recommendations' && activeTab !== 'sync' && activeTab !== 'assessment' && (
                 <div className="text-center py-20">
                   <p className="text-text-muted">Please add a child first from the dashboard.</p>
                   <button onClick={() => setActiveTab('home')} className="text-accent font-medium mt-2">Go to Dashboard</button>
@@ -428,6 +664,29 @@ export default function App() {
               <p className="font-serif text-lg">{levelUpToast.childName} reached Level {levelUpToast.level}</p>
             </div>
             <button onClick={() => setLevelUpToast({ ...levelUpToast, show: false })} className="ml-4 p-1 hover:bg-white/10 rounded-lg">
+              <X size={20} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Error Toast */}
+      <AnimatePresence>
+        {errorToast.show && (
+          <motion.div 
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 50, scale: 0.9 }}
+            className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] bg-red-50 text-red-700 px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 border border-red-200"
+          >
+            <div className="text-red-500">
+              <AlertCircle size={24} />
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest opacity-80">Error</p>
+              <p className="font-medium text-sm">{errorToast.message}</p>
+            </div>
+            <button onClick={() => setErrorToast({ ...errorToast, show: false })} className="ml-4 p-1 hover:bg-red-100 rounded-lg transition-colors">
               <X size={20} />
             </button>
           </motion.div>

@@ -67,7 +67,7 @@ export function generateAlerts(childId: string, scores: CategoryScores, childNam
   if (scores.stress >= 4) {
     alerts.push({
       childId,
-      type: 'critical' as const,
+      type: scores.stress === 5 ? 'critical' as const : 'warning' as const,
       title: `High stress detected — ${childName}`,
       description: `Stress score of ${scores.stress}/5 is significantly high. Immediate attention recommended.`,
       timestamp,
@@ -78,7 +78,7 @@ export function generateAlerts(childId: string, scores: CategoryScores, childNam
   if (scores.mood >= 4) {
     alerts.push({
       childId,
-      type: 'warning' as const,
+      type: scores.mood === 5 ? 'critical' as const : 'warning' as const,
       title: `Low mood detected — ${childName}`,
       description: `Mood distress score is ${scores.mood}/5. Monitor closely for persistent patterns.`,
       timestamp,
@@ -89,7 +89,7 @@ export function generateAlerts(childId: string, scores: CategoryScores, childNam
   if (scores.sleep >= 4) {
     alerts.push({
       childId,
-      type: 'info' as const,
+      type: scores.sleep === 5 ? 'warning' as const : 'info' as const,
       title: `Sleep disruption — ${childName}`,
       description: `Poor sleep quality reported (${scores.sleep}/5). This may impact emotional regulation.`,
       timestamp,
