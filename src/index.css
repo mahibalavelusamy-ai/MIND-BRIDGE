@@ -95,9 +95,14 @@
     --color-surface: #fff !important;
     --color-surface-2: #f9f9f9 !important;
     --color-border: #e5e5e5 !important;
-    --color-text-main: #111 !important;
-    --color-text-muted: #444 !important;
-    --color-text-dim: #666 !important;
+    --color-text-main: #000 !important;
+    --color-text-muted: #222 !important;
+    --color-text-dim: #444 !important;
+  }
+
+  body * {
+    color: #000000 !important;
+    text-shadow: none !important;
   }
 
   body {

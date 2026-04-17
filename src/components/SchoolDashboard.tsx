@@ -354,6 +354,57 @@ export default function SchoolDashboard({ user, initialTab = 'overview' }: Schoo
           </div>
         )}
 
+        {/* Heatmap View */}
+        {activeView === 'analytics' && (
+          <div className="md:col-span-12 bg-surface border border-border rounded-[2rem] p-8 shadow-sm">
+            <h3 className="text-2xl font-serif mb-2">Classroom Heatmap (Stress & Burnout)</h3>
+            <p className="text-text-muted mb-8 text-sm">Aggregate tracking of recent risk patterns. Names remain isolated to maintain DPDP compliance.</p>
+            <div className="overflow-x-auto pb-4">
+              <table className="w-full text-left border-separate border-spacing-y-2">
+                <thead>
+                  <tr>
+                    <th className="pb-4 text-[10px] font-bold text-text-dim uppercase tracking-widest pl-4">Class Target</th>
+                    <th className="pb-4 text-[10px] font-bold text-text-dim uppercase tracking-widest text-center">Mon</th>
+                    <th className="pb-4 text-[10px] font-bold text-text-dim uppercase tracking-widest text-center">Tue</th>
+                    <th className="pb-4 text-[10px] font-bold text-text-dim uppercase tracking-widest text-center">Wed</th>
+                    <th className="pb-4 text-[10px] font-bold text-text-dim uppercase tracking-widest text-center">Thu</th>
+                    <th className="pb-4 text-[10px] font-bold text-text-dim uppercase tracking-widest text-center">Fri</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {MOCK_HEATMAP_DATA.map((row, idx) => (
+                    <tr key={idx}>
+                      <td className="py-3 pl-4 font-medium text-sm border-r border-border min-w-[120px]">
+                        {isAnonymized ? `Class Target ${idx+1}` : `Class ${row.class}`}
+                      </td>
+                      {['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map((day) => {
+                        const val = (row as any)[day];
+                        // Inverse color scaling (lower mood/higher stress is red)
+                        const bgColor = val >= 8 ? 'bg-green-100 text-green-800' :
+                                        val >= 6 ? 'bg-amber-100 text-amber-800' :
+                                        'bg-red-200 text-red-900';
+                        return (
+                          <td key={day} className="px-1 text-center">
+                            <div className={cn("py-3 rounded-lg font-bold text-sm shadow-sm transition-all hover:scale-105", bgColor)}>
+                              {val}
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="mt-6 flex justify-end items-center gap-4 text-[10px] font-bold text-text-dim uppercase tracking-widest">
+                <span>Legend: </span>
+                <div className="flex items-center gap-1"><div className="w-3 h-3 bg-red-200 rounded" /> High Risk</div>
+                <div className="flex items-center gap-1"><div className="w-3 h-3 bg-amber-100 rounded" /> Caution</div>
+                <div className="flex items-center gap-1"><div className="w-3 h-3 bg-green-100 rounded" /> Stable</div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Class List & Analytics */}
         {(activeView === 'overview' || activeView === 'classes') && (
           <div className="md:col-span-12 bg-surface border border-border rounded-[2rem] p-8 shadow-sm">

@@ -29,9 +29,10 @@ interface ChildProfileProps {
   child: Child;
   onUpdate: (child: Child) => void;
   onStartAssessment: () => void;
+  onDelete?: () => void;
 }
 
-export default function ChildProfile({ child, onUpdate, onStartAssessment }: ChildProfileProps) {
+export default function ChildProfile({ child, onUpdate, onStartAssessment, onDelete }: ChildProfileProps) {
   const [schedule, setSchedule] = useState<any[]>([]);
   const [isAddingEvent, setIsAddingEvent] = useState(false);
   const [newEvent, setNewEvent] = useState({ title: '', type: 'class', time: '', day: 'Monday', subject: '', difficulty: 'medium' });
@@ -168,6 +169,19 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment }: Chi
     }
   };
 
+  const handleDelete = async () => {
+    if (window.confirm("Are you sure you want to permanently delete this profile and all associated data? This action cannot be undone.")) {
+      try {
+        if (onDelete) {
+          onDelete();
+        }
+        await deleteDoc(doc(db, 'children', child.id));
+      } catch (error) {
+        handleFirestoreError(error, OperationType.DELETE, 'children');
+      }
+    }
+  };
+
   const handleAddEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -272,7 +286,13 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment }: Chi
                 </button>
               )}
               
-              <button className="px-6 py-2.5 bg-surface-2 border border-border rounded-xl text-sm font-bold uppercase tracking-wider hover:bg-border transition-all">
+              <button 
+                onClick={() => {
+                  const el = document.getElementById('edit-profile-form');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="px-6 py-2.5 bg-surface-2 border border-border rounded-xl text-sm font-bold uppercase tracking-wider hover:bg-border transition-all"
+              >
                 Edit Profile
               </button>
             </div>
@@ -306,10 +326,10 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment }: Chi
       <div className="grid lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-6">
           {/* Profile Form */}
-          <div className="glass-card p-8">
+          <div id="edit-profile-form" className="glass-card p-8">
             <h3 className="font-semibold mb-6 flex items-center gap-2">
               <Save size={20} className="text-accent" />
-              {pronouns.possessive} Profile Details
+              Edit {child.age >= 18 ? 'Student' : 'Child'} Profile
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-1">
@@ -394,7 +414,13 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment }: Chi
                 />
               </div>
             </div>
-            <div className="mt-8 flex justify-end">
+            <div className="mt-8 flex justify-between items-center">
+              <button 
+                onClick={handleDelete}
+                className="flex items-center gap-2 px-6 py-2.5 text-red-500 bg-red-50 hover:bg-red-100 rounded-lg font-medium transition-all"
+              >
+                <Trash2 size={18} /> Delete Profile
+              </button>
               <button 
                 onClick={handleSave}
                 disabled={isSaving}

@@ -39,9 +39,13 @@ import {
   doc,
   getDoc,
   setDoc,
+  addDoc,
+  updateDoc,
   deleteDoc,
   OperationType,
-  handleFirestoreError
+  handleFirestoreError,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword
 } from './lib/firebase';
 import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
@@ -54,6 +58,7 @@ import PrivacyEthics from './components/PrivacyEthics';
 import Forecasts from './components/Forecasts';
 import Recommendations from './components/Recommendations';
 import SchoolSync from './components/SchoolSync';
+import SOSModal from './components/SOSModal';
 
 type Page = 'landing' | 'user-type' | 'login' | 'app';
 type Tab = 'home' | 'profile' | 'assessment' | 'reports' | 'alerts' | 'privacy' | 'forecasts' | 'recommendations' | 'sync';
@@ -79,6 +84,20 @@ export default function App() {
   const [levelUpToast, setLevelUpToast] = useState<{ show: boolean; level: number; childName: string }>({ show: false, level: 0, childName: '' });
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const [errorToast, setErrorToast] = useState<{ show: boolean; message: string }>({ show: false, message: '' });
+  
+  // SOS State
+  const [isSOSOpen, setIsSOSOpen] = useState(false);
+
+  // Profile Creation UI state
+  const [isCreatingProfile, setIsCreatingProfile] = useState(false);
+  const [newProfile, setNewProfile] = useState({ name: '', age: '', grade: '', avatar: '👦', gender: 'male' });
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+  // Email Auth
+  const [emailAuth, setEmailAuth] = useState('');
+  const [passwordAuth, setPasswordAuth] = useState('');
+  const [isSignUpMode, setIsSignUpMode] = useState(false);
+  const [authErrorContent, setAuthErrorContent] = useState('');
 
   useEffect(() => {
     const handleGlobalError = (event: Event) => {
@@ -108,6 +127,7 @@ export default function App() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setSelectedChild(null); // Strict Auth State Handling: Enforce Profile Gateway routing on refresh/load
       if (firebaseUser) {
         // Check if user exists in Firestore
         const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
@@ -135,12 +155,13 @@ export default function App() {
       const childrenData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Child));
       setChildren(childrenData);
       
-      if (childrenData.length > 0) {
-        if (selectedChild) {
-          const updatedSelected = childrenData.find(c => c.id === selectedChild.id);
-          if (updatedSelected) {
-            setSelectedChild(updatedSelected);
-          }
+      if (selectedChild) {
+        const updatedSelected = childrenData.find(c => c.id === selectedChild.id);
+        if (updatedSelected) {
+          setSelectedChild(updatedSelected);
+        } else {
+          setSelectedChild(null);
+          setActiveTab('home');
         }
       }
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'children'));
@@ -171,6 +192,28 @@ export default function App() {
       localStorage.setItem('theme', 'light');
     }
   }, [isDarkMode]);
+
+  const handleEmailAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthErrorContent('');
+    try {
+      if (isSignUpMode) {
+        await createUserWithEmailAndPassword(auth, emailAuth, passwordAuth);
+      } else {
+        await signInWithEmailAndPassword(auth, emailAuth, passwordAuth);
+      }
+    } catch (error: any) {
+      if (error.code === 'auth/weak-password') {
+        setAuthErrorContent('Password must be at least 8 characters and include a number and special character');
+      } else if (error.code === 'auth/email-already-in-use') {
+        setAuthErrorContent('This email is already registered.');
+      } else if (error.code === 'auth/invalid-login-credentials' || error.code === 'auth/wrong-password') {
+        setAuthErrorContent('Invalid email or password.');
+      } else {
+        setAuthErrorContent(error.message);
+      }
+    }
+  };
 
   const handleLogin = async () => {
     try {
@@ -212,6 +255,33 @@ export default function App() {
       setEnteredPin('');
     } else {
       setPinError('Incorrect PIN');
+    }
+  };
+
+  const handleCreateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!auth.currentUser) return;
+    setIsSavingProfile(true);
+    try {
+      await addDoc(collection(db, 'children'), {
+        ...newProfile,
+        age: parseInt(newProfile.age),
+        parentId: auth.currentUser.uid,
+        riskLevel: 'low',
+        moodScore: 7.0,
+        stressLevel: 'Low',
+        notes: '',
+        lastCheckIn: 'Never',
+        gems: 0,
+        streak: 0,
+        level: 1
+      });
+      setIsCreatingProfile(false);
+      setNewProfile({ name: '', age: '', grade: '', avatar: '👦', gender: 'male' });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'children');
+    } finally {
+      setIsSavingProfile(false);
     }
   };
 
@@ -266,15 +336,61 @@ export default function App() {
         <div className="flex-1 flex items-center justify-center p-8">
           <div className="max-w-md w-full">
             <div className="mb-8">
-              <h2 className="text-3xl font-serif mb-2">Welcome Back</h2>
-              <p className="text-text-muted">Sign in to MindBridge to continue</p>
+              <h2 className="text-3xl font-serif mb-2">{isSignUpMode ? 'Create Account' : 'Welcome Back'}</h2>
+              <p className="text-text-muted">{isSignUpMode ? 'Sign up to start using MindBridge' : 'Sign in to MindBridge to continue'}</p>
             </div>
+            
+            <form onSubmit={handleEmailAuthSubmit} className="space-y-4 mb-6">
+              {authErrorContent && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-sm">
+                  {authErrorContent}
+                </div>
+              )}
+              <input
+                type="email"
+                placeholder="Email address"
+                required
+                value={emailAuth}
+                onChange={(e) => setEmailAuth(e.target.value)}
+                className="w-full bg-surface border border-border rounded-xl px-4 py-3 focus:outline-none focus:border-accent text-text-main"
+              />
+              <input
+                type="password"
+                placeholder="Password"
+                required
+                value={passwordAuth}
+                onChange={(e) => setPasswordAuth(e.target.value)}
+                className="w-full bg-surface border border-border rounded-xl px-4 py-3 focus:outline-none focus:border-accent text-text-main"
+              />
+              <button type="submit" className="w-full bg-surface-2 text-text-main border border-border p-3 rounded-xl font-medium hover:bg-border transition-colors">
+                {isSignUpMode ? 'Sign Up with Email' : 'Sign In with Email'}
+              </button>
+            </form>
+
+            <div className="relative mb-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-border"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-bg text-text-muted">Or</span>
+              </div>
+            </div>
+
             <div className="space-y-4">
-              <button onClick={handleLogin} className="w-full bg-accent text-white p-3 rounded-lg font-medium hover:bg-accent-hover transition-colors flex items-center justify-center gap-2">
-                Sign In with Google →
+              <button onClick={handleLogin} className="w-full bg-accent text-white p-3 rounded-xl font-medium hover:bg-accent-hover transition-colors flex items-center justify-center gap-2">
+                Continue with Google →
               </button>
             </div>
-            <button onClick={() => setCurrentPage('landing')} className="w-full mt-4 text-accent text-sm hover:underline">← Back</button>
+            
+            <div className="mt-8 flex flex-col items-center gap-2">
+              <button 
+                onClick={() => { setIsSignUpMode(!isSignUpMode); setAuthErrorContent(''); }} 
+                className="text-text-muted text-sm hover:text-accent transition-colors"
+              >
+                {isSignUpMode ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+              </button>
+              <button onClick={() => setCurrentPage('landing')} className="text-text-dim text-sm hover:underline mt-4">← Back to Home</button>
+            </div>
           </div>
         </div>
         <div className="hidden lg:flex flex-1 bg-accent-light items-center justify-center p-12">
@@ -324,12 +440,7 @@ export default function App() {
             <motion.button
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => {
-                // If they add a child, for now we can just route them to home 
-                // where the empty state shows the 'Add Child' form or similar
-                setActiveTab('home');
-                setSelectedChild({ id: 'temp_new', name: 'New Profile', age: 0, avatar: '➕', parentId: user.uid } as any); // Hack to bypass gateway temporarily to reach dashboard
-              }}
+              onClick={() => setIsCreatingProfile(true)}
               className="flex flex-col items-center group cursor-pointer opacity-70 hover:opacity-100"
             >
               <div className="w-32 h-32 md:w-40 md:h-40 rounded-3xl bg-gray-900 border-2 border-dashed border-gray-600 group-hover:border-white shadow-2xl flex items-center justify-center text-4xl mb-4 transition-all duration-300">
@@ -346,37 +457,65 @@ export default function App() {
           </div>
         </div>
 
-        {pinModalProfile && (
+        {/* Profile Creation Modal */}
+        {isCreatingProfile && (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-fade-in">
-            <div className="bg-gradient-to-b from-gray-800 to-gray-900 p-8 rounded-[2rem] border border-gray-700 shadow-2xl max-w-sm w-full mx-4 backdrop-blur-xl relative overflow-hidden">
-              <div className="absolute inset-0 bg-accent/5 opacity-50 blur-3xl rounded-full"></div>
-              <div className="relative z-10">
-                <div className="text-center mb-6">
-                  <div className="w-20 h-20 mx-auto rounded-2xl bg-gray-800 border-2 border-gray-700 flex items-center justify-center text-4xl mb-4 shadow-inner">
-                    {pinModalProfile.age >= 18 ? <span className="font-serif text-white">{pinModalProfile.name.charAt(0).toUpperCase()}</span> : pinModalProfile.avatar}
-                  </div>
-                  <h3 className="text-2xl font-serif text-white">Enter PIN</h3>
-                  <p className="text-sm text-gray-400 mt-1">Unlock {pinModalProfile.name}'s profile</p>
+            <div className="bg-gradient-to-b from-gray-800 to-gray-900 p-8 rounded-[2rem] border border-gray-700 shadow-2xl max-w-lg w-full mx-4 backdrop-blur-xl relative overflow-hidden">
+               <div className="flex justify-between items-center mb-6 text-white">
+                 <h3 className="text-2xl font-serif">Create Profile</h3>
+                 <button onClick={() => setIsCreatingProfile(false)} className="text-gray-400 hover:text-white"><X size={24} /></button>
+               </div>
+               <form onSubmit={handleCreateProfile} className="space-y-4">
+                 <div className="grid grid-cols-2 gap-4">
+                   <input required placeholder="Name" className="p-3 rounded-xl border border-gray-700 text-sm bg-gray-900/50 text-white placeholder-gray-500" value={newProfile.name} onChange={e => setNewProfile({...newProfile, name: e.target.value})} />
+                   <input required type="number" placeholder="Age" className="p-3 rounded-xl border border-gray-700 text-sm bg-gray-900/50 text-white placeholder-gray-500" value={newProfile.age} onChange={e => {
+                     const age = parseInt(e.target.value);
+                     let grade = newProfile.grade;
+                     let gender = newProfile.gender;
+                     let avatar = newProfile.avatar;
+                     if (!isNaN(age)) {
+                       if (age >= 18) {
+                         grade = 'College/University';
+                         if (gender === 'other') gender = 'male'; 
+                       }
+                       if (age > 5 && avatar === '👶') {
+                         avatar = '👦'; 
+                       }
+                     }
+                     setNewProfile({...newProfile, age: e.target.value, grade, gender, avatar});
+                   }} />
+                   <select 
+                      value={newProfile.gender || 'male'} 
+                      onChange={e => setNewProfile({...newProfile, gender: e.target.value as any})}
+                      className="p-3 rounded-xl border border-gray-700 text-sm bg-gray-900/50 text-white"
+                    >
+                      <option value="male">Boy</option>
+                      <option value="female">Girl</option>
+                      {(parseInt(newProfile.age) < 18 || !newProfile.age) && <option value="other">Other</option>}
+                    </select>
+                    <select 
+                      value={newProfile.avatar || '👦'} 
+                      onChange={e => setNewProfile({...newProfile, avatar: e.target.value})}
+                      className="p-3 rounded-xl border border-gray-700 text-sm bg-gray-900/50 text-white"
+                    >
+                      <option value="👦">👦 Boy</option>
+                      <option value="👧">👧 Girl</option>
+                      {(parseInt(newProfile.age) <= 5 || !newProfile.age) && <option value="👶">👶 Toddler</option>}
+                    </select>
                 </div>
-                <form onSubmit={handlePinSubmit} className="space-y-4">
-                  <div>
-                    <input 
-                      type="password" 
-                      value={enteredPin}
-                      onChange={(e) => setEnteredPin(e.target.value)}
-                      className="w-full bg-gray-950/50 border border-gray-700 rounded-xl px-4 py-3 text-center text-2xl tracking-[0.5em] text-white shadow-inner focus:outline-none focus:border-accent transition-colors"
-                      placeholder="••••"
-                      maxLength={4}
-                      autoFocus
-                    />
-                    {pinError && <p className="text-red-400 text-xs mt-2 text-center font-bold animate-pulse">{pinError}</p>}
-                  </div>
-                  <div className="flex gap-3">
-                    <button type="button" onClick={() => setPinModalProfile(null)} className="flex-1 py-3 px-4 rounded-xl text-gray-400 font-bold hover:text-white hover:bg-gray-800 transition-colors">Cancel</button>
-                    <button type="submit" className="flex-1 py-3 px-4 rounded-xl bg-accent text-white font-bold hover:bg-accent-hover transition-colors shadow-lg shadow-accent/20">Unlock</button>
-                  </div>
-                </form>
-              </div>
+                <div className="mt-4">
+                  <input 
+                    placeholder="Grade" 
+                    className={cn("w-full p-3 rounded-xl border border-gray-700 text-sm bg-gray-900/50 text-white placeholder-gray-500", parseInt(newProfile.age) >= 18 && "opacity-60 cursor-not-allowed")} 
+                    value={newProfile.grade} 
+                    onChange={e => setNewProfile({...newProfile, grade: e.target.value})} 
+                    disabled={parseInt(newProfile.age) >= 18}
+                  />
+                </div>
+                <button type="submit" disabled={isSavingProfile} className="w-full bg-accent text-white py-3 rounded-xl text-sm font-bold shadow-lg shadow-accent/20 hover:bg-accent-hover transition-all mt-6 disabled:opacity-50">
+                  {isSavingProfile ? "Creating..." : "Save Profile"}
+                </button>
+               </form>
             </div>
           </div>
         )}
@@ -497,7 +636,7 @@ export default function App() {
                 />
                 {user?.role !== 'teacher' && (
                   <>
-                    <SidebarLink icon={<UserCircle size={18} />} label="Child Profile" active={activeTab === 'profile'} onClick={() => setActiveTab('profile')} />
+                    <SidebarLink icon={<UserCircle size={18} />} label={selectedChild && selectedChild.age >= 18 ? "Student Profile" : "Child Profile"} active={activeTab === 'profile'} onClick={() => setActiveTab('profile')} />
                     <SidebarLink icon={<ClipboardCheck size={18} />} label="Assessments" active={activeTab === 'assessment'} onClick={() => setActiveTab('assessment')} />
                   </>
                 )}
@@ -594,6 +733,7 @@ export default function App() {
                     child={selectedChild} 
                     onUpdate={(updated) => setSelectedChild(updated)}
                     onStartAssessment={() => setActiveTab('assessment')}
+                    onDelete={() => { setSelectedChild(null); setActiveTab('home'); }}
                   />
                 )
               )}
@@ -692,6 +832,78 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Global SOS Button */}
+      {selectedChild && (
+        <button 
+          onClick={() => setIsSOSOpen(true)}
+          className="fixed bottom-8 right-8 z-[90] bg-red-600 text-white w-16 h-16 rounded-full shadow-[0_0_20px_rgba(220,38,38,0.4)] flex items-center justify-center hover:scale-110 hover:bg-red-500 transition-all group"
+        >
+          <div className="absolute inset-0 bg-red-500 rounded-full animate-ping opacity-20 pointer-events-none" />
+          <AlertCircle size={28} className="group-hover:animate-pulse" />
+        </button>
+      )}
+
+      {isSOSOpen && (
+        <SOSModal onClose={() => setIsSOSOpen(false)} selectedChild={selectedChild} />
+      )}
+
+      {/* Global PIN Modal */}
+      {pinModalProfile && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md animate-fade-in">
+          <div className="bg-gradient-to-b from-gray-800 to-gray-900 p-8 rounded-[2rem] border border-gray-700 shadow-2xl max-w-sm w-full mx-4 backdrop-blur-xl relative overflow-hidden">
+            <div className="absolute inset-0 bg-accent/5 opacity-50 blur-3xl rounded-full"></div>
+            <div className="relative z-10">
+              <div className="text-center mb-6">
+                <div className="w-20 h-20 mx-auto rounded-2xl bg-gray-800 border-2 border-gray-700 flex items-center justify-center text-4xl mb-4 shadow-inner">
+                  {pinModalProfile.age >= 18 ? <span className="font-serif text-white">{pinModalProfile.name.charAt(0).toUpperCase()}</span> : pinModalProfile.avatar}
+                </div>
+                <h3 className="text-2xl font-serif text-white">Enter PIN</h3>
+                <p className="text-sm text-gray-400 mt-1">Unlock {pinModalProfile.name}'s profile</p>
+              </div>
+              <form onSubmit={handlePinSubmit} className="space-y-4">
+                <div>
+                  <input 
+                    type="password" 
+                    value={enteredPin}
+                    onChange={(e) => setEnteredPin(e.target.value)}
+                    className="w-full bg-gray-950/50 border border-gray-700 rounded-xl px-4 py-3 text-center text-2xl tracking-[0.5em] text-white shadow-inner focus:outline-none focus:border-accent transition-colors"
+                    placeholder="••••"
+                    maxLength={4}
+                    autoFocus
+                  />
+                  {pinError && <p className="text-red-400 text-xs mt-2 text-center font-bold animate-pulse">{pinError}</p>}
+                </div>
+                <div className="flex gap-3">
+                  <button type="button" onClick={() => setPinModalProfile(null)} className="flex-1 py-3 px-4 rounded-xl text-gray-400 font-bold hover:text-white hover:bg-gray-800 transition-colors">Cancel</button>
+                  <button type="submit" className="flex-1 py-3 px-4 rounded-xl bg-accent text-white font-bold hover:bg-accent-hover transition-colors shadow-lg shadow-accent/20">Unlock</button>
+                </div>
+                <div className="text-center pt-2">
+                  <button 
+                    type="button" 
+                    onClick={async () => {
+                      const confirmReset = window.confirm("Override PIN? This requires the parent/account owner to confirm. For this demo, clicking OK will clear the PIN.");
+                      if (confirmReset && pinModalProfile) {
+                        try {
+                          await updateDoc(doc(db, 'children', pinModalProfile.id), { pin: '' });
+                          setSelectedChild({...pinModalProfile, pin: ''});
+                          setPinModalProfile(null);
+                          setEnteredPin('');
+                        } catch (error) {
+                          handleFirestoreError(error, OperationType.UPDATE, 'children');
+                        }
+                      }
+                    }}
+                    className="text-gray-400 text-xs hover:text-white underline transition-colors"
+                  >
+                    Forgot PIN? (Parent Override)
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

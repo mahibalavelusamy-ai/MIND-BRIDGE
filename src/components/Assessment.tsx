@@ -51,6 +51,18 @@ export default function Assessment({ childrenList, initialSelectedChildId, onCom
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [schedule, setSchedule] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   const child = childrenList.find(c => c.id === selectedChildId);
 
@@ -228,9 +240,11 @@ export default function Assessment({ childrenList, initialSelectedChildId, onCom
         >
           <Trophy size={48} />
         </motion.div>
-        <h2 className="text-4xl font-serif mb-4">You're a Star! 🌟</h2>
+        <h2 className="text-4xl font-serif mb-4">{child.age >= 18 ? 'Assessment Complete' : "You're a Star! 🌟"}</h2>
         <p className="text-text-muted max-w-sm mb-8">
-          Amazing job completing your check-in, {child.name}! You've earned some rewards for your {child.age >= 18 ? 'habit tracker' : 'wellness garden'}.
+          {child.age >= 18 
+            ? `Thank you for completing your check-in, ${child.name}. Your profile has been updated.` 
+            : `Amazing job completing your check-in, ${child.name}! You've earned some rewards for your wellness garden.`}
         </p>
         
         <div className="flex gap-4 mb-8">
@@ -441,37 +455,44 @@ export default function Assessment({ childrenList, initialSelectedChildId, onCom
         </AnimatePresence>
       </div>
 
-      <div className="mt-12 flex items-center justify-between">
-        <button 
-          onClick={handleBack}
-          disabled={currentIdx === 0 || isSubmitting}
-          className="flex items-center gap-2 px-8 py-3 rounded-2xl font-bold text-sm uppercase tracking-wider text-text-dim hover:text-text-main hover:bg-surface-2 disabled:opacity-30 transition-all"
-        >
-          <ChevronLeft size={20} /> Previous
-        </button>
+      <div className="mt-12 flex flex-col gap-6">
+        {!isOnline && (
+          <div className="p-3 bg-white/10 backdrop-blur-md rounded-xl text-yellow-500 font-bold border border-yellow-500/20 text-sm flex items-center gap-2 justify-center shadow-lg animate-pulse">
+            <AlertCircle size={18} /> Connection paused. Please reconnect to securely save your check-in.
+          </div>
+        )}
+        <div className="flex items-center justify-between">
+          <button 
+            onClick={handleBack}
+            disabled={currentIdx === 0 || isSubmitting}
+            className="flex items-center gap-2 px-8 py-3 rounded-2xl font-bold text-sm uppercase tracking-wider text-text-dim hover:text-text-main hover:bg-surface-2 disabled:opacity-30 transition-all"
+          >
+            <ChevronLeft size={20} /> Previous
+          </button>
 
-        <div className="hidden md:flex gap-2">
-          {activeQuestions.map((_, i) => (
-            <div 
-              key={i} 
-              className={cn(
-                "h-1.5 rounded-full transition-all duration-500",
-                i === currentIdx ? "w-8 bg-accent" : i < currentIdx ? "w-4 bg-accent/30" : "w-4 bg-border"
-              )} 
-            />
-          ))}
+          <div className="hidden md:flex gap-2">
+            {activeQuestions.map((_, i) => (
+              <div 
+                key={i} 
+                className={cn(
+                  "h-1.5 rounded-full transition-all duration-500",
+                  i === currentIdx ? "w-8 bg-accent" : i < currentIdx ? "w-4 bg-accent/30" : "w-4 bg-border"
+                )} 
+              />
+            ))}
+          </div>
+
+          <button 
+            onClick={handleNext}
+            disabled={answers[currentQuestion.id] === undefined || isSubmitting || (!isOnline && currentIdx === activeQuestions.length - 1)}
+            className={cn(
+              "flex items-center gap-2 px-10 py-4 bg-accent text-white rounded-2xl font-bold text-sm uppercase tracking-widest hover:bg-accent-hover disabled:opacity-50 transition-all shadow-xl shadow-accent/20",
+              isSubmitting && "animate-pulse"
+            )}
+          >
+            {isSubmitting ? "Analyzing..." : currentIdx === activeQuestions.length - 1 ? "Complete Check-in" : <>Next Step <ChevronRight size={20} /></>}
+          </button>
         </div>
-
-        <button 
-          onClick={handleNext}
-          disabled={answers[currentQuestion.id] === undefined || isSubmitting}
-          className={cn(
-            "flex items-center gap-2 px-10 py-4 bg-accent text-white rounded-2xl font-bold text-sm uppercase tracking-widest hover:bg-accent-hover disabled:opacity-50 transition-all shadow-xl shadow-accent/20",
-            isSubmitting && "animate-pulse"
-          )}
-        >
-          {isSubmitting ? "Analyzing..." : currentIdx === activeQuestions.length - 1 ? "Complete Check-in" : <>Next Step <ChevronRight size={20} /></>}
-        </button>
       </div>
       {/* AI Disclaimer */}
       <div className="mt-auto pt-8 border-t border-border">

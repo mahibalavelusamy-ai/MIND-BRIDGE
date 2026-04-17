@@ -21,14 +21,14 @@ export default function MicroIntervention({ onComplete, onSkip }: MicroIntervent
     if (phase === 'in') {
       timeout = setTimeout(() => setPhase('hold1'), 4000);
     } else if (phase === 'hold1') {
-      timeout = setTimeout(() => setPhase('out'), 2000);
+      timeout = setTimeout(() => setPhase('out'), 4000);
     } else if (phase === 'out') {
       timeout = setTimeout(() => setPhase('hold2'), 4000);
     } else if (phase === 'hold2') {
       timeout = setTimeout(() => {
         setPhase('in');
         setCycle(c => c + 1);
-      }, 2000);
+      }, 4000);
     }
 
     return () => clearTimeout(timeout);
@@ -62,12 +62,12 @@ export default function MicroIntervention({ onComplete, onSkip }: MicroIntervent
       <div className="relative w-48 h-48 flex items-center justify-center my-8">
         <motion.div
           animate={{ scale: getScale() }}
-          transition={{ duration: phase === 'in' || phase === 'out' ? 4 : 2, ease: "easeInOut" }}
+          transition={{ duration: phase === 'in' || phase === 'out' ? 4 : 4, ease: "linear" }}
           className="absolute w-32 h-32 bg-blue-200 rounded-full opacity-50"
         />
         <motion.div
           animate={{ scale: getScale() }}
-          transition={{ duration: phase === 'in' || phase === 'out' ? 4 : 2, ease: "easeInOut" }}
+          transition={{ duration: phase === 'in' || phase === 'out' ? 4 : 4, ease: "linear" }}
           className="absolute w-24 h-24 bg-blue-400 rounded-full flex items-center justify-center text-white shadow-lg shadow-blue-400/50"
         >
           <Wind size={32} />

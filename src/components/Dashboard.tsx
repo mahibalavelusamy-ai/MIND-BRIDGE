@@ -49,17 +49,39 @@ interface DashboardProps {
 const COLORS = ['#2d7a5a', '#c47a1e', '#c0392b'];
 
 export default function Dashboard({ user, children, alerts, onViewProfile }: DashboardProps) {
-  const [isAddingChild, setIsAddingChild] = useState(false);
-  const [newChild, setNewChild] = useState({ name: '', age: '', grade: '', avatar: '👦', gender: 'male' });
   const [schedules, setSchedules] = useState<Record<string, any[]>>({});
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [isLoadingRecs, setIsLoadingRecs] = useState(false);
   const [interventionChild, setInterventionChild] = useState<Child | null>(null);
   const [dashboardAssessments, setDashboardAssessments] = useState<any[]>([]);
   const [isShopOpen, setIsShopOpen] = useState(false);
+  const [chartTimeframe, setChartTimeframe] = useState<'7d' | '30d'>('7d');
   
   const [showTimerModal, setShowTimerModal] = useState(false);
   const [showSpotsModal, setShowSpotsModal] = useState(false);
+
+  // Apply clinical chart scaling filtering based on timeframe
+  const rawAssessments = dashboardAssessments;
+  // Make sure we correctly map and slice based on timeframe
+  const filteredAssessments = chartTimeframe === '30d' 
+    ? rawAssessments.slice(0, 30).reverse() 
+    : rawAssessments.slice(0, 7).reverse();
+
+  // If we don't have enough data to fill the timeframe, provide empty state pads, 
+  // but map it properly across exactly 7 or 30 nodes so the chart line remains scaled exactly.
+  const chartData = rawAssessments.length > 0 
+    ? filteredAssessments.map(a => ({
+        day: new Date(a.timestamp).toLocaleDateString('en-US', { 
+           month: chartTimeframe === '30d' ? 'short' : undefined,
+           day: chartTimeframe === '30d' ? 'numeric' : undefined,
+           weekday: chartTimeframe === '7d' ? 'short' : undefined 
+        }),
+        score: a.totalScore || a.score || 0
+      }))
+    : Array.from({ length: chartTimeframe === '30d' ? 30 : 7 }).map((_, i) => ({
+        day: `Day ${i+1}`,
+        score: 0
+      }));
 
   useEffect(() => {
     const fetchSchedules = async () => {
@@ -187,30 +209,6 @@ export default function Dashboard({ user, children, alerts, onViewProfile }: Das
     { name: 'High', value: children.filter(c => c.riskLevel === 'high').length || 0 },
   ];
 
-  const handleAddChild = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!auth.currentUser) return;
-    try {
-      await addDoc(collection(db, 'children'), {
-        ...newChild,
-        age: parseInt(newChild.age),
-        parentId: auth.currentUser.uid,
-        riskLevel: 'low',
-        moodScore: 7.0,
-        stressLevel: 'Low',
-        notes: '',
-        lastCheckIn: 'Never',
-        gems: 0,
-        streak: 0,
-        level: 1
-      });
-      setIsAddingChild(false);
-      setNewChild({ name: '', age: '', grade: '', avatar: '👦', gender: 'male' });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'children');
-    }
-  };
-
   const selectedChildForChart = children[0];
   const rawSchedule = selectedChildForChart ? (schedules[selectedChildForChart.id] || []) : [];
   
@@ -228,21 +226,6 @@ export default function Dashboard({ user, children, alerts, onViewProfile }: Das
     return true;
   });
 
-  const chartData = dashboardAssessments.length > 0 
-    ? dashboardAssessments.slice(0, 7).reverse().map(a => ({
-        day: new Date(a.timestamp).toLocaleDateString('en-US', { weekday: 'short' }),
-        score: a.totalScore || a.score || 0
-      }))
-    : [
-        { day: 'Mon', score: 0 },
-        { day: 'Tue', score: 0 },
-        { day: 'Wed', score: 0 },
-        { day: 'Thu', score: 0 },
-        { day: 'Fri', score: 0 },
-        { day: 'Sat', score: 0 },
-        { day: 'Sun', score: 0 }
-      ];
-
   const calculateDisplayScore = (assessments: any[]) => {
     if (!assessments || assessments.length === 0) return 0;
     const sum = assessments.reduce((acc, curr) => acc + (curr.totalScore || curr.score || 0), 0);
@@ -256,64 +239,9 @@ export default function Dashboard({ user, children, alerts, onViewProfile }: Das
       <div className="space-y-8 animate-fade-in pb-12">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-4xl font-serif tracking-tight">Add a Child Profile</h1>
-            <p className="text-text-muted mt-1">Let's create a profile to start tracking their well-being.</p>
+            <h1 className="text-4xl font-serif tracking-tight">No Profiles Available</h1>
+            <p className="text-text-muted mt-1">Head back to the Gateway screen to add your first profile.</p>
           </div>
-        </div>
-
-        <div className="glass-card p-8 max-w-2xl mt-12 mx-auto sm:mx-0">
-            <form onSubmit={handleAddChild} className="space-y-4">
-              <div className="flex justify-between items-center mb-6">
-                <h4 className="font-bold text-lg">New Profile Details</h4>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                 <input required placeholder="Name" className="p-3 rounded-xl border border-border text-sm bg-surface-2" value={newChild.name} onChange={e => setNewChild({...newChild, name: e.target.value})} />
-                 <input required type="number" placeholder="Age" className="p-3 rounded-xl border border-border text-sm bg-surface-2" value={newChild.age} onChange={e => {
-                   const age = parseInt(e.target.value);
-                   let grade = newChild.grade;
-                   let gender = newChild.gender;
-                   let avatar = newChild.avatar;
-                   if (!isNaN(age)) {
-                     if (age >= 18) {
-                       grade = 'College/University';
-                       if (gender === 'other') gender = 'male'; 
-                     }
-                     if (age > 5 && avatar === '👶') {
-                       avatar = '👦'; 
-                     }
-                   }
-                   setNewChild({...newChild, age: e.target.value, grade, gender, avatar});
-                 }} />
-                 <select 
-                    value={newChild.gender || 'male'} 
-                    onChange={e => setNewChild({...newChild, gender: e.target.value as any})}
-                    className="p-3 rounded-xl border border-border text-sm bg-surface-2"
-                  >
-                    <option value="male">Boy</option>
-                    <option value="female">Girl</option>
-                    {(parseInt(newChild.age) < 18 || !newChild.age) && <option value="other">Other</option>}
-                  </select>
-                  <select 
-                    value={newChild.avatar || '👦'} 
-                    onChange={e => setNewChild({...newChild, avatar: e.target.value})}
-                    className="p-3 rounded-xl border border-border text-sm bg-surface-2"
-                  >
-                    <option value="👦">👦 Boy</option>
-                    <option value="👧">👧 Girl</option>
-                    {(parseInt(newChild.age) <= 5 || !newChild.age) && <option value="👶">👶 Toddler</option>}
-                  </select>
-              </div>
-              <div className="mt-4">
-                <input 
-                  placeholder="Grade" 
-                  className={cn("w-full p-3 rounded-xl border border-border text-sm bg-surface-2", parseInt(newChild.age) >= 18 && "opacity-60 cursor-not-allowed")} 
-                  value={newChild.grade} 
-                  onChange={e => setNewChild({...newChild, grade: e.target.value})} 
-                  disabled={parseInt(newChild.age) >= 18}
-                />
-              </div>
-              <button type="submit" className="w-full bg-accent text-white py-3 rounded-xl text-sm font-bold shadow-lg shadow-accent/20 hover:bg-accent-hover transition-all mt-6">Create Profile</button>
-            </form>
         </div>
       </div>
     );
@@ -344,9 +272,21 @@ export default function Dashboard({ user, children, alerts, onViewProfile }: Das
             <TrendingUp size={120} />
           </div>
           <div className="relative z-10">
-            <div className="flex items-center gap-2 mb-6">
-              <span className="px-3 py-1 bg-accent-light text-accent text-[10px] font-bold uppercase tracking-widest rounded-full">Family Insight</span>
-              <span className="text-text-dim text-xs">Updated just now</span>
+            <div className="flex items-center justify-between gap-2 mb-6">
+              <div className="flex items-center gap-2">
+                <span className="px-3 py-1 bg-accent-light text-accent text-[10px] font-bold uppercase tracking-widest rounded-full">Mental State Trend</span>
+                <span className="text-text-dim text-xs">Updated just now</span>
+              </div>
+              <div className="flex bg-surface-2 border border-border p-1 rounded-xl">
+                 <button 
+                   onClick={() => setChartTimeframe('7d')}
+                   className={cn("px-3 py-1 text-xs font-bold rounded-lg transition-colors", chartTimeframe === '7d' ? "bg-accent text-white" : "text-text-dim hover:text-text-main")}
+                 >7 Days</button>
+                 <button 
+                   onClick={() => setChartTimeframe('30d')}
+                   className={cn("px-3 py-1 text-xs font-bold rounded-lg transition-colors", chartTimeframe === '30d' ? "bg-accent text-white" : "text-text-dim hover:text-text-main")}
+                 >30 Days</button>
+              </div>
             </div>
             <h3 className="text-2xl font-serif mb-4 leading-tight max-w-md">
               {children.length > 0 && dashboardAssessments.length > 0
@@ -466,59 +406,7 @@ export default function Dashboard({ user, children, alerts, onViewProfile }: Das
         <div className="md:col-span-6 glass-card p-8">
           <div className="flex items-center justify-between mb-8">
             <h3 className="text-xl font-serif">Your {children[0]?.age >= 18 ? 'Students' : 'Children'}</h3>
-            <button 
-              onClick={() => setIsAddingChild(true)}
-              className="w-8 h-8 bg-surface-2 rounded-full flex items-center justify-center hover:bg-accent hover:text-white transition-all"
-            >
-              <Plus size={16} />
-            </button>
           </div>
-
-          {isAddingChild && (
-            <form onSubmit={handleAddChild} className="mb-8 p-6 bg-surface-2 rounded-3xl border border-border space-y-4 animate-fade-in">
-              <div className="flex justify-between items-center">
-                <h4 className="font-bold text-sm">Add New Child</h4>
-                <button type="button" onClick={() => setIsAddingChild(false)} className="p-1 hover:bg-border rounded-lg"><X size={16} /></button>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <input required placeholder="Name" className="p-3 rounded-xl border border-border text-sm bg-surface" value={newChild.name} onChange={e => setNewChild({...newChild, name: e.target.value})} />
-                <input required type="number" placeholder="Age" className="p-3 rounded-xl border border-border text-sm bg-surface" value={newChild.age} onChange={e => {
-                  const age = parseInt(e.target.value);
-                  let grade = newChild.grade;
-                  let gender = newChild.gender;
-                  let avatar = newChild.avatar;
-                  if (!isNaN(age)) {
-                    if (age >= 18) {
-                      grade = 'College/University';
-                      if (gender === 'other') gender = 'male'; // limit to Boy/Girl (male/female)
-                    }
-                    if (age > 5 && avatar === '👶') {
-                      avatar = '👦'; // reset if it was toddler
-                    }
-                  }
-                  setNewChild({...newChild, age: e.target.value, grade, gender, avatar});
-                }} />
-                <input 
-                  placeholder="Grade" 
-                  className={cn("p-3 rounded-xl border border-border text-sm bg-surface", parseInt(newChild.age) >= 18 && "opacity-60 cursor-not-allowed")} 
-                  value={newChild.grade} 
-                  onChange={e => setNewChild({...newChild, grade: e.target.value})} 
-                  disabled={parseInt(newChild.age) >= 18}
-                />
-                <select className="p-3 rounded-xl border border-border text-sm bg-surface" value={newChild.gender} onChange={e => setNewChild({...newChild, gender: e.target.value})}>
-                  <option value="male">Boy</option>
-                  <option value="female">Girl</option>
-                  {(parseInt(newChild.age) < 18 || !newChild.age) && <option value="other">Other</option>}
-                </select>
-                <select className="p-3 rounded-xl border border-border text-sm bg-surface col-span-2" value={newChild.avatar} onChange={e => setNewChild({...newChild, avatar: e.target.value})}>
-                  <option value="👦">👦 Boy</option>
-                  <option value="👧">👧 Girl</option>
-                  {(parseInt(newChild.age) <= 5 || !newChild.age) && <option value="👶">👶 Toddler</option>}
-                </select>
-              </div>
-              <button type="submit" className="w-full bg-accent text-white py-3 rounded-xl text-sm font-bold shadow-lg shadow-accent/20 hover:bg-accent-hover transition-all">Add Child</button>
-            </form>
-          )}
 
           <div className="grid grid-cols-1 gap-4">
             {children.map(child => (
@@ -570,17 +458,19 @@ export default function Dashboard({ user, children, alerts, onViewProfile }: Das
                   )}>
                     {child.riskLevel}
                   </div>
-                  <div className="flex gap-2 mt-2">
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setInterventionChild(child);
-                      }}
-                      className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-bold uppercase hover:bg-blue-100 transition-all border border-blue-100"
-                    >
-                      <Wind size={12} /> Breathe
-                    </button>
-                  </div>
+                  {(child.riskLevel === 'high' || child.riskLevel === 'medium') && (
+                    <div className="flex gap-2 mt-2">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setInterventionChild(child);
+                        }}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-bold uppercase hover:bg-blue-100 transition-all border border-blue-100"
+                      >
+                        <Wind size={12} /> Breathe
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <ChevronRight size={18} className="text-text-dim group-hover:text-accent group-hover:translate-x-1 transition-all" />
               </div>

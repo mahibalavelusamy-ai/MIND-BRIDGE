@@ -215,20 +215,22 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
     { subject: 'Stress', A: 0, fullMark: 5 },
   ];
 
-  const trendData = assessments.length > 0 ? assessments.slice(0, 7).reverse().map(a => ({
+  const isAdult = selectedChild.age >= 18;
+  const isSummaryMode = selectedChild.privacyLevel === 'summary';
+
+  // Scale data points based on timeframe selection '7d' or '30d' (we map 'all' to 30d here as well constraint)
+  const filteredAssessments = (timeframe === '30d' || timeframe === 'all') 
+    ? assessments.slice(0, 30).reverse() 
+    : assessments.slice(0, 7).reverse();
+
+  const trendData = assessments.length > 0 ? filteredAssessments.map(a => ({
     date: new Date(a.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
     wellness: 6 - a.totalScore,
     mood: 6 - a.scores.mood,
     stress: a.scores.stress
-  })) : [
-    { date: 'Mon', wellness: 0, mood: 0, stress: 0 },
-    { date: 'Tue', wellness: 0, mood: 0, stress: 0 },
-    { date: 'Wed', wellness: 0, mood: 0, stress: 0 },
-    { date: 'Thu', wellness: 0, mood: 0, stress: 0 },
-    { date: 'Fri', wellness: 0, mood: 0, stress: 0 },
-    { date: 'Sat', wellness: 0, mood: 0, stress: 0 },
-    { date: 'Sun', wellness: 0, mood: 0, stress: 0 }
-  ];
+  })) : Array.from({ length: timeframe === '7d' ? 7 : 30 }).map((_, i) => ({
+    date: `Day ${i+1}`, wellness: 0, mood: 0, stress: 0
+  }));
 
   return (
     <div className="space-y-8 animate-fade-in pb-12">
@@ -238,6 +240,13 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
           <p className="text-text-muted mt-1">Deep dive into behavioral patterns and AI-driven insights.</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <button 
+            onClick={() => window.print()}
+            className="no-print flex items-center gap-2 px-4 py-2 bg-surface text-text-main border border-border hover:border-accent hover:text-accent rounded-xl text-sm font-bold shadow-sm transition-all"
+          >
+            <Download size={16} />
+            Export Report (PDF)
+          </button>
           <div className="no-print flex bg-surface border border-border rounded-2xl p-1 shadow-sm">
             {(['7d', '30d', 'all'] as const).map((t) => (
               <button
