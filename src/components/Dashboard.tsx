@@ -44,11 +44,17 @@ interface DashboardProps {
   children: Child[];
   alerts: Alert[];
   onViewProfile: (child: Child) => void;
+  selectedChild?: Child | null;
+  setActiveTab: (tab: any) => void;
 }
 
 const COLORS = ['#2d7a5a', '#c47a1e', '#c0392b'];
 
-export default function Dashboard({ user, children, alerts, onViewProfile }: DashboardProps) {
+export default function Dashboard({ user, children, alerts, onViewProfile, selectedChild, setActiveTab }: DashboardProps) {
+  // Session Isolation: Filter children to only show the currently authenticated profile if one is selected
+  const displayChildren = selectedChild ? children.filter(c => c.id === selectedChild.id) : children;
+  const activeChild = selectedChild || children[0];
+
   const [schedules, setSchedules] = useState<Record<string, any[]>>({});
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [isLoadingRecs, setIsLoadingRecs] = useState(false);
@@ -97,10 +103,10 @@ export default function Dashboard({ user, children, alerts, onViewProfile }: Das
     };
 
     const fetchRecommendations = async () => {
-      if (children.length === 0) return;
+      if (!activeChild) return;
       setIsLoadingRecs(true);
       try {
-        const child = children[0]; // Default to first child for dashboard recs
+        const child = activeChild; 
         
         // Fetch last assessment
         const qA = query(
@@ -149,6 +155,7 @@ export default function Dashboard({ user, children, alerts, onViewProfile }: Das
 
   const handleSetSleepReminder = async () => {
     try {
+      if (!activeChild) return;
       if ('Notification' in window) {
         const permission = await Notification.requestPermission();
         if (permission === 'granted') {
@@ -159,10 +166,11 @@ export default function Dashboard({ user, children, alerts, onViewProfile }: Das
       await addDoc(collection(db, 'alerts'), {
         type: 'info',
         title: 'Sleep Reminder',
-        description: `Bedtime wind-down routine recommended for ${children[0]?.name || 'child'}.`,
-        childId: children[0]?.id || 'unknown_child',
+        description: `Bedtime wind-down routine recommended for ${activeChild.name}.`,
+        childId: activeChild.id,
         parentId: auth.currentUser?.uid || '',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        status: 'active'
       });
       alert('Sleep Reminder set successfully!');
     } catch (error) {
@@ -204,12 +212,12 @@ export default function Dashboard({ user, children, alerts, onViewProfile }: Das
   ];
 
   const pieData = [
-    { name: 'Low', value: children.filter(c => c.riskLevel === 'low').length || 1 },
-    { name: 'Moderate', value: children.filter(c => c.riskLevel === 'medium').length || 0 },
-    { name: 'High', value: children.filter(c => c.riskLevel === 'high').length || 0 },
+    { name: 'Low', value: displayChildren.filter(c => c.riskLevel === 'low').length || 1 },
+    { name: 'Moderate', value: displayChildren.filter(c => c.riskLevel === 'medium').length || 0 },
+    { name: 'High', value: displayChildren.filter(c => c.riskLevel === 'high').length || 0 },
   ];
 
-  const selectedChildForChart = children[0];
+  const selectedChildForChart = activeChild;
   const rawSchedule = selectedChildForChart ? (schedules[selectedChildForChart.id] || []) : [];
   
   // Deduplicate and fallback
@@ -289,17 +297,17 @@ export default function Dashboard({ user, children, alerts, onViewProfile }: Das
               </div>
             </div>
             <h3 className="text-2xl font-serif mb-4 leading-tight max-w-md">
-              {children.length > 0 && dashboardAssessments.length > 0
-                ? `${children[0].name}'s stress levels are correlating with upcoming exams.`
-                : children.length > 0 
-                  ? `Ready to track ${children[0].name}'s well-being?`
-                  : "Welcome! Add your first child to start tracking mental health."}
+              {activeChild && dashboardAssessments.length > 0
+                ? `${activeChild.name}'s stress levels are correlating with upcoming exams.`
+                : activeChild 
+                  ? `Ready to track ${activeChild.name}'s well-being?`
+                  : "Welcome! Add your first profile to start tracking."}
             </h3>
             
-            {dashboardAssessments.length === 0 && children.length > 0 ? (
+            {dashboardAssessments.length === 0 && activeChild ? (
               <div className="h-[280px] mt-8 flex flex-col items-center justify-center p-8 text-center rounded-2xl border-2 border-dashed border-border bg-surface/50">
                  <p className="text-text-muted mb-6">No data available. Complete your first check-in to generate insights.</p>
-                 <button onClick={() => onViewProfile(children[0])} className="px-6 py-2.5 bg-accent text-white rounded-xl text-sm font-bold shadow-lg shadow-accent/20 hover:bg-accent-hover transition-all">Go to Profile</button>
+                 <button onClick={() => onViewProfile(activeChild)} className="px-6 py-2.5 bg-accent text-white rounded-xl text-sm font-bold shadow-lg shadow-accent/20 hover:bg-accent-hover transition-all">Go to Profile</button>
               </div>
             ) : (
               <div className="h-[280px] mt-8">
@@ -405,11 +413,11 @@ export default function Dashboard({ user, children, alerts, onViewProfile }: Das
         {/* Children List - Medium Bento Box */}
         <div className="md:col-span-6 glass-card p-8">
           <div className="flex items-center justify-between mb-8">
-            <h3 className="text-xl font-serif">Your {children[0]?.age >= 18 ? 'Students' : 'Children'}</h3>
+            <h3 className="text-xl font-serif">{activeChild?.age >= 18 ? 'Your Student' : 'Your Profile'}</h3>
           </div>
 
           <div className="grid grid-cols-1 gap-4">
-            {children.map(child => (
+            {displayChildren.map(child => (
               <div 
                 key={child.id}
                 onClick={() => onViewProfile(child)}
@@ -538,7 +546,7 @@ export default function Dashboard({ user, children, alerts, onViewProfile }: Das
                 </div>
                 <div>
                   <h3 className="text-2xl font-serif">Personalized Recommendations</h3>
-                  <p className="text-sm text-text-muted">Adaptive strategies based on {children[0]?.name}'s recent data</p>
+                  <p className="text-sm text-text-muted">Adaptive strategies based on {activeChild?.name}'s recent data</p>
                 </div>
               </div>
               <button 
@@ -548,7 +556,7 @@ export default function Dashboard({ user, children, alerts, onViewProfile }: Das
               </button>
             </div>
 
-            {children[0]?.privacyLevel === 'summary' ? (
+            {activeChild?.privacyLevel === 'summary' ? (
               <div className="flex items-center gap-3 text-purple-400 bg-purple-900/20 p-4 rounded-xl border border-purple-500/20">
                 <Lock size={20} />
                 <p className="text-sm font-medium">Personalized recommendations are disabled due to privacy settings.</p>
@@ -561,7 +569,7 @@ export default function Dashboard({ user, children, alerts, onViewProfile }: Das
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {SHORTCUTS.map((rec) => (
+                {(recommendations.length > 0 ? recommendations : SHORTCUTS).map((rec: any) => (
                   <div key={rec.id} className="group p-6 bg-surface-2 rounded-3xl border border-border hover:border-accent/30 transition-all flex flex-col justify-between">
                     <div>
                       <div className="flex items-center justify-between mb-4">
@@ -590,7 +598,14 @@ export default function Dashboard({ user, children, alerts, onViewProfile }: Das
                         Context: {rec.context}
                       </div>
                       <button 
-                        onClick={rec.onClick}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (rec.onClick) {
+                            rec.onClick();
+                          } else if (rec.actionLabel === 'Start Check-in') {
+                            setActiveTab('assessment');
+                          }
+                        }}
                         className="w-full py-3 bg-white border border-border rounded-xl text-xs font-bold flex items-center justify-center gap-2 group-hover:bg-accent group-hover:text-white group-hover:border-accent transition-all"
                       >
                         {rec.actionLabel}
@@ -612,8 +627,8 @@ export default function Dashboard({ user, children, alerts, onViewProfile }: Das
           <div className="relative z-10">
             <div className="flex items-center justify-between mb-8">
               <div>
-                <h3 className="text-2xl font-serif mb-1">{children[0]?.age >= 18 ? 'Habit Tracker' : 'Wellness Garden'}</h3>
-                <p className="text-sm text-text-muted">{children[0]?.age >= 18 ? 'Encourage positive habits through a simple credit system.' : 'Encourage positive habits through gamified rewards.'}</p>
+                <h3 className="text-2xl font-serif mb-1">{activeChild?.age >= 18 ? 'Habit Tracker' : 'Wellness Garden'}</h3>
+                <p className="text-sm text-text-muted">{activeChild?.age >= 18 ? 'Encourage positive habits through a simple credit system.' : 'Encourage positive habits through gamified rewards.'}</p>
               </div>
               <div className="flex gap-2">
                 <button 
@@ -626,7 +641,7 @@ export default function Dashboard({ user, children, alerts, onViewProfile }: Das
             </div>
             
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
-              {children.map(child => (
+              {displayChildren.map(child => (
                 <div key={child.id} className="flex flex-col items-center gap-3 p-4 bg-surface-2 rounded-[2rem] border border-border group hover:border-accent transition-all">
                   <div className="relative">
                     <div className="w-20 h-20 rounded-full bg-accent-light flex items-center justify-center text-4xl shadow-inner group-hover:scale-110 transition-transform">

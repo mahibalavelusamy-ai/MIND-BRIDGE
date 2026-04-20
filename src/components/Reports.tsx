@@ -41,6 +41,9 @@ import { cn } from '../lib/utils';
 import { db, auth, collection, query, where, getDocs, orderBy, addDoc, handleFirestoreError, OperationType } from '../lib/firebase';
 import { detectBehavioralPatterns } from '../lib/patternService';
 import { Activity, AlertTriangle, Fingerprint, Lock } from 'lucide-react';
+import { getGradientForChild } from '../lib/utils';
+
+// ... 
 
 interface ReportsProps {
   children: Child[];
@@ -132,7 +135,8 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
         description: `Recommended morning check-in for ${selectedChild?.name || 'child'} to track sleep patterns.`,
         childId: selectedChild?.id || 'unknown_child',
         parentId: auth.currentUser?.uid || '',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        status: 'active'
       });
       alert('Reminder set successfully!');
     } catch (error) {
@@ -158,7 +162,10 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
               )}
             >
               <div className="flex items-center gap-4 mb-6">
-                <div className="w-16 h-16 rounded-full bg-accent-light flex items-center justify-center text-3xl">
+                <div className={cn(
+                  "w-16 h-16 rounded-full flex items-center justify-center text-3xl",
+                  child.age >= 18 ? `text-white bg-gradient-to-br ${getGradientForChild(child.id)}` : "bg-accent-light"
+                )}>
                   {child.age >= 18 ? <span className="font-serif">{child.name ? child.name.charAt(0).toUpperCase() : '👤'}</span> : child.avatar}
                 </div>
                 <div>

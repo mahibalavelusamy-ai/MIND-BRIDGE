@@ -18,7 +18,7 @@ import {
   Smile
 } from 'lucide-react';
 import { Child, PredictiveRisk, RootCauseAnalysis } from '../types';
-import { cn } from '../lib/utils';
+import { cn, getGradientForChild } from '../lib/utils';
 import { db, collection, addDoc, deleteDoc, doc, query, where, onSnapshot, OperationType, handleFirestoreError, updateDoc, getDocs, orderBy, limit } from '../lib/firebase';
 import { getAIInsights } from '../services/geminiService';
 import { predictFutureRisk } from '../lib/predictiveService';
@@ -221,8 +221,11 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
       {/* Header */}
       <div className="glass-card p-8 relative overflow-hidden">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center gap-8">
-          <div className="w-24 h-24 rounded-2xl bg-accent-light flex items-center justify-center text-5xl shadow-inner">
-            {child.age >= 18 ? <span className="font-serif text-accent">{child.name ? child.name.charAt(0).toUpperCase() : '👤'}</span> : child.avatar}
+          <div className={cn(
+            "w-24 h-24 rounded-2xl flex items-center justify-center text-5xl shadow-inner",
+            child.age >= 18 ? `text-white bg-gradient-to-br ${getGradientForChild(child.id)}` : "bg-accent-light"
+          )}>
+            {child.age >= 18 ? <span className="font-serif">{child.name ? child.name.charAt(0).toUpperCase() : '👤'}</span> : child.avatar}
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2">
@@ -295,6 +298,32 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
               >
                 Edit Profile
               </button>
+
+              {!child.pin && (
+                <button
+                  onClick={async () => {
+                     const newPin = window.prompt("Create an alphanumeric PIN/Password for this profile (min. 4 characters):");
+                     if (newPin && newPin.length >= 4) {
+                       if (/(.)\1{2,}/.test(newPin)) {
+                         alert("PIN is too weak. Avoid at least 3 repeating characters.");
+                         return;
+                       }
+                       try {
+                         await updateDoc(doc(db, 'children', child.id), { pin: newPin });
+                         alert("PIN created successfully!");
+                         onUpdate({ ...child, pin: newPin });
+                       } catch (error) {
+                         handleFirestoreError(error, OperationType.UPDATE, 'children');
+                       }
+                     } else if (newPin) {
+                       alert("Invalid PIN. Must be at least 4 characters.");
+                     }
+                  }}
+                  className="px-6 py-2.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-xl text-sm font-bold uppercase tracking-wider hover:bg-amber-100 transition-all flex items-center gap-2"
+                >
+                  <Lock size={16} /> Create Profile PIN
+                </button>
+              )}
             </div>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -775,6 +804,88 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
               Recalculate Model
             </button>
           </div>
+          
+          {/* Security Settings Section */}
+          {child.pin && (
+            <div className="glass-card p-6 relative overflow-hidden">
+              <div className="flex items-center gap-2 text-accent font-bold text-xs uppercase tracking-widest mb-4">
+                <Lock size={14} /> Security Settings
+              </div>
+              
+              <div className="space-y-4">
+                <h4 className="font-semibold text-sm">Update Profile PIN</h4>
+                <p className="text-xs text-text-muted mb-4">Create a medium-strength alphanumeric PIN (e.g., Maddy@123). Repeating characters are not allowed.</p>
+                
+                <form 
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    // Validate input
+                    const currentPinInput = (document.getElementById('current-pin') as HTMLInputElement).value;
+                    const newPinInput = (document.getElementById('new-pin') as HTMLInputElement).value;
+                    const confirmPinInput = (document.getElementById('confirm-pin') as HTMLInputElement).value;
+                    
+                    if (currentPinInput !== child.pin) {
+                      alert("Current PIN is incorrect.");
+                      return;
+                    }
+                    if (newPinInput !== confirmPinInput) {
+                      alert("New PINs do not match.");
+                      return;
+                    }
+                    if (newPinInput.length < 4) {
+                      alert("PIN must be at least 4 characters long.");
+                      return;
+                    }
+                    if (/(.)\1{2,}/.test(newPinInput)) {
+                      alert("PIN is too weak. Please avoid repeating characters.");
+                      return;
+                    }
+                    
+                    try {
+                      await updateDoc(doc(db, 'children', child.id), { pin: newPinInput });
+                      alert("PIN updated successfully.");
+                      onUpdate({ ...child, pin: newPinInput });
+                      (document.getElementById('current-pin') as HTMLInputElement).value = '';
+                      (document.getElementById('new-pin') as HTMLInputElement).value = '';
+                      (document.getElementById('confirm-pin') as HTMLInputElement).value = '';
+                    } catch (error) {
+                      handleFirestoreError(error, OperationType.UPDATE, 'children');
+                    }
+                  }}
+                  className="space-y-3"
+                >
+                  <input
+                    id="current-pin"
+                    type="password"
+                    required
+                    placeholder="Current PIN"
+                    className="w-full p-3 rounded-xl border border-border text-sm bg-surface"
+                  />
+                  <input
+                    id="new-pin"
+                    type="password"
+                    required
+                    placeholder="New PIN"
+                    className="w-full p-3 rounded-xl border border-border text-sm bg-surface"
+                  />
+                  <input
+                    id="confirm-pin"
+                    type="password"
+                    required
+                    placeholder="Confirm New PIN"
+                    className="w-full p-3 rounded-xl border border-border text-sm bg-surface"
+                  />
+                  <button 
+                    type="submit"
+                    className="w-full bg-accent text-white py-3 rounded-xl text-sm font-bold shadow hover:bg-accent-hover transition-all"
+                  >
+                    Update PIN
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+          
         </div>
       </div>
     </div>

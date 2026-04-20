@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { Child } from '../types';
 import { PEDIATRIC_QUESTIONS, ADULT_QUESTIONS } from '../constants';
-import { cn } from '../lib/utils';
+import { cn, getGradientForChild } from '../lib/utils';
 import { db, auth, collection, addDoc, updateDoc, doc, Timestamp, OperationType, handleFirestoreError, query, where, getDocs, orderBy, limit } from '../lib/firebase';
 import { GoogleGenAI } from "@google/genai";
 import { calculateAssessmentResult, generateAlerts, CategoryScores } from '../lib/scoring';
@@ -27,8 +27,7 @@ import { performRootCauseAnalysis } from '../lib/rootCauseService';
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 interface AssessmentProps {
-  childrenList: Child[];
-  initialSelectedChildId?: string;
+  child: Child;
   onComplete: (level?: number, childName?: string) => void;
 }
 
@@ -41,9 +40,16 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   'Behavior': <Activity size={20} />
 };
 
-export default function Assessment({ childrenList, initialSelectedChildId, onComplete }: AssessmentProps) {
-  const [selectedChildId, setSelectedChildId] = useState<string>(initialSelectedChildId || '');
+export default function Assessment({ child, onComplete }: AssessmentProps) {
   const [hasStarted, setHasStarted] = useState(false);
+  
+  // Clean up any stale answers if the active child prop changes rapidly
+  useEffect(() => {
+    setHasStarted(false);
+    setAnswers({});
+    setCurrentIdx(0);
+  }, [child.id]);
+
   const [currentIdx, setCurrentIdx] = useState(0);
   const [direction, setDirection] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
@@ -63,8 +69,6 @@ export default function Assessment({ childrenList, initialSelectedChildId, onCom
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
-
-  const child = childrenList.find(c => c.id === selectedChildId);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -95,7 +99,7 @@ export default function Assessment({ childrenList, initialSelectedChildId, onCom
     if (hasStarted && child) {
       fetchData();
     }
-  }, [hasStarted, child?.id]);
+  }, [hasStarted, child.id]);
 
   const activeQuestions = child?.age >= 18 ? ADULT_QUESTIONS : PEDIATRIC_QUESTIONS;
   const currentQuestion = activeQuestions[currentIdx];
@@ -116,6 +120,7 @@ export default function Assessment({ childrenList, initialSelectedChildId, onCom
   };
 
   const handleSubmit = async () => {
+    // Safety check relies on securely authenticated session router providing strictly validated `child` component
     if (!auth.currentUser || !child) return;
     setIsSubmitting(true);
     
@@ -286,35 +291,23 @@ export default function Assessment({ childrenList, initialSelectedChildId, onCom
   };
 
   if (!hasStarted) {
+    if (!child) return null;
+
     return (
       <div className="max-w-xl mx-auto py-12 px-4 animate-fade-in flex flex-col items-center text-center">
-        <h1 className="text-3xl md:text-4xl font-serif mb-4">Start Assessment</h1>
-        <p className="text-text-muted mb-8">Who is taking this check-in today?</p>
-        
-        <div className="grid grid-cols-2 gap-4 w-full mb-8">
-          {childrenList.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => setSelectedChildId(c.id)}
-              className={cn(
-                "p-6 rounded-3xl border-2 transition-all flex flex-col items-center gap-4 bg-surface",
-                selectedChildId === c.id 
-                  ? "border-accent shadow-md bg-accent/5 ring-4 ring-accent/10" 
-                  : "border-border hover:border-text-dim hover:bg-surface-2"
-              )}
-            >
-              <div className="w-16 h-16 rounded-full bg-accent-light flex items-center justify-center text-3xl">
-                {c.avatar}
-              </div>
-              <span className="font-bold text-lg">{c.name}</span>
-            </button>
-          ))}
+        <div className={cn(
+          "w-32 h-32 md:w-40 md:h-40 rounded-3xl shadow-2xl flex items-center justify-center text-6xl mb-8 transition-all duration-300 relative overflow-hidden bg-gradient-to-br text-white",
+          getGradientForChild(child.id)
+        )}>
+          <div className="absolute inset-0 bg-white/10" />
+          {child.age >= 18 ? <span className="font-serif">{child.name ? child.name.charAt(0).toUpperCase() : '👤'}</span> : child.avatar}
         </div>
-
+        <h1 className="text-3xl md:text-4xl font-serif mb-4">Ready for your check-in, {child.name}?</h1>
+        <p className="text-text-muted mb-8 max-w-sm">Take a moment to reflect on how you've been feeling lately. Your answers are secure and help us provide the right support.</p>
+        
         <button 
           onClick={() => setHasStarted(true)}
-          disabled={!selectedChildId}
-          className="w-full md:w-auto px-12 py-4 bg-accent text-white rounded-xl font-bold hover:bg-accent-hover transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg disabled:hover:shadow-none"
+          className="w-full md:w-auto px-12 py-4 bg-accent text-white rounded-xl font-bold hover:bg-accent-hover transition-all shadow-md hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-accent/20"
         >
           Begin Check-in
         </button>
@@ -335,7 +328,7 @@ export default function Assessment({ childrenList, initialSelectedChildId, onCom
       {/* Stepper Header */}
       <div className="mb-12 relative">
         <div className="flex justify-between items-center relative z-10">
-          {ASSESSMENT_QUESTIONS.map((q, i) => (
+          {activeQuestions.map((q, i) => (
             <div key={q.id} className="flex flex-col items-center gap-2">
               <button
                 onClick={() => {
@@ -374,7 +367,7 @@ export default function Assessment({ childrenList, initialSelectedChildId, onCom
           <motion.div 
             className="h-full bg-accent"
             initial={{ width: 0 }}
-            animate={{ width: `${(currentIdx / (ASSESSMENT_QUESTIONS.length - 1)) * 100}%` }}
+            animate={{ width: `${(currentIdx / (activeQuestions.length - 1)) * 100}%` }}
             transition={{ duration: 0.5 }}
           />
         </div>

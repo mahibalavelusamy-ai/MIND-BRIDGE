@@ -36,15 +36,19 @@ service cloud.firestore {
     }
     
     function isParentOf(childId) {
-      return isAuthenticated() && get(/databases/$(database)/documents/children/$(childId)).data.parentId == request.auth.uid;
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/children/$(childId)) &&
+             get(/databases/$(database)/documents/children/$(childId)).data.parentId == request.auth.uid;
     }
 
     function getUserRole() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+      let path = /databases/$(database)/documents/users/$(request.auth.uid);
+      return exists(path) ? get(path).data.role : 'guest';
     }
 
     function isTeacherOrClinician() {
-      return isAuthenticated() && getUserRole() in ['teacher', 'clinician'];
+      let role = getUserRole();
+      return isAuthenticated() && (role == 'teacher' || role == 'clinician');
     }
 
     function isValidUser(data) {
@@ -74,10 +78,7 @@ service cloud.firestore {
              data.submittedBy == request.auth.uid &&
              data.scores is map &&
              data.scores.keys().hasAll(['mood', 'energy', 'sleep', 'social', 'stress']) &&
-             data.scores.mood is number &&
-             data.scores.stress is number &&
-             data.totalScore is number &&
-             (!('aiInsight' in data) || (data.aiInsight is string && data.aiInsight.size() < 5000));
+             (!('aiInsight' in data) || (data.aiInsight is string && data.aiInsight.size() < 10000));
     }
 
     function isValidAlert(data) {

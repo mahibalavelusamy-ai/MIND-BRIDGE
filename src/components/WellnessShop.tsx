@@ -3,6 +3,7 @@ import { X, Star, Gift, Palette, Gamepad2, Clock, Utensils, Film, Coffee, Music,
 import { motion, AnimatePresence } from 'motion/react';
 import { Child } from '../types';
 import { db, doc, updateDoc, handleFirestoreError, OperationType } from '../lib/firebase';
+import { cn, getGradientForChild } from '../lib/utils';
 
 interface WellnessShopProps {
   isOpen: boolean;
@@ -79,7 +80,12 @@ export default function WellnessShop({ isOpen, onClose, child }: WellnessShopPro
           <div className="p-6 flex-1 overflow-y-auto">
             <div className="flex items-center justify-between mb-8 bg-accent/10 p-4 rounded-2xl border border-accent/20">
               <div className="flex items-center gap-3">
-                <div className="text-4xl">{child.age >= 18 ? <span className="font-serif text-accent bg-white w-14 h-14 flex items-center justify-center rounded-2xl">{child.name ? child.name.charAt(0).toUpperCase() : '👤'}</span> : child.avatar}</div>
+                <div className={cn(
+                  "text-4xl w-14 h-14 flex items-center justify-center rounded-2xl shadow-inner",
+                  child.age >= 18 ? `text-white bg-gradient-to-br ${getGradientForChild(child.id)}` : "bg-white text-accent"
+                )}>
+                  {child.age >= 18 ? <span className="font-serif">{child.name ? child.name.charAt(0).toUpperCase() : '👤'}</span> : child.avatar}
+                </div>
                 <div>
                   <p className="font-bold text-lg">{child.name}'s Balance</p>
                   <p className="text-xs text-text-dim">Keep completing tasks to earn more!</p>

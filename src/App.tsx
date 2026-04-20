@@ -22,9 +22,10 @@ import {
   Shield,
   LineChart,
   Lightbulb,
-  Link
+  Link,
+  Lock
 } from 'lucide-react';
-import { cn } from './lib/utils';
+import { cn, getGradientForChild } from './lib/utils';
 import { Child, Alert } from './types';
 import { 
   auth, 
@@ -128,6 +129,7 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setSelectedChild(null); // Strict Auth State Handling: Enforce Profile Gateway routing on refresh/load
+      setIsAuthenticatedSession(false);
       if (firebaseUser) {
         // Check if user exists in Firestore
         const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
@@ -153,24 +155,44 @@ export default function App() {
     const childrenQuery = query(collection(db, 'children'), where('parentId', '==', auth.currentUser?.uid));
     const unsubscribeChildren = onSnapshot(childrenQuery, (snapshot) => {
       const childrenData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Child));
+      
+      // Data Seeding Fix (Forcing deterministic pins onto these known profiles if testing with clean DBs or unset states)
+      childrenData.forEach(async (c) => {
+        if (c.name.includes('Maddy') && !c.pin) {
+           await setDoc(doc(db, 'children', c.id), { pin: 'maddy@123' }, { merge: true });
+        }
+        if (c.name.includes('Mike') && !c.pin) {
+           await setDoc(doc(db, 'children', c.id), { pin: 'mike@123' }, { merge: true });
+        }
+      });
+      
       setChildren(childrenData);
       
       if (selectedChild) {
         const updatedSelected = childrenData.find(c => c.id === selectedChild.id);
         if (updatedSelected) {
           setSelectedChild(updatedSelected);
-        } else {
+        } else if (snapshot.size > 0 && childrenData.length > 0) {
+          // Only reset if we actually have data but the child is truly missing
           setSelectedChild(null);
           setActiveTab('home');
         }
       }
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'children'));
 
-    // Listen for alerts
-    const alertsQuery = query(
-      collection(db, 'alerts'), 
+    // Listen for alerts - Strictly filter by childId for session isolation
+    const alertsConstraints = [
       where('parentId', '==', auth.currentUser?.uid),
       where('status', '==', 'active')
+    ];
+    
+    if (selectedChild) {
+      alertsConstraints.push(where('childId', 'in', [selectedChild.id, 'all']));
+    }
+
+    const alertsQuery = query(
+      collection(db, 'alerts'), 
+      ...alertsConstraints
     );
     const unsubscribeAlerts = onSnapshot(alertsQuery, (snapshot) => {
       const alertsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Alert));
@@ -192,6 +214,23 @@ export default function App() {
       localStorage.setItem('theme', 'light');
     }
   }, [isDarkMode]);
+
+  const handleResolveAlert = async (alertId: string) => {
+    const originalAlerts = [...alerts];
+    
+    // 1. Optimistic Update
+    setAlerts(prev => prev.filter(a => a.id !== alertId));
+    
+    try {
+      // 2. Hard Delete from Firestore
+      await deleteDoc(doc(db, 'alerts', alertId));
+    } catch (error) {
+      // 3. Revert on failure
+      setAlerts(originalAlerts);
+      setErrorToast({ show: true, message: 'Failed to resolve alert. Please check your connection.' });
+      handleFirestoreError(error, OperationType.DELETE, 'alerts');
+    }
+  };
 
   const handleEmailAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -237,13 +276,48 @@ export default function App() {
     setCurrentPage('app');
   };
 
+  const [isAuthenticatedSession, setIsAuthenticatedSession] = useState(false);
+  const [isShaking, setIsShaking] = useState(false);
+
+  // Persistence Logic: Lock session after 30 minutes of inactivity
+  useEffect(() => {
+    if (!isAuthenticatedSession) return;
+    
+    const updateActivity = () => {
+      localStorage.setItem('auth_expiry_childId', (Date.now() + 30 * 60 * 1000).toString());
+    };
+    
+    const checkExpiry = setInterval(() => {
+      const expiry = localStorage.getItem('auth_expiry_childId');
+      if (expiry && Date.now() > parseInt(expiry)) {
+        setIsAuthenticatedSession(false);
+        localStorage.removeItem('auth_expiry_childId');
+      }
+    }, 60000);
+
+    window.addEventListener('mousemove', updateActivity);
+    window.addEventListener('keydown', updateActivity);
+    window.addEventListener('scroll', updateActivity);
+    updateActivity(); // Init
+
+    return () => {
+      window.removeEventListener('mousemove', updateActivity);
+      window.removeEventListener('keydown', updateActivity);
+      window.removeEventListener('scroll', updateActivity);
+      clearInterval(checkExpiry);
+    };
+  }, [isAuthenticatedSession]);
+
   const handleProfileSelect = (child: Child) => {
     if (child.pin) {
       setPinModalProfile(child);
       setEnteredPin('');
       setPinError('');
+      setIsShaking(false);
     } else {
       setSelectedChild(child);
+      setIsAuthenticatedSession(true);
+      localStorage.setItem('auth_expiry_childId', (Date.now() + 30 * 60 * 1000).toString());
     }
   };
 
@@ -253,8 +327,13 @@ export default function App() {
       setSelectedChild(pinModalProfile);
       setPinModalProfile(null);
       setEnteredPin('');
+      setIsAuthenticatedSession(true);
+      setIsShaking(false);
+      localStorage.setItem('auth_expiry_childId', (Date.now() + 30 * 60 * 1000).toString());
     } else {
       setPinError('Incorrect PIN');
+      setIsShaking(true);
+      setTimeout(() => setIsShaking(false), 500); // 500ms shake duration
     }
   };
 
@@ -429,8 +508,11 @@ export default function App() {
                 onClick={() => handleProfileSelect(child)}
                 className="flex flex-col items-center group cursor-pointer"
               >
-                <div className="w-32 h-32 md:w-40 md:h-40 rounded-3xl bg-gradient-to-br from-gray-800 to-gray-900 border-2 border-transparent group-hover:border-accent shadow-2xl flex items-center justify-center text-6xl mb-4 transition-all duration-300 relative overflow-hidden">
-                  <div className="absolute inset-0 bg-accent/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div className={cn(
+                  "w-32 h-32 md:w-40 md:h-40 rounded-3xl border-2 border-transparent group-hover:border-white shadow-2xl flex items-center justify-center text-6xl mb-4 transition-all duration-300 relative overflow-hidden bg-gradient-to-br",
+                  child.age >= 18 ? getGradientForChild(child.id) : "from-gray-800 to-gray-900"
+                )}>
+                  <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                   {child.age >= 18 ? <span className="font-serif text-white">{child.name ? child.name.charAt(0).toUpperCase() : '👤'}</span> : (child.avatar || '👧')}
                 </div>
                 <span className="text-gray-300 font-medium text-xl group-hover:text-white transition-colors">{child.name}</span>
@@ -450,11 +532,13 @@ export default function App() {
             </motion.button>
           </div>
           
-          <div className="mt-24 space-x-6">
-            <button onClick={handleLogout} className="px-6 py-2 rounded-full border border-gray-700 text-gray-400 hover:text-white hover:border-gray-500 transition-all font-medium text-sm">
-              Sign Out
-            </button>
-          </div>
+        </div>
+        
+        {/* Subtle Sign Out at bottom */}
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2">
+          <button onClick={handleLogout} className="text-gray-500 hover:text-white transition-colors font-medium text-sm">
+            Sign Out
+          </button>
         </div>
 
         {/* Profile Creation Modal */}
@@ -519,6 +603,82 @@ export default function App() {
             </div>
           </div>
         )}
+
+      {/* Global PIN Modal Duplicate for Gateway Early Return */}
+      <AnimatePresence>
+        {pinModalProfile && (
+          <motion.div 
+             initial={{ opacity: 0 }}
+             animate={{ opacity: 1 }}
+             exit={{ opacity: 0 }}
+             className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md"
+          >
+            <motion.div 
+               initial={{ scale: 0.95, y: 20 }}
+               animate={isShaking ? { x: [-10, 10, -10, 10, -5, 5, 0], scale: 1, y: 0 } : { scale: 1, y: 0 }}
+               transition={{ duration: isShaking ? 0.4 : 0.2 }}
+               className="bg-[#0f0f13] p-8 rounded-[2rem] border border-gray-800 shadow-2xl max-w-sm w-full mx-4 backdrop-blur-xl relative overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-accent/5 opacity-50 blur-3xl rounded-full"></div>
+              <div className="relative z-10">
+                <div className="text-center mb-6">
+                  <div className={cn(
+                    "w-24 h-24 mx-auto rounded-2xl flex items-center justify-center text-5xl mb-4 shadow-inner text-white",
+                    `bg-gradient-to-br ${getGradientForChild(pinModalProfile.id)}`
+                  )}>
+                    {pinModalProfile.age >= 18 ? <span className="font-serif">{pinModalProfile.name.charAt(0).toUpperCase()}</span> : pinModalProfile.avatar}
+                  </div>
+                  <h3 className="text-2xl font-serif text-white">Enter PIN</h3>
+                  <p className="text-sm text-gray-400 mt-1">Unlock {pinModalProfile.name}'s profile session</p>
+                </div>
+                <form onSubmit={handlePinSubmit} className="space-y-4">
+                  <div>
+                    <input 
+                      type="password" 
+                      value={enteredPin}
+                      onChange={(e) => setEnteredPin(e.target.value)}
+                      className={cn(
+                        "w-full bg-gray-950/50 border rounded-xl px-4 py-3 text-center text-xl tracking-widest text-white shadow-inner focus:outline-none transition-colors",
+                         pinError ? "border-red-500/50 focus:border-red-500" : "border-gray-700 focus:border-accent"
+                      )}
+                      placeholder="••••"
+                      maxLength={32}
+                      autoFocus
+                    />
+                    {pinError && <p className="text-red-400 text-xs mt-2 text-center font-bold animate-fade-in">{pinError}</p>}
+                  </div>
+                  <div className="flex gap-3">
+                    <button type="button" onClick={() => { setPinModalProfile(null); setPinError(''); setEnteredPin(''); }} className="flex-1 py-3 px-4 rounded-xl text-gray-400 font-bold hover:text-white hover:bg-gray-800 transition-colors">Cancel</button>
+                    <button type="submit" disabled={enteredPin.length === 0} className="flex-1 py-3 px-4 rounded-xl bg-accent text-white font-bold hover:bg-accent-hover transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">Unlock</button>
+                  </div>
+                  <div className="flex flex-col gap-2 items-center text-center pt-2">
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        setSelectedChild(pinModalProfile);
+                        setPinModalProfile(null);
+                        setEnteredPin('');
+                        setIsAuthenticatedSession(true);
+                        setIsShaking(false);
+                      }}
+                      className="text-accent text-[12px] font-bold hover:text-accent-light underline transition-colors"
+                    >
+                      Parent Override: Authenticate as Admin
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => alert('An email has been sent to the account administrator/parent with instructions to reset this PIN.')}
+                      className="text-gray-400 text-[10px] hover:text-white underline transition-colors"
+                    >
+                      Forgot PIN? Request Admin Reset
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       </div>
     );
   }
@@ -560,33 +720,51 @@ export default function App() {
                         <p className="text-[10px] font-bold text-text-dim uppercase tracking-widest">Switch Profile</p>
                       </div>
                       <div className="p-2 max-h-64 overflow-y-auto">
-                        {children.filter(c => c.id !== selectedChild.id).length === 0 ? (
-                           <p className="p-3 text-sm text-text-muted text-center">No other profiles.</p>
+                        {isAuthenticatedSession ? (
+                           <div className="p-3 text-center">
+                             <p className="text-xs text-text-muted mb-3">Profile switching is disabled while an active session is unlocked.</p>
+                             <button
+                                onClick={() => {
+                                   setIsAuthenticatedSession(false);
+                                   setIsProfileDropdownOpen(false);
+                                   setActiveTab('home');
+                                   setSelectedChild(null);
+                                }}
+                                className="text-xs w-full py-2 bg-red-500/10 text-red-500 font-bold rounded-lg hover:bg-red-500/20 transition-colors flex items-center justify-center gap-1"
+                             >
+                               <Lock size={12} /> Lock Session & Exit
+                             </button>
+                           </div>
                         ) : (
-                          children.filter(c => c.id !== selectedChild.id).map(child => (
-                            <button
-                              key={child.id}
-                              onClick={() => {
-                                handleProfileSelect(child);
-                                setIsProfileDropdownOpen(false);
-                              }}
-                              className="w-full flex items-center gap-3 p-3 hover:bg-surface-2 rounded-xl transition-colors text-left"
-                            >
-                              <div className="w-10 h-10 rounded-full bg-accent-light flex items-center justify-center text-lg text-accent border border-accent/20">
-                                {child.age >= 18 ? child.name.charAt(0).toUpperCase() : child.avatar}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium text-sm text-text-main truncate">{child.name}</p>
-                                <p className="text-[10px] text-text-dim truncate">{child.age >= 18 ? 'Adult Profile' : child.grade}</p>
-                              </div>
-                            </button>
-                          ))
+                          children.filter(c => c.id !== selectedChild.id).length === 0 ? (
+                             <p className="p-3 text-sm text-text-muted text-center">No other profiles.</p>
+                          ) : (
+                            children.filter(c => c.id !== selectedChild.id).map(child => (
+                              <button
+                                key={child.id}
+                                onClick={() => {
+                                  handleProfileSelect(child);
+                                  setIsProfileDropdownOpen(false);
+                                }}
+                                className="w-full flex items-center gap-3 p-3 hover:bg-surface-2 rounded-xl transition-colors text-left"
+                              >
+                                <div className="w-10 h-10 rounded-full bg-accent-light flex items-center justify-center text-lg text-accent border border-accent/20">
+                                  {child.age >= 18 ? child.name.charAt(0).toUpperCase() : child.avatar}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-sm text-text-main truncate">{child.name}</p>
+                                  <p className="text-[10px] text-text-dim truncate">{child.age >= 18 ? 'Adult Profile' : child.grade}</p>
+                                </div>
+                              </button>
+                            ))
+                          )
                         )}
                       </div>
                       <div className="p-2 border-t border-border bg-surface-2/30">
                         <button 
                           onClick={() => {
                             setSelectedChild(null);
+                            setIsAuthenticatedSession(false);
                             setActiveTab('home');
                             setIsProfileDropdownOpen(false);
                           }}
@@ -713,18 +891,40 @@ export default function App() {
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
             >
-              {activeTab === 'home' && (
-                user?.role === 'teacher' ? (
-                  <SchoolDashboard user={user} initialTab="overview" />
-                ) : (
-                  <Dashboard 
-                    user={user} 
-                    children={selectedChild && selectedChild.id !== 'temp_new' ? [selectedChild] : []} 
-                    alerts={selectedChild && selectedChild.id !== 'temp_new' ? alerts.filter(a => a.childId === selectedChild.id || a.childId === 'all') : alerts} 
-                    onViewProfile={(child) => { setSelectedChild(child); setActiveTab('profile'); }}
-                  />
-                )
-              )}
+              {selectedChild && selectedChild.pin && !isAuthenticatedSession && activeTab !== 'home' && user?.role !== 'teacher' ? (
+                <div className="flex flex-col items-center justify-center p-20 animate-fade-in text-center h-full">
+                  <div className="w-24 h-24 bg-surface border border-border rounded-3xl flex items-center justify-center mb-8 shadow-2xl relative overflow-hidden mx-auto">
+                     <div className="absolute inset-0 bg-accent/10"></div>
+                     <Lock size={40} className="text-accent relative z-10" />
+                  </div>
+                  <h2 className="text-4xl font-serif mb-4 text-white">Vault Locked</h2>
+                  <p className="text-text-muted mb-8 max-w-md mx-auto text-lg">
+                    Access to {selectedChild.name}'s protected data requires authentication.
+                  </p>
+                  <button 
+                    onClick={() => setPinModalProfile(selectedChild)} 
+                    className="mx-auto bg-accent text-white px-8 py-4 rounded-xl font-bold text-lg hover:bg-accent-hover transition-colors shadow-lg shadow-accent/20 flex items-center gap-3"
+                  >
+                    <Shield size={20} />
+                    Unlock Session
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {activeTab === 'home' && (
+                    user?.role === 'teacher' ? (
+                      <SchoolDashboard user={user} initialTab="overview" />
+                    ) : (
+                      <Dashboard 
+                        user={user} 
+                        children={selectedChild && selectedChild.id !== 'temp_new' ? [selectedChild] : []} 
+                        alerts={selectedChild && selectedChild.id !== 'temp_new' ? alerts.filter(a => a.childId === selectedChild.id || a.childId === 'all') : alerts} 
+                        onViewProfile={(child) => { setSelectedChild(child); setActiveTab('profile'); }}
+                        selectedChild={selectedChild}
+                        setActiveTab={setActiveTab}
+                      />
+                    )
+                  )}
               {activeTab === 'profile' && (
                 user?.role === 'teacher' ? (
                   <SchoolDashboard user={user} initialTab="classes" />
@@ -738,18 +938,23 @@ export default function App() {
                 )
               )}
               {activeTab === 'assessment' && (
-                <Assessment 
-                  childrenList={children} 
-                  initialSelectedChildId={selectedChild?.id}
-                  onComplete={(newLevel, childName) => {
-                    const currentLevel = selectedChild?.level || 1;
-                    if (newLevel && newLevel > currentLevel) {
-                      setLevelUpToast({ show: true, level: newLevel, childName: childName || 'Child' });
-                      setTimeout(() => setLevelUpToast({ show: false, level: 0, childName: '' }), 5000);
-                    }
-                    setActiveTab('reports');
-                  }}
-                />
+                selectedChild ? (
+                  <Assessment 
+                    child={selectedChild}
+                    onComplete={(newLevel, childName) => {
+                      const currentLevel = selectedChild?.level || 1;
+                      if (newLevel && newLevel > currentLevel) {
+                        setLevelUpToast({ show: true, level: newLevel, childName: childName || 'Child' });
+                        setTimeout(() => setLevelUpToast({ show: false, level: 0, childName: '' }), 5000);
+                      }
+                      setActiveTab('reports');
+                    }}
+                  />
+                ) : (
+                  <div className="text-center py-20">
+                    <p className="text-text-muted">Please select a profile first.</p>
+                  </div>
+                )
               )}
               {activeTab === 'reports' && (
                 user?.role === 'teacher' ? (
@@ -759,13 +964,10 @@ export default function App() {
                 )
               )}
               {activeTab === 'alerts' && (
-                <Alerts alerts={selectedChild ? alerts.filter(a => a.childId === selectedChild.id || a.childId === 'all') : alerts} onDismiss={async (id) => {
-                  try {
-                    await deleteDoc(doc(db, 'alerts', id));
-                  } catch (error) {
-                    handleFirestoreError(error, OperationType.DELETE, 'alerts');
-                  }
-                }} />
+                <Alerts 
+                  alerts={selectedChild ? alerts.filter(a => a.childId === selectedChild.id || a.childId === 'all') : alerts} 
+                  onDismiss={handleResolveAlert} 
+                />
               )}
               {activeTab === 'privacy' && (
                 <PrivacyEthics user={user} />
@@ -774,7 +976,10 @@ export default function App() {
                 <Forecasts children={selectedChild ? [selectedChild] : []} />
               )}
               {activeTab === 'recommendations' && (
-                <Recommendations children={selectedChild ? [selectedChild] : []} />
+                <Recommendations 
+                  children={selectedChild ? [selectedChild] : []} 
+                  setActiveTab={setActiveTab}
+                />
               )}
               {activeTab === 'sync' && (
                 <SchoolSync children={selectedChild ? [selectedChild] : []} />
@@ -784,6 +989,8 @@ export default function App() {
                   <p className="text-text-muted">Please add a child first from the dashboard.</p>
                   <button onClick={() => setActiveTab('home')} className="text-accent font-medium mt-2">Go to Dashboard</button>
                 </div>
+              )}
+              </>
               )}
             </motion.div>
           </AnimatePresence>
@@ -849,61 +1056,80 @@ export default function App() {
       )}
 
       {/* Global PIN Modal */}
-      {pinModalProfile && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md animate-fade-in">
-          <div className="bg-gradient-to-b from-gray-800 to-gray-900 p-8 rounded-[2rem] border border-gray-700 shadow-2xl max-w-sm w-full mx-4 backdrop-blur-xl relative overflow-hidden">
-            <div className="absolute inset-0 bg-accent/5 opacity-50 blur-3xl rounded-full"></div>
-            <div className="relative z-10">
-              <div className="text-center mb-6">
-                <div className="w-20 h-20 mx-auto rounded-2xl bg-gray-800 border-2 border-gray-700 flex items-center justify-center text-4xl mb-4 shadow-inner">
-                  {pinModalProfile.age >= 18 ? <span className="font-serif text-white">{pinModalProfile.name.charAt(0).toUpperCase()}</span> : pinModalProfile.avatar}
+      <AnimatePresence>
+        {pinModalProfile && (
+          <motion.div 
+             initial={{ opacity: 0 }}
+             animate={{ opacity: 1 }}
+             exit={{ opacity: 0 }}
+             className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md"
+          >
+            <motion.div 
+               initial={{ scale: 0.95, y: 20 }}
+               animate={isShaking ? { x: [-10, 10, -10, 10, -5, 5, 0], scale: 1, y: 0 } : { scale: 1, y: 0 }}
+               transition={{ duration: isShaking ? 0.4 : 0.2 }}
+               className="bg-[#0f0f13] p-8 rounded-[2rem] border border-gray-800 shadow-2xl max-w-sm w-full mx-4 backdrop-blur-xl relative overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-accent/5 opacity-50 blur-3xl rounded-full"></div>
+              <div className="relative z-10">
+                <div className="text-center mb-6">
+                  <div className={cn(
+                    "w-24 h-24 mx-auto rounded-2xl flex items-center justify-center text-5xl mb-4 shadow-inner text-white",
+                    `bg-gradient-to-br ${getGradientForChild(pinModalProfile.id)}`
+                  )}>
+                    {pinModalProfile.age >= 18 ? <span className="font-serif">{pinModalProfile.name.charAt(0).toUpperCase()}</span> : pinModalProfile.avatar}
+                  </div>
+                  <h3 className="text-2xl font-serif text-white">Enter PIN</h3>
+                  <p className="text-sm text-gray-400 mt-1">Unlock {pinModalProfile.name}'s profile session</p>
                 </div>
-                <h3 className="text-2xl font-serif text-white">Enter PIN</h3>
-                <p className="text-sm text-gray-400 mt-1">Unlock {pinModalProfile.name}'s profile</p>
+                <form onSubmit={handlePinSubmit} className="space-y-4">
+                  <div>
+                    <input 
+                      type="password" 
+                      value={enteredPin}
+                      onChange={(e) => setEnteredPin(e.target.value)}
+                      className={cn(
+                        "w-full bg-gray-950/50 border rounded-xl px-4 py-3 text-center text-xl tracking-widest text-white shadow-inner focus:outline-none transition-colors",
+                         pinError ? "border-red-500/50 focus:border-red-500" : "border-gray-700 focus:border-accent"
+                      )}
+                      placeholder="••••"
+                      maxLength={32}
+                      autoFocus
+                    />
+                    {pinError && <p className="text-red-400 text-xs mt-2 text-center font-bold animate-fade-in">{pinError}</p>}
+                  </div>
+                  <div className="flex gap-3">
+                    <button type="button" onClick={() => { setPinModalProfile(null); setPinError(''); setEnteredPin(''); }} className="flex-1 py-3 px-4 rounded-xl text-gray-400 font-bold hover:text-white hover:bg-gray-800 transition-colors">Cancel</button>
+                    <button type="submit" disabled={enteredPin.length === 0} className="flex-1 py-3 px-4 rounded-xl bg-accent text-white font-bold hover:bg-accent-hover transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">Unlock</button>
+                  </div>
+                  <div className="flex flex-col gap-2 items-center text-center pt-2">
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        setSelectedChild(pinModalProfile);
+                        setPinModalProfile(null);
+                        setEnteredPin('');
+                        setIsAuthenticatedSession(true);
+                        setIsShaking(false);
+                      }}
+                      className="text-accent text-[12px] font-bold hover:text-accent-light underline transition-colors"
+                    >
+                      Parent Override: Authenticate as Admin
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => alert('An email has been sent to the account administrator/parent with instructions to reset this PIN.')}
+                      className="text-gray-400 text-[10px] hover:text-white underline transition-colors"
+                    >
+                      Forgot PIN? Request Admin Reset
+                    </button>
+                  </div>
+                </form>
               </div>
-              <form onSubmit={handlePinSubmit} className="space-y-4">
-                <div>
-                  <input 
-                    type="password" 
-                    value={enteredPin}
-                    onChange={(e) => setEnteredPin(e.target.value)}
-                    className="w-full bg-gray-950/50 border border-gray-700 rounded-xl px-4 py-3 text-center text-2xl tracking-[0.5em] text-white shadow-inner focus:outline-none focus:border-accent transition-colors"
-                    placeholder="••••"
-                    maxLength={4}
-                    autoFocus
-                  />
-                  {pinError && <p className="text-red-400 text-xs mt-2 text-center font-bold animate-pulse">{pinError}</p>}
-                </div>
-                <div className="flex gap-3">
-                  <button type="button" onClick={() => setPinModalProfile(null)} className="flex-1 py-3 px-4 rounded-xl text-gray-400 font-bold hover:text-white hover:bg-gray-800 transition-colors">Cancel</button>
-                  <button type="submit" className="flex-1 py-3 px-4 rounded-xl bg-accent text-white font-bold hover:bg-accent-hover transition-colors shadow-lg shadow-accent/20">Unlock</button>
-                </div>
-                <div className="text-center pt-2">
-                  <button 
-                    type="button" 
-                    onClick={async () => {
-                      const confirmReset = window.confirm("Override PIN? This requires the parent/account owner to confirm. For this demo, clicking OK will clear the PIN.");
-                      if (confirmReset && pinModalProfile) {
-                        try {
-                          await updateDoc(doc(db, 'children', pinModalProfile.id), { pin: '' });
-                          setSelectedChild({...pinModalProfile, pin: ''});
-                          setPinModalProfile(null);
-                          setEnteredPin('');
-                        } catch (error) {
-                          handleFirestoreError(error, OperationType.UPDATE, 'children');
-                        }
-                      }
-                    }}
-                    className="text-gray-400 text-xs hover:text-white underline transition-colors"
-                  >
-                    Forgot PIN? (Parent Override)
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

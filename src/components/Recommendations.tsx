@@ -7,9 +7,10 @@ import { cn } from '../lib/utils';
 
 interface RecommendationsProps {
   children: Child[];
+  setActiveTab: (tab: any) => void;
 }
 
-export default function Recommendations({ children }: RecommendationsProps) {
+export default function Recommendations({ children, setActiveTab }: RecommendationsProps) {
   const [recommendations, setRecommendations] = useState<Record<string, Recommendation[]>>({});
   const [isLoading, setIsLoading] = useState(true);
 
@@ -121,7 +122,15 @@ export default function Recommendations({ children }: RecommendationsProps) {
                             <Coffee size={14} className="text-accent" />
                             <span className="flex-1 truncate" title={rec.context}>{rec.context}</span>
                           </div>
-                          <button className="w-full py-3 bg-white border border-border rounded-xl text-sm font-bold flex items-center justify-center gap-2 group-hover:bg-accent group-hover:text-white group-hover:border-accent transition-all shadow-sm">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (rec.actionLabel === 'Start Check-in') {
+                                setActiveTab('assessment');
+                              }
+                            }}
+                            className="w-full py-3 bg-white border border-border rounded-xl text-sm font-bold flex items-center justify-center gap-2 group-hover:bg-accent group-hover:text-white group-hover:border-accent transition-all shadow-sm"
+                          >
                             {rec.actionLabel}
                             <ArrowRight size={16} />
                           </button>
