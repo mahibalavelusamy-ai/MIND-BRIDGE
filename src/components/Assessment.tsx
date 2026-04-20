@@ -180,7 +180,8 @@ export default function Assessment({ child, onComplete }: AssessmentProps) {
       // Save assessment to Firestore
       await addDoc(collection(db, 'assessments'), {
         childId: child.id,
-        submittedBy: auth.currentUser.uid,
+        parentId: auth.currentUser!.uid,
+        submittedBy: auth.currentUser!.uid,
         timestamp: new Date().toISOString(),
         scores,
         totalScore: analysisResult.weightedScore,
@@ -191,6 +192,7 @@ export default function Assessment({ child, onComplete }: AssessmentProps) {
       await addDoc(collection(db, 'rootCauseAnalyses'), {
         ...rootCause,
         childId: child.id,
+        parentId: auth.currentUser!.uid,
         timestamp: new Date().toISOString(),
         assessmentId: 'latest' // We could get the ID from the previous addDoc if needed
       });

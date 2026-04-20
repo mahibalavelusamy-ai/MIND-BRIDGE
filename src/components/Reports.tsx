@@ -225,19 +225,48 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
   const isAdult = selectedChild.age >= 18;
   const isSummaryMode = selectedChild.privacyLevel === 'summary';
 
-  // Scale data points based on timeframe selection '7d' or '30d' (we map 'all' to 30d here as well constraint)
-  const filteredAssessments = (timeframe === '30d' || timeframe === 'all') 
-    ? assessments.slice(0, 30).reverse() 
-    : assessments.slice(0, 7).reverse();
+  // Group assessments by date and calculate average score per day using a Map for grouping
+  const trendData = React.useMemo(() => {
+    if (assessments.length === 0) {
+      return Array.from({ length: timeframe === '7d' ? 7 : 30 }).map((_, i) => ({
+        date: `Day ${i + 1}`,
+        wellness: 0,
+        mood: 0,
+        stress: 0
+      }));
+    }
 
-  const trendData = assessments.length > 0 ? filteredAssessments.map(a => ({
-    date: new Date(a.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-    wellness: 6 - a.totalScore,
-    mood: 6 - a.scores.mood,
-    stress: a.scores.stress
-  })) : Array.from({ length: timeframe === '7d' ? 7 : 30 }).map((_, i) => ({
-    date: `Day ${i+1}`, wellness: 0, mood: 0, stress: 0
-  }));
+    // Group by toLocaleDateString() as requested for accurate daily aggregation
+    const dateGroups = new Map<string, any[]>();
+    
+    assessments.forEach(item => {
+      const d = new Date(item.timestamp);
+      const dateKey = d.toLocaleDateString();
+      if (!dateGroups.has(dateKey)) {
+        dateGroups.set(dateKey, []);
+      }
+      dateGroups.get(dateKey)?.push(item);
+    });
+
+    // Convert Map to array and calculate averages
+    const allAggregatedData = Array.from(dateGroups.entries())
+      .map(([dateKey, items]) => {
+        const avgTotal = items.reduce((sum, i) => sum + (i.totalScore || 0), 0) / items.length;
+        const avgMood = items.reduce((sum, i) => sum + (i.scores?.mood || 0), 0) / items.length;
+        const avgStress = items.reduce((sum, i) => sum + (i.scores?.stress || 0), 0) / items.length;
+
+        return {
+          date: new Date(items[0].timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          wellness: parseFloat((6 - avgTotal).toFixed(2)),
+          mood: parseFloat((6 - avgMood).toFixed(2)),
+          stress: parseFloat(avgStress.toFixed(2)),
+          sortDate: items[0].timestamp // used for sorting
+        };
+      })
+      .sort((a, b) => new Date(a.sortDate).getTime() - new Date(b.sortDate).getTime());
+
+    return timeframe === '7d' ? allAggregatedData.slice(-7) : timeframe === '30d' ? allAggregatedData.slice(-30) : allAggregatedData;
+  }, [assessments, timeframe]);
 
   return (
     <div className="space-y-8 animate-fade-in pb-12">

@@ -1021,10 +1021,10 @@ export default function App() {
       <AnimatePresence>
         {errorToast.show && (
           <motion.div 
-            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            initial={{ opacity: 0, y: -50, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 50, scale: 0.9 }}
-            className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] bg-red-50 text-red-700 px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 border border-red-200"
+            exit={{ opacity: 0, y: -50, scale: 0.9 }}
+            className="fixed top-8 left-1/2 -translate-x-1/2 z-[100] bg-red-50 text-red-700 px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 border border-red-200"
           >
             <div className="text-red-500">
               <AlertCircle size={24} />

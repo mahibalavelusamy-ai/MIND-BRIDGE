@@ -36,9 +36,8 @@ service cloud.firestore {
     }
     
     function isParentOf(childId) {
-      return isAuthenticated() && 
-             exists(/databases/$(database)/documents/children/$(childId)) &&
-             get(/databases/$(database)/documents/children/$(childId)).data.parentId == request.auth.uid;
+      let childPath = /databases/$(database)/documents/children/$(childId);
+      return isAuthenticated() && exists(childPath) && get(childPath).data.parentId == request.auth.uid;
     }
 
     function getUserRole() {
@@ -74,19 +73,20 @@ service cloud.firestore {
     }
 
     function isValidAssessment(data) {
-      return data.keys().hasAll(['childId', 'submittedBy', 'timestamp', 'scores', 'totalScore']) &&
+      let requiredFields = ['childId', 'submittedBy', 'timestamp', 'scores', 'totalScore', 'parentId'];
+      return data.keys().hasAll(requiredFields) &&
              data.submittedBy == request.auth.uid &&
              data.scores is map &&
-             data.scores.keys().hasAll(['mood', 'energy', 'sleep', 'social', 'stress']) &&
-             (!('aiInsight' in data) || (data.aiInsight is string && data.aiInsight.size() < 10000));
+             data.scores.keys().hasAll(['mood', 'energy', 'sleep', 'social', 'stress', 'behavior']) &&
+             (!('aiInsight' in data) || (data.aiInsight is string && data.aiInsight.size() < 15000));
     }
 
     function isValidAlert(data) {
+      // Allow flexible parentId check for teachers/clinicians
       return data.keys().hasAll(['childId', 'parentId', 'type', 'title', 'timestamp']) &&
+             (data.parentId == request.auth.uid || isTeacherOrClinician()) &&
              data.type in ['critical', 'warning', 'info'] &&
-             data.title is string && data.title.size() < 200 &&
-             (!('description' in data) || (data.description is string && data.description.size() < 2000)) &&
-             (!('status' in data) || data.status in ['active', 'dismissed']);
+             data.title is string && data.title.size() < 200;
     }
 
     function isValidSchoolSchedule(data) {
@@ -109,8 +109,8 @@ service cloud.firestore {
     }
 
     function isValidRootCauseAnalysis(data) {
-      return data.keys().hasAll(['childId', 'timestamp', 'primaryDriver']) &&
-             data.primaryDriver is string && data.primaryDriver.size() < 500 &&
+      return data.keys().hasAll(['childId', 'timestamp', 'primaryFactor', 'parentId']) &&
+             data.primaryFactor is string && data.primaryFactor.size() < 500 &&
              (!('contributingFactors' in data) || (data.contributingFactors is list && data.contributingFactors.size() < 20)) &&
              (!('recommendedFocus' in data) || (data.recommendedFocus is string && data.recommendedFocus.size() < 1000));
     }
@@ -134,15 +134,15 @@ service cloud.firestore {
 
     match /assessments/{assessmentId} {
       allow read: if isAuthenticated() && (isParentOf(resource.data.childId) || isTeacherOrClinician());
-      allow create: if isAuthenticated() && isValidAssessment(request.resource.data) && (isParentOf(request.resource.data.childId) || isTeacherOrClinician());
-      allow update: if isAuthenticated() && isParentOf(resource.data.childId) && isValidAssessment(request.resource.data) && request.resource.data.childId == resource.data.childId;
+      allow create: if request.auth != null && (request.resource.data.parentId == request.auth.uid || isTeacherOrClinician());
+      allow update: if isAuthenticated() && (isParentOf(resource.data.childId) || isTeacherOrClinician()) && isValidAssessment(request.resource.data) && request.resource.data.childId == resource.data.childId;
     }
 
     match /alerts/{alertId} {
       allow read: if isAuthenticated() && (resource.data.parentId == request.auth.uid || isTeacherOrClinician());
-      allow create: if isAuthenticated() && isValidAlert(request.resource.data) && (request.resource.data.parentId == request.auth.uid || getUserRole() == 'teacher');
+      allow create: if isAuthenticated() && isValidAlert(request.resource.data) && (request.resource.data.parentId == request.auth.uid || isTeacherOrClinician());
       allow update: if isAuthenticated() && (resource.data.parentId == request.auth.uid) && isValidAlert(request.resource.data) && request.resource.data.parentId == resource.data.parentId && request.resource.data.childId == resource.data.childId;
-      allow delete: if isAuthenticated() && (resource.data.parentId == request.auth.uid || getUserRole() == 'teacher');
+      allow delete: if isAuthenticated() && (resource.data.parentId == request.auth.uid || isTeacherOrClinician());
     }
 
     match /schoolSchedules/{scheduleId} {
@@ -159,9 +159,9 @@ service cloud.firestore {
     }
 
     match /rootCauseAnalyses/{analysisId} {
-      allow read: if isAuthenticated() && (isParentOf(resource.data.childId) || isTeacherOrClinician());
-      allow create: if isAuthenticated() && isValidRootCauseAnalysis(request.resource.data) && (isParentOf(request.resource.data.childId) || isTeacherOrClinician());
-      allow update: if isAuthenticated() && isParentOf(resource.data.childId) && isValidRootCauseAnalysis(request.resource.data) && request.resource.data.childId == resource.data.childId;
+      allow read: if isAuthenticated() && (resource.data.parentId == request.auth.uid || isTeacherOrClinician());
+      allow create: if isAuthenticated() && isValidRootCauseAnalysis(request.resource.data) && (request.resource.data.parentId == request.auth.uid || isTeacherOrClinician());
+      allow update: if isAuthenticated() && (resource.data.parentId == request.auth.uid) && isValidRootCauseAnalysis(request.resource.data) && request.resource.data.childId == resource.data.childId;
     }
   }
 }
