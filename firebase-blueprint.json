@@ -110,12 +110,16 @@
       "properties": {
         "id": { "type": "string" },
         "childId": { "type": "string" },
+        "parentId": { "type": "string" },
         "timestamp": { "type": "string", "format": "date-time" },
-        "primaryDriver": { "type": "string" },
+        "primaryFactor": { "type": "string" },
         "contributingFactors": { "type": "array", "items": { "type": "string" } },
-        "recommendedFocus": { "type": "string" }
+        "recommendedFocus": { "type": "string" },
+        "explanation": { "type": "string" },
+        "confidence": { "type": "number" },
+        "evidence": { "type": "array", "items": { "type": "string" } }
       },
-      "required": ["childId", "timestamp", "primaryDriver"]
+      "required": ["childId", "parentId", "timestamp", "primaryFactor"]
     }
   },
   "firestore": {

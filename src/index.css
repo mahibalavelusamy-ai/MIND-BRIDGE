@@ -26,9 +26,9 @@
   --color-surface: rgba(25, 25, 30, 0.4);
   --color-surface-2: rgba(35, 35, 45, 0.5);
   --color-border: rgba(255, 255, 255, 0.1);
-  --color-text-main: #eef3f0;
-  --color-text-muted: #a3b8ad;
-  --color-text-dim: #7a9488;
+  --color-text-main: #f8fafc;
+  --color-text-muted: #cbd5e1;
+  --color-text-dim: #94a3b8;
   --color-accent: #4db389;
   --color-accent-hover: #6cd1a8;
   --color-accent-light: #1c3d2f;

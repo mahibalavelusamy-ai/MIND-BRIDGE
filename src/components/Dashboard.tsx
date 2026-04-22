@@ -112,6 +112,7 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
         const qA = query(
           collection(db, 'assessments'),
           where('childId', '==', child.id),
+          where('parentId', '==', auth.currentUser?.uid),
           orderBy('timestamp', 'desc'),
           limit(7)
         );
@@ -120,7 +121,11 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
         setDashboardAssessments(assessments);
 
         // Fetch schedule
-        const qS = query(collection(db, 'schoolSchedules'), where('childId', '==', child.id));
+        const qS = query(
+          collection(db, 'schoolSchedules'), 
+          where('childId', '==', child.id),
+          where('parentId', '==', auth.currentUser?.uid)
+        );
         const snapS = await getDocs(qS);
         const scheduleRaw = snapS.docs.map(d => d.data());
         
@@ -259,16 +264,31 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
     <div className="space-y-8 animate-fade-in pb-12">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-serif tracking-tight">Good morning, {user?.name?.split(' ')[0]} 👋</h1>
+          <h1 className="text-4xl font-serif tracking-tight text-text-main">Good morning, {user?.name?.split(' ')[0]} 👋</h1>
           <p className="text-text-muted mt-1">Here's a bento-style overview of your family's well-being.</p>
         </div>
-        <button 
-          onClick={() => setIsShopOpen(true)}
-          className="flex items-center gap-2 bg-amber-100 text-amber-700 px-4 py-2 rounded-xl font-bold hover:bg-amber-200 transition-colors"
-        >
-          <Trophy size={18} />
-          {children[0]?.age >= 18 ? 'Habit Tracker' : 'Wellness Shop'}
-        </button>
+        <div className="flex flex-col md:flex-row items-end md:items-center gap-4">
+          {activeChild && (
+            <div className="bg-surface border border-border px-4 py-2 rounded-2xl shadow-sm flex items-center gap-4 animate-fade-in group hover:border-accent transition-colors">
+              <div className="flex flex-col items-end">
+                <span className="text-[10px] font-bold text-text-dim uppercase tracking-widest">Progress to Mega Prize</span>
+                <p className="text-sm font-bold text-accent dark:text-white">
+                  Day {activeChild.streak || 0}/7 — {7 - (activeChild.streak || 0)} more days to unlock 70 bonus credits!
+                </p>
+              </div>
+              <div className="w-12 h-12 rounded-xl bg-accent/10 flex items-center justify-center text-accent group-hover:scale-110 transition-transform">
+                <Trophy size={24} />
+              </div>
+            </div>
+          )}
+          <button 
+            onClick={() => setIsShopOpen(true)}
+            className="flex items-center gap-2 bg-amber-100 text-amber-700 px-6 py-2.5 rounded-xl font-bold hover:bg-amber-200 transition-colors shadow-sm"
+          >
+            <Sparkles size={18} />
+            {activeChild?.age >= 18 ? 'Habit Tracker' : 'Wellness Shop'}
+          </button>
+        </div>
       </div>
 
       {/* Bento Grid Layout */}
@@ -307,7 +327,12 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
             {dashboardAssessments.length === 0 && activeChild ? (
               <div className="h-[280px] mt-8 flex flex-col items-center justify-center p-8 text-center rounded-2xl border-2 border-dashed border-border bg-surface/50">
                  <p className="text-text-muted mb-6">No data available. Complete your first check-in to generate insights.</p>
-                 <button onClick={() => onViewProfile(activeChild)} className="px-6 py-2.5 bg-accent text-white rounded-xl text-sm font-bold shadow-lg shadow-accent/20 hover:bg-accent-hover transition-all">Go to Profile</button>
+                 <button 
+                   onClick={() => onViewProfile(activeChild)} 
+                   className="px-6 py-2.5 bg-accent text-white dark:text-white rounded-xl text-sm font-bold shadow-lg shadow-accent/20 hover:bg-accent-hover transition-all"
+                 >
+                   Go to Profile
+                 </button>
               </div>
             ) : (
               <div className="h-[280px] mt-8">
@@ -575,15 +600,15 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
                       <div className="flex items-center justify-between mb-4">
                         <span className={cn(
                           "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest",
-                          rec.type === 'activity' ? "bg-blue-100 text-blue-700" :
-                          rec.type === 'resource' ? "bg-purple-100 text-purple-700" :
-                          "bg-orange-100 text-orange-700"
+                          rec.type === 'activity' ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" :
+                          rec.type === 'resource' ? "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300" :
+                          "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300"
                         )}>
                           {rec.type}
                         </span>
                         <span className={cn(
                           "text-[10px] font-bold uppercase",
-                          rec.priority === 'high' ? "text-red-500" : "text-text-dim"
+                          rec.priority === 'high' ? "text-red-500 font-bold" : "text-text-dim dark:text-slate-300"
                         )}>
                           {rec.priority} priority
                         </span>
@@ -629,6 +654,17 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
               <div>
                 <h3 className="text-2xl font-serif mb-1">{activeChild?.age >= 18 ? 'Habit Tracker' : 'Wellness Garden'}</h3>
                 <p className="text-sm text-text-muted">{activeChild?.age >= 18 ? 'Encourage positive habits through a simple credit system.' : 'Encourage positive habits through gamified rewards.'}</p>
+                {activeChild && (
+                  <div className="mt-4 inline-flex items-center gap-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-500/30 px-4 py-2 rounded-xl">
+                    <Trophy className="text-orange-500 dark:text-orange-400" size={18} />
+                    <div>
+                      <p className="text-xs font-bold text-orange-700 dark:text-orange-300 uppercase tracking-wider">Mega Prize Progress</p>
+                      <p className="text-[10px] text-orange-600 dark:text-white font-bold tracking-tight">
+                        Day {activeChild.streak || 0}/7 — {7 - (activeChild.streak || 0)} more days to unlock 70 bonus credits!
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="flex gap-2">
                 <button 

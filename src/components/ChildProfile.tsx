@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { Child, PredictiveRisk, RootCauseAnalysis } from '../types';
 import { cn, getGradientForChild } from '../lib/utils';
-import { db, collection, addDoc, deleteDoc, doc, query, where, onSnapshot, OperationType, handleFirestoreError, updateDoc, getDocs, orderBy, limit } from '../lib/firebase';
+import { db, auth, collection, addDoc, deleteDoc, doc, query, where, onSnapshot, OperationType, handleFirestoreError, updateDoc, getDocs, orderBy, limit } from '../lib/firebase';
 import { getAIInsights } from '../services/geminiService';
 import { predictFutureRisk } from '../lib/predictiveService';
 import { ShieldAlert, Zap, Target } from 'lucide-react';
@@ -55,7 +55,8 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
     try {
       const q = query(
         collection(db, 'rootCauseAnalyses'),
-        where('childId', '==', child.id)
+        where('childId', '==', child.id),
+        where('parentId', '==', auth.currentUser?.uid)
       );
       const snap = await getDocs(q);
       if (!snap.empty) {
@@ -75,7 +76,11 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
     fetchPrediction();
     fetchRootCause();
     
-    const q = query(collection(db, 'schoolSchedules'), where('childId', '==', child.id));
+    const q = query(
+      collection(db, 'schoolSchedules'), 
+      where('childId', '==', child.id),
+      where('parentId', '==', auth.currentUser?.uid)
+    );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const scheduleRaw = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any));
       const scheduleMap = new Map();
@@ -187,7 +192,8 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
     try {
       await addDoc(collection(db, 'schoolSchedules'), {
         ...newEvent,
-        childId: child.id
+        childId: child.id,
+        parentId: auth.currentUser?.uid
       });
       setIsAddingEvent(false);
       setNewEvent({ title: '', type: 'class', time: '', day: 'Monday', subject: '', difficulty: 'medium' });
@@ -239,12 +245,32 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
             </div>
             <p className="text-text-muted mb-6">{child.age} years old • {getStatus(child.age)}{child.age >= 18 ? '' : ` • Grade ${child.grade}`}</p>
             <div className="flex flex-wrap gap-3">
-              <button 
-                onClick={onStartAssessment}
-                className="px-6 py-2.5 bg-accent text-white rounded-xl text-sm font-bold uppercase tracking-wider hover:bg-accent-hover transition-all shadow-lg shadow-accent/10"
-              >
-                Start Assessment
-              </button>
+              {(() => {
+                const todayDate = new Date().toISOString().split('T')[0];
+                const hasCheckedInToday = child.lastCheckInDate === todayDate;
+                
+                return (
+                  <div className="flex flex-col gap-2">
+                    <button 
+                      onClick={onStartAssessment}
+                      disabled={hasCheckedInToday}
+                      className={cn(
+                        "px-6 py-2.5 rounded-xl text-sm font-bold uppercase tracking-wider transition-all shadow-lg",
+                        hasCheckedInToday 
+                          ? "bg-slate-100 dark:bg-neutral-800 text-slate-400 dark:text-neutral-500 border border-border cursor-not-allowed" 
+                          : "bg-accent text-white dark:text-white hover:bg-accent-hover shadow-accent/10"
+                      )}
+                    >
+                      {hasCheckedInToday ? 'Check-in Complete for Today' : 'Start Assessment'}
+                    </button>
+                    {hasCheckedInToday && (
+                      <p className="text-[10px] font-bold text-accent dark:text-slate-200 animate-fade-in text-center">
+                        Great job maintaining your streak! See you tomorrow.
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
               <button 
                 onClick={async () => {
                   try {

@@ -29,6 +29,7 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 interface AssessmentProps {
   child: Child;
   onComplete: (level?: number, childName?: string) => void;
+  onError?: (message: string) => void;
 }
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
@@ -40,7 +41,7 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   'Behavior': <Activity size={20} />
 };
 
-export default function Assessment({ child, onComplete }: AssessmentProps) {
+export default function Assessment({ child, onComplete, onError }: AssessmentProps) {
   const [hasStarted, setHasStarted] = useState(false);
   
   // Clean up any stale answers if the active child prop changes rapidly
@@ -177,6 +178,65 @@ export default function Assessment({ child, onComplete }: AssessmentProps) {
       // 3. Perform Root-Cause Analysis
       const rootCause = await performRootCauseAnalysis(child, scores, history || [], schedule);
 
+      // --- NEW STREAK & REWARDS LOGIC ---
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      let newStreak = (child.streak || 0);
+      const lastTs = child.lastAssessmentTimestamp;
+      
+      if (lastTs) {
+        const lastDate = new Date(lastTs);
+        lastDate.setHours(0, 0, 0, 0);
+        const diffTime = today.getTime() - lastDate.getTime();
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+        
+        if (diffDays === 1) {
+          // Consecutive day
+          newStreak += 1;
+        } else if (diffDays > 1) {
+          // Missed at least one day
+          newStreak = 1;
+        } else if (diffDays === 0) {
+          // Already did a check-in today, streak stays the same
+          // but we won't double count for the 7-day bonus in a single day
+        }
+      } else {
+        // First ever check-in
+        newStreak = 1;
+      }
+
+      let addedGems = 5; // Base reward
+      let showBonus = false;
+
+      if (newStreak === 7) {
+        addedGems += 70; // 70 bonus + 5 daily = 75 total on 7th day? 
+        // Wait, requirement: "bonus of 70 credits... making the perfect week total exactly 100".
+        // 6 days * 5 credits = 30 credits.
+        // 7th day: 5 (base) + 70 (bonus) = 75 credits.
+        // Total = 30 + 75 = 105 credits?
+        // Wait, "exactly 100".
+        // 7 days * 5 = 35. 100 - 35 = 65 bonus?
+        // User said "grant a one-time bonus of 70 credits... total exactly 100".
+        // Let's check math: 6 days * 5 = 30. 7th day: 70 bonus. 30 + 70 = 100.
+        // So the 70 bonus INCLUDES the 5 daily or REPLACES it?
+        // "grant a one-time bonus of 70 credits on that 7th day".
+        // If I grant 70 bonus, and 5 daily, that's 75 on day 7.
+        // 30 (days 1-6) + 75 (day 7) = 105.
+        // If I grant 70 TOTAL on day 7: 30 + 70 = 100.
+        // Let's assume the 70 bonus is the additional amount, so 1-6 = 30, 7th = 5 + 65 = 70 total?
+        // Re-reading: "one-time bonus of 70 credits on that 7th day. This makes the perfect week total exactly 100 credits."
+        // 100 - 70 = 30. 30 / 6 = 5.
+        // OK, so Days 1-6 = 5 each. Day 7 = 70 bonus ONLY (or 5 daily + 65).
+        // I will follow "exactly 100" as the source of truth.
+        addedGems = 70; // This makes it 30 + 70 = 100.
+        newStreak = 0; // Reset after 7th day bonus
+        showBonus = true;
+      }
+      
+      const newGems = (child.gems || 0) + addedGems;
+      // ----------------------------------
+
       // Save assessment to Firestore
       await addDoc(collection(db, 'assessments'), {
         childId: child.id,
@@ -197,7 +257,6 @@ export default function Assessment({ child, onComplete }: AssessmentProps) {
         assessmentId: 'latest' // We could get the ID from the previous addDoc if needed
       });
 
-      const newGems = (child.gems || 0) + 50;
       const newLevel = Math.floor(newGems / 500) + 1;
 
       // Update child record
@@ -206,8 +265,10 @@ export default function Assessment({ child, onComplete }: AssessmentProps) {
         moodScore: scores.mood,
         stressLevel: scores.stress >= 4 ? 'High' : scores.stress >= 2.5 ? 'Moderate' : 'Low',
         lastCheckIn: 'Just now',
+        lastCheckInDate: new Date().toISOString().split('T')[0],
+        lastAssessmentTimestamp: new Date().toISOString(),
         gems: newGems,
-        streak: (child.streak || 0) + 1,
+        streak: newStreak,
         level: newLevel
       });
 
@@ -216,15 +277,25 @@ export default function Assessment({ child, onComplete }: AssessmentProps) {
         for (const alert of alerts) {
           await addDoc(collection(db, 'alerts'), {
             ...alert,
-            parentId: child.parentId || auth.currentUser.uid
+            parentId: child.parentId || auth.currentUser!.uid
           });
         }
       }
 
       setIsFinished(true);
       setTimeout(() => onComplete(newLevel, child.name), 3000);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'assessments');
+    } catch (error: any) {
+      if (error instanceof Error && error.message.includes('permission')) {
+        // Handle specific daily limit violation from Firestore Rules if bypassed UI
+        const msg = 'Only one assessment is allowed per day to maintain data accuracy.';
+        if (onError) {
+          onError(msg);
+        } else {
+          alert(msg);
+        }
+      } else {
+        handleFirestoreError(error, OperationType.CREATE, 'assessments');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -295,6 +366,9 @@ export default function Assessment({ child, onComplete }: AssessmentProps) {
   if (!hasStarted) {
     if (!child) return null;
 
+    const todayDate = new Date().toISOString().split('T')[0];
+    const hasCheckedInToday = child.lastCheckInDate === todayDate;
+
     return (
       <div className="max-w-xl mx-auto py-12 px-4 animate-fade-in flex flex-col items-center text-center">
         <div className={cn(
@@ -304,15 +378,36 @@ export default function Assessment({ child, onComplete }: AssessmentProps) {
           <div className="absolute inset-0 bg-white/10" />
           {child.age >= 18 ? <span className="font-serif">{child.name ? child.name.charAt(0).toUpperCase() : '👤'}</span> : child.avatar}
         </div>
-        <h1 className="text-3xl md:text-4xl font-serif mb-4">Ready for your check-in, {child.name}?</h1>
-        <p className="text-text-muted mb-8 max-w-sm">Take a moment to reflect on how you've been feeling lately. Your answers are secure and help us provide the right support.</p>
+        <h1 className="text-3xl md:text-4xl font-serif mb-4">
+          {hasCheckedInToday ? 'Check-in Complete' : `Ready for your check-in, ${child.name}?`}
+        </h1>
+        <p className="text-text-muted mb-8 max-w-sm">
+          {hasCheckedInToday 
+            ? 'Check-in complete for today! Come back tomorrow to continue your streak.' 
+            : 'Take a moment to reflect on how you\'ve been feeling lately. Your answers are secure and help us provide the right support.'}
+        </p>
         
-        <button 
-          onClick={() => setHasStarted(true)}
-          className="w-full md:w-auto px-12 py-4 bg-accent text-white rounded-xl font-bold hover:bg-accent-hover transition-all shadow-md hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-accent/20"
-        >
-          Begin Check-in
-        </button>
+        <div className="w-full flex flex-col items-center gap-4">
+          {hasCheckedInToday ? (
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="w-full bg-emerald-500/10 border border-emerald-500/50 p-6 rounded-2xl text-center shadow-lg shadow-emerald-500/5"
+            >
+              <h3 className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mb-2">Check-in Complete! 🌟</h3>
+              <p className="text-sm text-emerald-800/80 dark:text-emerald-300/80 font-medium leading-relaxed">
+                You've secured your 5 credits for today. See you tomorrow to continue your streak!
+              </p>
+            </motion.div>
+          ) : (
+            <button 
+              onClick={() => setHasStarted(true)}
+              className="w-full md:w-auto px-12 py-4 bg-accent text-white dark:text-white rounded-xl font-bold transition-all shadow-md hover:shadow-lg hover:bg-accent-hover focus:outline-none focus:ring-4 focus:ring-accent/20"
+            >
+              Begin Check-in
+            </button>
+          )}
+        </div>
       </div>
     );
   }
@@ -460,7 +555,7 @@ export default function Assessment({ child, onComplete }: AssessmentProps) {
           <button 
             onClick={handleBack}
             disabled={currentIdx === 0 || isSubmitting}
-            className="flex items-center gap-2 px-8 py-3 rounded-2xl font-bold text-sm uppercase tracking-wider text-text-dim hover:text-text-main hover:bg-surface-2 disabled:opacity-30 transition-all"
+            className="flex items-center gap-2 px-8 py-3 rounded-2xl font-bold text-sm uppercase tracking-wider text-slate-900 dark:text-white bg-surface-2 hover:bg-slate-200 dark:hover:bg-surface border border-border disabled:opacity-30 transition-all"
           >
             <ChevronLeft size={20} /> Previous
           </button>
@@ -481,7 +576,7 @@ export default function Assessment({ child, onComplete }: AssessmentProps) {
             onClick={handleNext}
             disabled={answers[currentQuestion.id] === undefined || isSubmitting || (!isOnline && currentIdx === activeQuestions.length - 1)}
             className={cn(
-              "flex items-center gap-2 px-10 py-4 bg-accent text-white rounded-2xl font-bold text-sm uppercase tracking-widest hover:bg-accent-hover disabled:opacity-50 transition-all shadow-xl shadow-accent/20",
+              "flex items-center gap-2 px-10 py-4 bg-accent text-white dark:text-white rounded-2xl font-bold text-sm uppercase tracking-widest hover:bg-accent-hover disabled:opacity-50 transition-all shadow-xl shadow-accent/20",
               isSubmitting && "animate-pulse"
             )}
           >
@@ -491,9 +586,9 @@ export default function Assessment({ child, onComplete }: AssessmentProps) {
       </div>
       {/* AI Disclaimer */}
       <div className="mt-auto pt-8 border-t border-border">
-        <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex items-start gap-3">
-          <AlertCircle className="text-amber-600 shrink-0 mt-0.5" size={18} />
-          <div className="text-[10px] text-amber-800 leading-relaxed">
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-500/30 p-4 rounded-2xl flex items-start gap-3">
+          <AlertCircle className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" size={18} />
+          <div className="text-[10px] text-amber-800 dark:text-amber-100 leading-relaxed">
             <p className="font-bold uppercase tracking-widest mb-1">Ethical AI Disclosure</p>
             Insights are generated by Gemini AI for decision support. This is not a clinical diagnosis. 
             Always consult a qualified mental health professional for medical advice.

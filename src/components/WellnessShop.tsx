@@ -12,16 +12,16 @@ interface WellnessShopProps {
 }
 
 const KID_REWARDS = [
-  { id: 'gaming_pass', name: 'Gaming Pass', cost: 50, icon: <Gamepad2 size={24} />, color: 'bg-green-100 text-green-600' },
-  { id: 'dinner_choice', name: 'Dinner Choice', cost: 100, icon: <Utensils size={24} />, color: 'bg-orange-100 text-orange-600' },
-  { id: 'cinema_outing', name: 'Cinema Outing', cost: 250, icon: <Film size={24} />, color: 'bg-purple-100 text-purple-600' },
+  { id: 'gaming_pass', name: 'Gaming Pass', cost: 20, icon: <Gamepad2 size={24} />, color: 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300' },
+  { id: 'dinner_choice', name: 'Dinner Choice', cost: 50, icon: <Utensils size={24} />, color: 'bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-300' },
+  { id: 'cinema_outing', name: 'Cinema Outing', cost: 100, icon: <Film size={24} />, color: 'bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-300' },
 ];
 
 const ADULT_REWARDS = [
-  { id: 'coffee_voucher', name: 'UberEats Coffee Voucher', cost: 50, icon: <Coffee size={24} />, color: 'bg-amber-100 text-amber-600' },
-  { id: 'study_break', name: 'Extra Study Break', cost: 100, icon: <Clock size={24} />, color: 'bg-blue-100 text-blue-600' },
-  { id: 'spotify_premium', name: 'Spotify Premium Contribution', cost: 250, icon: <Music size={24} />, color: 'bg-green-100 text-green-600' },
-  { id: 'mental_health_day', name: 'Guilt-Free Mental Health Day', cost: 500, icon: <Heart size={24} />, color: 'bg-rose-100 text-rose-600' },
+  { id: 'coffee_voucher', name: 'UberEats Coffee Voucher', cost: 20, icon: <Coffee size={24} />, color: 'bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-300' },
+  { id: 'study_break', name: 'Extra Study Break', cost: 40, icon: <Clock size={24} />, color: 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300' },
+  { id: 'spotify_premium', name: 'Spotify Premium Contribution', cost: 75, icon: <Music size={24} />, color: 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300' },
+  { id: 'mental_health_day', name: 'Guilt-Free Mental Health Day', cost: 100, icon: <Heart size={24} />, color: 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-300' },
 ];
 
 export default function WellnessShop({ isOpen, onClose, child }: WellnessShopProps) {
@@ -114,7 +114,7 @@ export default function WellnessShop({ isOpen, onClose, child }: WellnessShopPro
                     <button 
                       onClick={() => handleRedeem(item.cost)}
                       disabled={(child.gems || 0) < item.cost || isRedeeming}
-                      className="mt-4 w-full py-2 rounded-xl font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-accent text-white hover:bg-accent-dark"
+                      className="mt-4 w-full py-2 rounded-xl font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-accent text-white dark:text-white hover:bg-accent-dark"
                     >
                       {(child.gems || 0) >= item.cost ? 'Buy' : `Not Enough ${child.age >= 18 ? 'Credits' : 'Gems'}`}
                     </button>

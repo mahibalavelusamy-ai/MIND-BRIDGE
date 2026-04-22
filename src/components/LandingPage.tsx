@@ -24,10 +24,16 @@ export default function LandingPage({ onStart }: { onStart: () => void }) {
               MindBridge helps parents, teachers, and clinicians detect emotional patterns early — with gentle assessments, real-time tracking, and AI-guided insights.
             </p>
             <div className="flex flex-wrap gap-4">
-              <button onClick={onStart} className="px-8 py-3 bg-accent text-white rounded-full font-medium hover:bg-accent-hover transition-all shadow-lg hover:shadow-accent/20 hover:-translate-y-0.5">
+              <button 
+                onClick={onStart} 
+                className="px-8 py-3 bg-accent text-white dark:text-white rounded-full font-medium hover:bg-accent-hover transition-all shadow-lg hover:shadow-accent/20 hover:-translate-y-0.5"
+              >
                 Get Started →
               </button>
-              <button onClick={onStart} className="px-8 py-3 bg-surface border border-border rounded-full font-medium hover:bg-surface-2 transition-all">
+              <button 
+                onClick={onStart} 
+                className="px-8 py-3 bg-surface border border-border rounded-full font-medium text-slate-900 dark:text-white hover:bg-surface-2 transition-all"
+              >
                 Login
               </button>
             </div>

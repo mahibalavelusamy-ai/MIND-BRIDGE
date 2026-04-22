@@ -8,6 +8,8 @@ export interface Child {
   gender?: 'male' | 'female' | 'other';
   riskLevel: 'low' | 'medium' | 'high';
   lastCheckIn: string;
+  lastCheckInDate?: string;
+  lastAssessmentTimestamp?: string;
   moodScore: number;
   stressLevel: 'Low' | 'Moderate' | 'High';
   notes: string;

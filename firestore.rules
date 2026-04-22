@@ -134,7 +134,9 @@ service cloud.firestore {
 
     match /assessments/{assessmentId} {
       allow read: if isAuthenticated() && (isParentOf(resource.data.childId) || isTeacherOrClinician());
-      allow create: if request.auth != null && (request.resource.data.parentId == request.auth.uid || isTeacherOrClinician());
+      allow create: if request.auth != null && 
+                    (request.resource.data.parentId == request.auth.uid || isTeacherOrClinician()) &&
+                    (isTeacherOrClinician() || get(/databases/$(database)/documents/children/$(request.resource.data.childId)).data.get('lastCheckInDate', '') != request.resource.data.timestamp.substring(0, 10));
       allow update: if isAuthenticated() && (isParentOf(resource.data.childId) || isTeacherOrClinician()) && isValidAssessment(request.resource.data) && request.resource.data.childId == resource.data.childId;
     }
 

@@ -156,13 +156,30 @@ export default function App() {
     const unsubscribeChildren = onSnapshot(childrenQuery, (snapshot) => {
       const childrenData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Child));
       
-      // Data Seeding Fix (Forcing deterministic pins onto these known profiles if testing with clean DBs or unset states)
+      // 1. Streak Reset Logic (Proactive check on data load)
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
       childrenData.forEach(async (c) => {
+        // Data Seeding Fix (Forcing deterministic pins onto these known profiles if testing with clean DBs or unset states)
         if (c.name.includes('Maddy') && !c.pin) {
            await setDoc(doc(db, 'children', c.id), { pin: 'maddy@123' }, { merge: true });
         }
         if (c.name.includes('Mike') && !c.pin) {
            await setDoc(doc(db, 'children', c.id), { pin: 'mike@123' }, { merge: true });
+        }
+
+        // Streak check
+        if (c.streak && c.streak > 0 && c.lastAssessmentTimestamp) {
+          const lastDate = new Date(c.lastAssessmentTimestamp);
+          lastDate.setHours(0, 0, 0, 0);
+          const diffTime = today.getTime() - lastDate.getTime();
+          const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+          
+          if (diffDays > 1) {
+            // Missed at least one day, reset streak in Firestore
+            await updateDoc(doc(db, 'children', c.id), { streak: 0 });
+          }
         }
       });
       
@@ -510,12 +527,12 @@ export default function App() {
               >
                 <div className={cn(
                   "w-32 h-32 md:w-40 md:h-40 rounded-3xl border-2 border-transparent group-hover:border-white shadow-2xl flex items-center justify-center text-6xl mb-4 transition-all duration-300 relative overflow-hidden bg-gradient-to-br",
-                  child.age >= 18 ? getGradientForChild(child.id) : "from-gray-800 to-gray-900"
+                  child.age >= 18 ? getGradientForChild(child.id) : "from-slate-700 to-slate-900"
                 )}>
                   <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                   {child.age >= 18 ? <span className="font-serif text-white">{child.name ? child.name.charAt(0).toUpperCase() : '👤'}</span> : (child.avatar || '👧')}
                 </div>
-                <span className="text-gray-300 font-medium text-xl group-hover:text-white transition-colors">{child.name}</span>
+                <span className="text-slate-300 font-medium text-xl group-hover:text-white transition-colors">{child.name}</span>
               </motion.button>
             ))}
             
@@ -525,10 +542,10 @@ export default function App() {
               onClick={() => setIsCreatingProfile(true)}
               className="flex flex-col items-center group cursor-pointer opacity-70 hover:opacity-100"
             >
-              <div className="w-32 h-32 md:w-40 md:h-40 rounded-3xl bg-gray-900 border-2 border-dashed border-gray-600 group-hover:border-white shadow-2xl flex items-center justify-center text-4xl mb-4 transition-all duration-300">
-                <Plus className="text-gray-400 group-hover:text-white" size={48} />
+              <div className="w-32 h-32 md:w-40 md:h-40 rounded-3xl bg-slate-900 border-2 border-dashed border-slate-600 group-hover:border-white shadow-2xl flex items-center justify-center text-4xl mb-4 transition-all duration-300">
+                <Plus className="text-slate-300 group-hover:text-white" size={48} />
               </div>
-              <span className="text-gray-400 font-medium text-xl group-hover:text-white transition-colors">Add Profile</span>
+              <span className="text-slate-300 font-medium text-xl group-hover:text-white transition-colors">Add Profile</span>
             </motion.button>
           </div>
           
@@ -536,7 +553,7 @@ export default function App() {
         
         {/* Subtle Sign Out at bottom */}
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2">
-          <button onClick={handleLogout} className="text-gray-500 hover:text-white transition-colors font-medium text-sm">
+          <button onClick={handleLogout} className="text-slate-400 hover:text-white transition-colors font-medium text-sm">
             Sign Out
           </button>
         </div>
@@ -551,8 +568,8 @@ export default function App() {
                </div>
                <form onSubmit={handleCreateProfile} className="space-y-4">
                  <div className="grid grid-cols-2 gap-4">
-                   <input required placeholder="Name" className="p-3 rounded-xl border border-gray-700 text-sm bg-gray-900/50 text-white placeholder-gray-500" value={newProfile.name} onChange={e => setNewProfile({...newProfile, name: e.target.value})} />
-                   <input required type="number" placeholder="Age" className="p-3 rounded-xl border border-gray-700 text-sm bg-gray-900/50 text-white placeholder-gray-500" value={newProfile.age} onChange={e => {
+                   <input required placeholder="Name" className="p-3 rounded-xl border border-neutral-200 dark:border-neutral-700 text-sm bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-500" value={newProfile.name} onChange={e => setNewProfile({...newProfile, name: e.target.value})} />
+                   <input required type="number" placeholder="Age" className="p-3 rounded-xl border border-neutral-200 dark:border-neutral-700 text-sm bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-500" value={newProfile.age} onChange={e => {
                      const age = parseInt(e.target.value);
                      let grade = newProfile.grade;
                      let gender = newProfile.gender;
@@ -571,7 +588,7 @@ export default function App() {
                    <select 
                       value={newProfile.gender || 'male'} 
                       onChange={e => setNewProfile({...newProfile, gender: e.target.value as any})}
-                      className="p-3 rounded-xl border border-gray-700 text-sm bg-gray-900/50 text-white"
+                      className="p-3 rounded-xl border border-neutral-200 dark:border-neutral-700 text-sm bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100"
                     >
                       <option value="male">Boy</option>
                       <option value="female">Girl</option>
@@ -580,7 +597,7 @@ export default function App() {
                     <select 
                       value={newProfile.avatar || '👦'} 
                       onChange={e => setNewProfile({...newProfile, avatar: e.target.value})}
-                      className="p-3 rounded-xl border border-gray-700 text-sm bg-gray-900/50 text-white"
+                      className="p-3 rounded-xl border border-neutral-200 dark:border-neutral-700 text-sm bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100"
                     >
                       <option value="👦">👦 Boy</option>
                       <option value="👧">👧 Girl</option>
@@ -590,13 +607,13 @@ export default function App() {
                 <div className="mt-4">
                   <input 
                     placeholder="Grade" 
-                    className={cn("w-full p-3 rounded-xl border border-gray-700 text-sm bg-gray-900/50 text-white placeholder-gray-500", parseInt(newProfile.age) >= 18 && "opacity-60 cursor-not-allowed")} 
+                    className={cn("w-full p-3 rounded-xl border border-neutral-200 dark:border-neutral-700 text-sm bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-500", parseInt(newProfile.age) >= 18 && "opacity-60 cursor-not-allowed")} 
                     value={newProfile.grade} 
                     onChange={e => setNewProfile({...newProfile, grade: e.target.value})} 
                     disabled={parseInt(newProfile.age) >= 18}
                   />
                 </div>
-                <button type="submit" disabled={isSavingProfile} className="w-full bg-accent text-white py-3 rounded-xl text-sm font-bold shadow-lg shadow-accent/20 hover:bg-accent-hover transition-all mt-6 disabled:opacity-50">
+                <button type="submit" disabled={isSavingProfile} className="w-full bg-accent text-white dark:text-white py-3 rounded-xl text-sm font-bold shadow-lg shadow-accent/20 hover:bg-accent-hover transition-all mt-6 disabled:opacity-50">
                   {isSavingProfile ? "Creating..." : "Save Profile"}
                 </button>
                </form>
@@ -617,7 +634,7 @@ export default function App() {
                initial={{ scale: 0.95, y: 20 }}
                animate={isShaking ? { x: [-10, 10, -10, 10, -5, 5, 0], scale: 1, y: 0 } : { scale: 1, y: 0 }}
                transition={{ duration: isShaking ? 0.4 : 0.2 }}
-               className="bg-[#0f0f13] p-8 rounded-[2rem] border border-gray-800 shadow-2xl max-w-sm w-full mx-4 backdrop-blur-xl relative overflow-hidden"
+               className="bg-white dark:bg-[#0f0f13] p-8 rounded-[2rem] border border-neutral-200 dark:border-gray-800 shadow-2xl max-w-sm w-full mx-4 backdrop-blur-xl relative overflow-hidden"
             >
               <div className="absolute inset-0 bg-accent/5 opacity-50 blur-3xl rounded-full"></div>
               <div className="relative z-10">
@@ -628,8 +645,8 @@ export default function App() {
                   )}>
                     {pinModalProfile.age >= 18 ? <span className="font-serif">{pinModalProfile.name.charAt(0).toUpperCase()}</span> : pinModalProfile.avatar}
                   </div>
-                  <h3 className="text-2xl font-serif text-white">Enter PIN</h3>
-                  <p className="text-sm text-gray-400 mt-1">Unlock {pinModalProfile.name}'s profile session</p>
+                  <h3 className="text-2xl font-serif text-neutral-900 dark:text-white">Enter PIN</h3>
+                  <p className="text-sm text-neutral-500 dark:text-gray-400 mt-1">Unlock {pinModalProfile.name}'s profile session</p>
                 </div>
                 <form onSubmit={handlePinSubmit} className="space-y-4">
                   <div>
@@ -638,8 +655,8 @@ export default function App() {
                       value={enteredPin}
                       onChange={(e) => setEnteredPin(e.target.value)}
                       className={cn(
-                        "w-full bg-gray-950/50 border rounded-xl px-4 py-3 text-center text-xl tracking-widest text-white shadow-inner focus:outline-none transition-colors",
-                         pinError ? "border-red-500/50 focus:border-red-500" : "border-gray-700 focus:border-accent"
+                        "w-full bg-white dark:bg-neutral-800 border-2 rounded-xl px-4 py-3 text-center text-xl tracking-widest text-neutral-900 dark:text-neutral-100 shadow-inner focus:outline-none transition-colors",
+                         pinError ? "border-red-500/50 focus:border-red-500" : "border-neutral-200 dark:border-neutral-700 focus:border-accent"
                       )}
                       placeholder="••••"
                       maxLength={32}
@@ -648,8 +665,8 @@ export default function App() {
                     {pinError && <p className="text-red-400 text-xs mt-2 text-center font-bold animate-fade-in">{pinError}</p>}
                   </div>
                   <div className="flex gap-3">
-                    <button type="button" onClick={() => { setPinModalProfile(null); setPinError(''); setEnteredPin(''); }} className="flex-1 py-3 px-4 rounded-xl text-gray-400 font-bold hover:text-white hover:bg-gray-800 transition-colors">Cancel</button>
-                    <button type="submit" disabled={enteredPin.length === 0} className="flex-1 py-3 px-4 rounded-xl bg-accent text-white font-bold hover:bg-accent-hover transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">Unlock</button>
+                    <button type="button" onClick={() => { setPinModalProfile(null); setPinError(''); setEnteredPin(''); }} className="flex-1 py-3 px-4 rounded-xl text-slate-900 dark:text-white bg-slate-100 dark:bg-white/10 font-bold hover:bg-slate-200 dark:hover:bg-white/20 transition-colors">Cancel</button>
+                    <button type="submit" disabled={enteredPin.length === 0} className="flex-1 py-3 px-4 rounded-xl bg-accent text-white dark:text-white font-bold hover:bg-accent-hover transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">Unlock</button>
                   </div>
                   <div className="flex flex-col gap-2 items-center text-center pt-2">
                     <button 
@@ -941,6 +958,7 @@ export default function App() {
                 selectedChild ? (
                   <Assessment 
                     child={selectedChild}
+                    onError={(msg) => setErrorToast({ show: true, message: msg })}
                     onComplete={(newLevel, childName) => {
                       const currentLevel = selectedChild?.level || 1;
                       if (newLevel && newLevel > currentLevel) {
@@ -1064,44 +1082,44 @@ export default function App() {
              exit={{ opacity: 0 }}
              className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md"
           >
-            <motion.div 
-               initial={{ scale: 0.95, y: 20 }}
-               animate={isShaking ? { x: [-10, 10, -10, 10, -5, 5, 0], scale: 1, y: 0 } : { scale: 1, y: 0 }}
-               transition={{ duration: isShaking ? 0.4 : 0.2 }}
-               className="bg-[#0f0f13] p-8 rounded-[2rem] border border-gray-800 shadow-2xl max-w-sm w-full mx-4 backdrop-blur-xl relative overflow-hidden"
-            >
-              <div className="absolute inset-0 bg-accent/5 opacity-50 blur-3xl rounded-full"></div>
-              <div className="relative z-10">
-                <div className="text-center mb-6">
-                  <div className={cn(
-                    "w-24 h-24 mx-auto rounded-2xl flex items-center justify-center text-5xl mb-4 shadow-inner text-white",
-                    `bg-gradient-to-br ${getGradientForChild(pinModalProfile.id)}`
-                  )}>
-                    {pinModalProfile.age >= 18 ? <span className="font-serif">{pinModalProfile.name.charAt(0).toUpperCase()}</span> : pinModalProfile.avatar}
-                  </div>
-                  <h3 className="text-2xl font-serif text-white">Enter PIN</h3>
-                  <p className="text-sm text-gray-400 mt-1">Unlock {pinModalProfile.name}'s profile session</p>
-                </div>
-                <form onSubmit={handlePinSubmit} className="space-y-4">
-                  <div>
-                    <input 
-                      type="password" 
-                      value={enteredPin}
-                      onChange={(e) => setEnteredPin(e.target.value)}
-                      className={cn(
-                        "w-full bg-gray-950/50 border rounded-xl px-4 py-3 text-center text-xl tracking-widest text-white shadow-inner focus:outline-none transition-colors",
-                         pinError ? "border-red-500/50 focus:border-red-500" : "border-gray-700 focus:border-accent"
-                      )}
-                      placeholder="••••"
-                      maxLength={32}
-                      autoFocus
-                    />
-                    {pinError && <p className="text-red-400 text-xs mt-2 text-center font-bold animate-fade-in">{pinError}</p>}
-                  </div>
-                  <div className="flex gap-3">
-                    <button type="button" onClick={() => { setPinModalProfile(null); setPinError(''); setEnteredPin(''); }} className="flex-1 py-3 px-4 rounded-xl text-gray-400 font-bold hover:text-white hover:bg-gray-800 transition-colors">Cancel</button>
-                    <button type="submit" disabled={enteredPin.length === 0} className="flex-1 py-3 px-4 rounded-xl bg-accent text-white font-bold hover:bg-accent-hover transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">Unlock</button>
-                  </div>
+                    <motion.div 
+                       initial={{ scale: 0.95, y: 20 }}
+                       animate={isShaking ? { x: [-10, 10, -10, 10, -5, 5, 0], scale: 1, y: 0 } : { scale: 1, y: 0 }}
+                       transition={{ duration: isShaking ? 0.4 : 0.2 }}
+                       className="bg-white dark:bg-[#0f0f13] p-8 rounded-[2rem] border border-neutral-200 dark:border-gray-800 shadow-2xl max-w-sm w-full mx-4 backdrop-blur-xl relative overflow-hidden"
+                    >
+                      <div className="absolute inset-0 bg-accent/5 opacity-50 blur-3xl rounded-full"></div>
+                      <div className="relative z-10">
+                        <div className="text-center mb-6">
+                          <div className={cn(
+                            "w-24 h-24 mx-auto rounded-2xl flex items-center justify-center text-5xl mb-4 shadow-inner text-white",
+                            `bg-gradient-to-br ${getGradientForChild(pinModalProfile.id)}`
+                          )}>
+                            {pinModalProfile.age >= 18 ? <span className="font-serif">{pinModalProfile.name.charAt(0).toUpperCase()}</span> : pinModalProfile.avatar}
+                          </div>
+                          <h3 className="text-2xl font-serif text-neutral-900 dark:text-white">Enter PIN</h3>
+                          <p className="text-sm text-neutral-500 dark:text-gray-400 mt-1">Unlock {pinModalProfile.name}'s profile session</p>
+                        </div>
+                        <form onSubmit={handlePinSubmit} className="space-y-4">
+                          <div>
+                            <input 
+                              type="password" 
+                              value={enteredPin}
+                              onChange={(e) => setEnteredPin(e.target.value)}
+                              className={cn(
+                                "w-full bg-white dark:bg-neutral-800 border-2 rounded-xl px-4 py-3 text-center text-xl tracking-widest text-neutral-900 dark:text-neutral-100 shadow-inner focus:outline-none transition-colors",
+                                 pinError ? "border-red-500/50 focus:border-red-500" : "border-neutral-200 dark:border-neutral-700 focus:border-accent"
+                              )}
+                              placeholder="••••"
+                              maxLength={32}
+                              autoFocus
+                            />
+                            {pinError && <p className="text-red-400 text-xs mt-2 text-center font-bold animate-fade-in">{pinError}</p>}
+                          </div>
+                          <div className="flex gap-3">
+                            <button type="button" onClick={() => { setPinModalProfile(null); setPinError(''); setEnteredPin(''); }} className="flex-1 py-3 px-4 rounded-xl text-slate-900 dark:text-white bg-slate-100 dark:bg-white/10 font-bold hover:bg-slate-200 dark:hover:bg-white/20 transition-colors">Cancel</button>
+                            <button type="submit" disabled={enteredPin.length === 0} className="flex-1 py-3 px-4 rounded-xl bg-accent text-white dark:text-white font-bold hover:bg-accent-hover transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">Unlock</button>
+                          </div>
                   <div className="flex flex-col gap-2 items-center text-center pt-2">
                     <button 
                       type="button" 
