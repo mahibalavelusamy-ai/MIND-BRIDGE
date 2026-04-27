@@ -47,7 +47,8 @@ import {
   OperationType,
   handleFirestoreError,
   createUserWithEmailAndPassword,
-  signInWithEmailAndPassword
+  signInWithEmailAndPassword,
+  writeBatch
 } from './lib/firebase';
 import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
@@ -65,6 +66,60 @@ import SOSModal from './components/SOSModal';
 
 type Page = 'landing' | 'user-type' | 'login' | 'app';
 type Tab = 'home' | 'profile' | 'assessment' | 'reports' | 'alerts' | 'privacy' | 'forecasts' | 'recommendations' | 'sync' | 'shop';
+
+const APP_VERSION = "1.2.0";
+
+const useDataMigration = (user: any, children: Child[], alerts: Alert[], setChildren: React.Dispatch<React.SetStateAction<Child[]>>) => {
+  useEffect(() => {
+    if (!user) return;
+    const runMigration = async () => {
+      try {
+        const storedVersion = localStorage.getItem('appVersion');
+        if (storedVersion === APP_VERSION) return;
+
+        const batch = writeBatch(db);
+        let hasUpdates = false;
+
+        const updatedChildren = [...children];
+
+        for (let i = 0; i < updatedChildren.length; i++) {
+          const child = updatedChildren[i];
+          if (child.pinSet === undefined || child.creditsEarned === undefined) {
+             const childRef = doc(db, 'children', child.id);
+             batch.update(childRef, { 
+               pinSet: child.pinSet ?? false, 
+               creditsEarned: child.creditsEarned ?? 10 
+             });
+             updatedChildren[i] = { ...child, pinSet: child.pinSet ?? false, creditsEarned: child.creditsEarned ?? 10 };
+             hasUpdates = true;
+          }
+        }
+
+        for (const alert of alerts) {
+          if (alert.read === undefined) {
+             const alertRef = doc(db, 'alerts', alert.id);
+             batch.update(alertRef, { read: false });
+             hasUpdates = true;
+          }
+        }
+        
+        if (hasUpdates) {
+          await batch.commit();
+          setChildren(updatedChildren);
+        }
+        
+        localStorage.setItem('appVersion', APP_VERSION);
+      } catch (error) {
+         console.error("Migration failed", error);
+         console.warn(`Action Required: Add ${window.location.origin} to Firebase Authorized Domains.`);
+      }
+    };
+    
+    if (children.length > 0 || alerts.length > 0) {
+        runMigration();
+    }
+  }, [user, children, alerts, setChildren]);
+};
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>('landing');
@@ -101,6 +156,8 @@ export default function App() {
   const [passwordAuth, setPasswordAuth] = useState('');
   const [isSignUpMode, setIsSignUpMode] = useState(false);
   const [authErrorContent, setAuthErrorContent] = useState('');
+
+  useDataMigration(user, children, alerts, setChildren);
 
   useEffect(() => {
     const handleGlobalError = (event: Event) => {
@@ -170,14 +227,6 @@ export default function App() {
       today.setHours(0, 0, 0, 0);
 
       childrenData.forEach(async (c) => {
-        // Data Seeding Fix (Forcing deterministic pins onto these known profiles if testing with clean DBs or unset states)
-        if (c.name.includes('Maddy') && !c.pin) {
-           await setDoc(doc(db, 'children', c.id), { pin: 'maddy@123' }, { merge: true });
-        }
-        if (c.name.includes('Mike') && !c.pin) {
-           await setDoc(doc(db, 'children', c.id), { pin: 'mike@123' }, { merge: true });
-        }
-
         // Streak check
         if (c.streak && c.streak > 0 && c.lastAssessmentTimestamp) {
           const lastDate = new Date(c.lastAssessmentTimestamp);
@@ -850,18 +899,18 @@ export default function App() {
                   icon={<LayoutDashboard size={18} />} 
                   label={user?.role === 'teacher' ? "School Overview" : "Home"} 
                   active={activeTab === 'home'} 
-                  onClick={() => setActiveTab('home')} 
+                  onClick={() => { setActiveTab('home'); setIsSidebarOpen(false); }} 
                 />
                 {user?.role !== 'teacher' && (
                   <>
-                    <SidebarLink icon={<UserCircle size={18} />} label={selectedChild && selectedChild.age >= 18 ? "Student Profile" : "Child Profile"} active={activeTab === 'profile'} onClick={() => setActiveTab('profile')} />
-                    <SidebarLink icon={<ClipboardCheck size={18} />} label="Assessments" active={activeTab === 'assessment'} onClick={() => setActiveTab('assessment')} />
+                    <SidebarLink icon={<UserCircle size={18} />} label={selectedChild && selectedChild.age >= 18 ? "Student Profile" : "Child Profile"} active={activeTab === 'profile'} onClick={() => { setActiveTab('profile'); setIsSidebarOpen(false); }} />
+                    <SidebarLink icon={<ClipboardCheck size={18} />} label="Assessments" active={activeTab === 'assessment'} onClick={() => { setActiveTab('assessment'); setIsSidebarOpen(false); }} />
                   </>
                 )}
                 {user?.role === 'teacher' && (
                   <>
-                    <SidebarLink icon={<Users size={18} />} label="Classes" active={activeTab === 'profile'} onClick={() => setActiveTab('profile')} />
-                    <SidebarLink icon={<TrendingUp size={18} />} label="Analytics" active={activeTab === 'reports'} onClick={() => setActiveTab('reports')} />
+                    <SidebarLink icon={<Users size={18} />} label="Classes" active={activeTab === 'profile'} onClick={() => { setActiveTab('profile'); setIsSidebarOpen(false); }} />
+                    <SidebarLink icon={<TrendingUp size={18} />} label="Analytics" active={activeTab === 'reports'} onClick={() => { setActiveTab('reports'); setIsSidebarOpen(false); }} />
                   </>
                 )}
               </nav>
@@ -869,14 +918,14 @@ export default function App() {
             <div>
               <p className="text-[10px] font-bold text-text-dim uppercase tracking-wider mb-2 px-3">Insights</p>
               <nav className="space-y-1">
-                <SidebarLink icon={<BarChart3 size={18} />} label="Reports" active={activeTab === 'reports'} onClick={() => setActiveTab('reports')} />
-                <SidebarLink icon={<LineChart size={18} />} label="Risk Forecasts" active={activeTab === 'forecasts'} onClick={() => setActiveTab('forecasts')} />
-                <SidebarLink icon={<Lightbulb size={18} />} label="Recommendations" active={activeTab === 'recommendations'} onClick={() => setActiveTab('recommendations')} />
+                <SidebarLink icon={<BarChart3 size={18} />} label="Reports" active={activeTab === 'reports'} onClick={() => { setActiveTab('reports'); setIsSidebarOpen(false); }} />
+                <SidebarLink icon={<LineChart size={18} />} label="Risk Forecasts" active={activeTab === 'forecasts'} onClick={() => { setActiveTab('forecasts'); setIsSidebarOpen(false); }} />
+                <SidebarLink icon={<Lightbulb size={18} />} label="Recommendations" active={activeTab === 'recommendations'} onClick={() => { setActiveTab('recommendations'); setIsSidebarOpen(false); }} />
                 <SidebarLink 
                   icon={<Bell size={18} />} 
                   label="Alerts" 
                   active={activeTab === 'alerts'} 
-                  onClick={() => setActiveTab('alerts')} 
+                  onClick={() => { setActiveTab('alerts'); setIsSidebarOpen(false); }} 
                   badge={alerts.filter(a => !a.read).length > 0 ? alerts.filter(a => !a.read).length : undefined}
                 />
               </nav>
@@ -888,13 +937,13 @@ export default function App() {
                   icon={<Shield size={18} />} 
                   label="Privacy & Ethics" 
                   active={activeTab === 'privacy'} 
-                  onClick={() => setActiveTab('privacy')} 
+                  onClick={() => { setActiveTab('privacy'); setIsSidebarOpen(false); }} 
                 />
                 <SidebarLink 
                   icon={<Link size={18} />} 
                   label="School Sync" 
                   active={activeTab === 'sync'} 
-                  onClick={() => setActiveTab('sync')} 
+                  onClick={() => { setActiveTab('sync'); setIsSidebarOpen(false); }} 
                 />
               </nav>
             </div>
@@ -959,7 +1008,7 @@ export default function App() {
                         user={user} 
                         children={selectedChild && selectedChild.id !== 'temp_new' ? [selectedChild] : []} 
                         alerts={selectedChild && selectedChild.id !== 'temp_new' ? alerts.filter(a => a.childId === selectedChild.id || a.childId === 'all') : alerts} 
-                        onViewProfile={(child) => { setSelectedChild(child); setActiveTab('profile'); }}
+                        onViewProfile={(child) => { handleProfileSelect(child); setActiveTab('profile'); }}
                         selectedChild={selectedChild}
                         setActiveTab={setActiveTab}
                       />
@@ -968,13 +1017,21 @@ export default function App() {
               {activeTab === 'profile' && (
                 user?.role === 'teacher' ? (
                   <SchoolDashboard user={user} initialTab="classes" />
-                ) : selectedChild && (
+                ) : selectedChild ? (
                   <ChildProfile 
                     child={selectedChild} 
                     onUpdate={(updated) => setSelectedChild(updated)}
                     onStartAssessment={() => setActiveTab('assessment')}
                     onDelete={() => { setSelectedChild(null); setActiveTab('home'); }}
                   />
+                ) : (
+                  <div className="text-center py-20">
+                    <p className="text-text-muted text-lg">No profile selected.</p>
+                    <p className="text-text-dim text-sm mt-2">Go back to the dashboard and select a child profile to continue.</p>
+                    <button onClick={() => setActiveTab('home')} className="mt-6 px-6 py-2 bg-accent text-white rounded-xl font-medium hover:bg-accent-hover transition-colors">
+                      Go to Dashboard
+                    </button>
+                  </div>
                 )
               )}
               {activeTab === 'assessment' && (

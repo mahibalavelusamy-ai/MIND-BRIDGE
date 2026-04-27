@@ -222,7 +222,7 @@ export default function Assessment({ child, onComplete, onError }: AssessmentPro
         // OK, I'll set addedGems to 70 for the 7th day, and assume previous days were 5 (which is what I implemented in previous turns maybe).
         // Let's stick to the user's "addedGems = 70" for Day 7 and "addedGems = 5" for Days 1-6.
         addedGems = 70;
-        newStreak = 0; // Reset after 7th day bonus
+        newStreak = 7; // Keep streak at 7 so user sees their achievement; App.tsx will handle reset on next day
         showBonus = true;
       } else {
         addedGems = 5; // Standard daily reward to ensure 100 total (6*5 + 70)
@@ -267,7 +267,7 @@ export default function Assessment({ child, onComplete, onError }: AssessmentPro
         assessmentId: 'latest' // We could get the ID from the previous addDoc if needed
       });
 
-      const newLevel = Math.floor((child.gems || 0 + addedGems) / 500) + 1;
+      const newLevel = Math.floor(((child.gems || 0) + addedGems) / 500) + 1;
 
       // Update redundant check
       await updateDoc(doc(db, 'children', child.id), {
