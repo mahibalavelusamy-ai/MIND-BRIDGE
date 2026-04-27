@@ -115,8 +115,27 @@ service cloud.firestore {
              (!('recommendedFocus' in data) || (data.recommendedFocus is string && data.recommendedFocus.size() < 1000));
     }
 
+    function isValidSession(data) {
+      return data.keys().hasAll(['type', 'durationMinutes', 'timestamp', 'userId']) &&
+             data.userId == request.auth.uid &&
+             data.type is string && data.type.size() < 100 &&
+             data.durationMinutes is number &&
+             data.timestamp is string && data.timestamp.size() < 50 &&
+             (!('childId' in data) || data.childId == null || (data.childId is string && data.childId.size() < 100));
+    }
+
+    function isValidSchedule(data) {
+      return data.keys().hasAll(['subject', 'day', 'startTime', 'endTime', 'room']) &&
+             data.subject is string && data.subject.size() < 100 &&
+             data.day in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'] &&
+             data.startTime is string && data.startTime.size() < 20 &&
+             data.endTime is string && data.endTime.size() < 20 &&
+             data.room is string && data.room.size() < 100;
+    }
+
     // ===============================================================
     // Rules
+
     // ===============================================================
 
     match /users/{userId} {
@@ -130,6 +149,13 @@ service cloud.firestore {
       allow create: if isAuthenticated() && isValidChild(request.resource.data);
       allow update: if isAuthenticated() && (resource.data.parentId == request.auth.uid) && isValidChild(request.resource.data) && request.resource.data.parentId == resource.data.parentId;
       allow delete: if isAuthenticated() && (resource.data.parentId == request.auth.uid);
+      
+      match /schedules/{scheduleId} {
+        allow read: if isAuthenticated() && (get(/databases/$(database)/documents/children/$(childId)).data.parentId == request.auth.uid || isTeacherOrClinician());
+        allow create: if isAuthenticated() && isValidSchedule(request.resource.data) && get(/databases/$(database)/documents/children/$(childId)).data.parentId == request.auth.uid;
+        allow update: if isAuthenticated() && get(/databases/$(database)/documents/children/$(childId)).data.parentId == request.auth.uid && isValidSchedule(request.resource.data);
+        allow delete: if isAuthenticated() && get(/databases/$(database)/documents/children/$(childId)).data.parentId == request.auth.uid;
+      }
     }
 
     match /assessments/{assessmentId} {
@@ -138,6 +164,7 @@ service cloud.firestore {
                     (request.resource.data.parentId == request.auth.uid || isTeacherOrClinician()) &&
                     (isTeacherOrClinician() || get(/databases/$(database)/documents/children/$(request.resource.data.childId)).data.get('lastCheckInDate', '') != request.resource.data.timestamp.substring(0, 10));
       allow update: if isAuthenticated() && (isParentOf(resource.data.childId) || isTeacherOrClinician()) && isValidAssessment(request.resource.data) && request.resource.data.childId == resource.data.childId;
+      allow delete: if isAuthenticated() && (isParentOf(resource.data.childId) || isTeacherOrClinician());
     }
 
     match /alerts/{alertId} {
@@ -158,12 +185,21 @@ service cloud.firestore {
       allow read: if isAuthenticated() && (isParentOf(resource.data.childId) || isTeacherOrClinician());
       allow create: if isAuthenticated() && isValidSelfCheck(request.resource.data) && (isParentOf(request.resource.data.childId) || isTeacherOrClinician());
       allow update: if isAuthenticated() && isParentOf(resource.data.childId) && isValidSelfCheck(request.resource.data) && request.resource.data.childId == resource.data.childId;
+      allow delete: if isAuthenticated() && (isParentOf(resource.data.childId) || isTeacherOrClinician());
     }
 
     match /rootCauseAnalyses/{analysisId} {
       allow read: if isAuthenticated() && (resource.data.parentId == request.auth.uid || isTeacherOrClinician());
       allow create: if isAuthenticated() && isValidRootCauseAnalysis(request.resource.data) && (request.resource.data.parentId == request.auth.uid || isTeacherOrClinician());
       allow update: if isAuthenticated() && (resource.data.parentId == request.auth.uid) && isValidRootCauseAnalysis(request.resource.data) && request.resource.data.childId == resource.data.childId;
+      allow delete: if isAuthenticated() && (resource.data.parentId == request.auth.uid || isTeacherOrClinician());
+    }
+
+    match /sessions/{sessionId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && isValidSession(request.resource.data);
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && isValidSession(request.resource.data) && request.resource.data.userId == resource.data.userId;
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
   }
 }

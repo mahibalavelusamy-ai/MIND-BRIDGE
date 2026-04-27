@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { X, Star, Gift, Palette, Gamepad2, Clock, Utensils, Film, Coffee, Music, Heart } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Child } from '../types';
-import { db, doc, updateDoc, handleFirestoreError, OperationType } from '../lib/firebase';
+import { db, auth, doc, updateDoc, handleFirestoreError, OperationType, increment } from '../lib/firebase';
 import { cn, getGradientForChild } from '../lib/utils';
 
 interface WellnessShopProps {
@@ -35,10 +35,17 @@ export default function WellnessShop({ isOpen, onClose, child }: WellnessShopPro
     if ((child.gems || 0) < cost) return;
     setIsRedeeming(true);
     try {
+      // Atomic deduction for child gems
       await updateDoc(doc(db, 'children', child.id), {
-        gems: (child.gems || 0) - cost
+        gems: increment(-cost)
       });
-      // Could add a toast or success animation here
+      
+      // Atomic deduction for parent credits
+      if (db && auth.currentUser) {
+        await updateDoc(doc(db, 'users', auth.currentUser.uid), {
+          creditsEarned: increment(-cost)
+        }).catch(e => console.warn("Failed to deduct parent credits:", e));
+      }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, 'children');
     } finally {

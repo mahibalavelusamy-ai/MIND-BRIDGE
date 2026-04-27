@@ -1,4 +1,5 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
+import { safeJsonParse } from "../lib/aiUtils";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -18,16 +19,45 @@ export async function getAIInsights(childData: any) {
       - Stress Level: ${childData.stressLevel}
       - Recent Notes: ${childData.notes}
       
-      Provide exactly 3 concise bullet points of clinical insights and actionable advice for the parent.
-      Do not include any introductory or concluding text, just the 3 bullet points starting with "- ". Do not include "Recent Trends" or "Self-Checks" in the output.
+      Return a structured JSON object with exactly these fields:
+      {
+        "status": "A one-sentence summary of the child's current clinical status.",
+        "concerns": ["Any specific concerns based on the data provided"],
+        "recommendations": ["Three specific, actionable clinical recommendations for the parent"]
+      }
+
+      Ensure the recommendations are concise and practical. Data processing is strictly for decision-support.
     `;
 
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            status: { type: Type.STRING },
+            concerns: { type: Type.ARRAY, items: { type: Type.STRING } },
+            recommendations: { type: Type.ARRAY, items: { type: Type.STRING } }
+          },
+          required: ["status", "concerns", "recommendations"]
+        }
+      }
     });
 
-    return response.text || `${childData.name} is showing consistent patterns. Continue monitoring ${pronouns.possessive} mood and encourage open communication about ${pronouns.possessive} day.`;
+    const text = response.text || "";
+    const result = safeJsonParse(text, {
+      status: `${childData.name} is showing consistent patterns.`,
+      concerns: [],
+      recommendations: [
+        `Continue monitoring ${pronouns.possessive} mood closely.`,
+        `Encourage open communication about ${pronouns.possessive} daily experiences.`,
+        `Maintain a consistent routine to help manage stress levels.`
+      ]
+    });
+
+    return result;
   } catch (error: any) {
     const errMsg = error instanceof Error ? error.message : JSON.stringify(error);
     if (errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('RESOURCE_EXHAUSTED') || error?.status === 429 || error?.status === 'RESOURCE_EXHAUSTED') {
@@ -35,6 +65,14 @@ export async function getAIInsights(childData: any) {
     } else {
       console.error("Error fetching AI insights:", error);
     }
-    return `${childData.name} is showing consistent patterns. Continue monitoring ${pronouns.possessive} mood and encourage open communication about ${pronouns.possessive} day.`;
+    return {
+      status: `${childData.name} is showing consistent patterns.`,
+      concerns: [],
+      recommendations: [
+        `Continue monitoring ${pronouns.possessive} mood closely.`,
+        `Encourage open communication about ${pronouns.possessive} daily experiences.`,
+        `Maintain a consistent routine to help manage stress levels.`
+      ]
+    };
   }
 }

@@ -16,7 +16,8 @@ import {
   Timestamp,
   orderBy,
   limit,
-  increment
+  increment,
+  writeBatch
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -103,6 +104,7 @@ export {
   orderBy,
   limit,
   increment,
+  writeBatch,
   onAuthStateChanged,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword

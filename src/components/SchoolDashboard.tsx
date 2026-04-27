@@ -313,8 +313,8 @@ export default function SchoolDashboard({ user, initialTab = 'overview' }: Schoo
         {(activeView === 'overview' || activeView === 'analytics') && (
           <div className="md:col-span-4 bg-surface border border-border rounded-[2rem] p-8 shadow-sm flex flex-col">
             <h3 className="text-xl font-serif mb-8">Risk Distribution</h3>
-            <div className="flex-1 flex items-center justify-center relative">
-              <ResponsiveContainer width="100%" height={240}>
+            <div className="h-[300px] flex items-center justify-center relative">
+              <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={riskDistribution}

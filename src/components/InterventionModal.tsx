@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { X, Star, Zap } from 'lucide-react';
 import MicroIntervention from './MicroIntervention';
 import { Child } from '../types';
+import { db, auth, updateDoc, doc, increment } from '../lib/firebase';
 
 interface InterventionModalProps {
   child: Child;
@@ -11,6 +12,29 @@ interface InterventionModalProps {
 
 export default function InterventionModal({ child, onClose }: InterventionModalProps) {
   const [step, setStep] = useState(1);
+  const [isAwarding, setIsAwarding] = useState(false);
+
+  const handleComplete = async () => {
+    setIsAwarding(true);
+    try {
+      // Award gems to child
+      await updateDoc(doc(db, 'children', child.id), {
+        gems: increment(5)
+      });
+      // Award credits to parent
+      if (auth.currentUser) {
+        await updateDoc(doc(db, 'users', auth.currentUser.uid), {
+          creditsEarned: increment(5)
+        }).catch(e => console.warn("Parent credit update failed:", e));
+      }
+      setStep(2);
+    } catch (error) {
+      console.error("Failed to award credits:", error);
+      setStep(2); // Still show completion screen even if credit update fails
+    } finally {
+      setIsAwarding(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
@@ -27,7 +51,7 @@ export default function InterventionModal({ child, onClose }: InterventionModalP
             </div>
             <div>
               <h2 className="text-xl font-serif font-bold">Quick Relief</h2>
-              <p className="text-sm text-text-muted">Take a moment for yourself</p>
+              <p className="text-sm text-text-muted">Take a moment for yourself {isAwarding && '(Awarding Rewards...)'}</p>
             </div>
           </div>
           <button 
@@ -41,7 +65,7 @@ export default function InterventionModal({ child, onClose }: InterventionModalP
         <div className="px-8 pb-12">
           {step === 1 ? (
             <MicroIntervention 
-              onComplete={() => setStep(2)} 
+              onComplete={handleComplete} 
               onSkip={onClose} 
             />
           ) : (

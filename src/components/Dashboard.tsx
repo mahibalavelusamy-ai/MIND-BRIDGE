@@ -10,7 +10,8 @@ import {
   Sparkles,
   Zap,
   Trophy,
-  MapPin
+  MapPin,
+  Clock
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -56,8 +57,6 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
   const activeChild = selectedChild || children[0];
 
   const [schedules, setSchedules] = useState<Record<string, any[]>>({});
-  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
-  const [isLoadingRecs, setIsLoadingRecs] = useState(false);
   const [interventionChild, setInterventionChild] = useState<Child | null>(null);
   const [dashboardAssessments, setDashboardAssessments] = useState<any[]>([]);
   const [isShopOpen, setIsShopOpen] = useState(false);
@@ -90,73 +89,38 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
       }));
 
   useEffect(() => {
-    const fetchSchedules = async () => {
+    const fetchData = async () => {
       if (children.length === 0) return;
       const newSchedules: Record<string, any[]> = {};
       
       for (const child of children) {
-        const q = query(collection(db, 'schoolSchedules'), where('childId', '==', child.id));
+        const q = query(collection(db, 'children', child.id, 'schedules'));
         const snap = await getDocs(q);
-        newSchedules[child.id] = snap.docs.map(d => d.data());
+        const mappedSchedules = snap.docs.map(d => d.data());
+        console.log(`Fetched ${mappedSchedules.length} schedules for child ${child.id}`);
+        newSchedules[child.id] = mappedSchedules;
       }
       setSchedules(newSchedules);
-    };
 
-    const fetchRecommendations = async () => {
-      if (!activeChild) return;
-      setIsLoadingRecs(true);
-      try {
-        const child = activeChild; 
-        
-        // Fetch last assessment
-        const qA = query(
-          collection(db, 'assessments'),
-          where('childId', '==', child.id),
-          where('parentId', '==', auth.currentUser?.uid),
-          orderBy('timestamp', 'desc'),
-          limit(7)
-        );
-        const snapA = await getDocs(qA);
-        const assessments = snapA.docs.map(d => d.data());
-        setDashboardAssessments(assessments);
-
-        // Fetch schedule
-        const qS = query(
-          collection(db, 'schoolSchedules'), 
-          where('childId', '==', child.id),
-          where('parentId', '==', auth.currentUser?.uid)
-        );
-        const snapS = await getDocs(qS);
-        const scheduleRaw = snapS.docs.map(d => d.data());
-        
-        // Strict deduplication by title/day/time
-        const scheduleMap = new Map();
-        scheduleRaw.forEach(item => {
-          const key = `${item.title}-${item.day}-${item.time}`;
-          if (!scheduleMap.has(key)) {
-            scheduleMap.set(key, {
-              ...item,
-              title: item.title || 'TBD',
-              day: item.day || 'TBD',
-              time: item.time || 'TBD',
-              subject: item.subject || 'TBD'
-            });
-          }
-        });
-        const schedule = Array.from(scheduleMap.values());
-
-        const recs = await generateRecommendations(child, assessments, schedule);
-        setRecommendations(recs);
-      } catch (error) {
-        console.error("Error fetching recommendations:", error);
-      } finally {
-        setIsLoadingRecs(false);
+      if (activeChild) {
+        try {
+          const qA = query(
+            collection(db, 'assessments'),
+            where('childId', '==', activeChild.id),
+            where('parentId', '==', auth.currentUser?.uid),
+            orderBy('timestamp', 'desc'),
+            limit(7)
+          );
+          const snapA = await getDocs(qA);
+          setDashboardAssessments(snapA.docs.map(d => d.data()));
+        } catch (error) {
+          console.error("Error fetching assessments:", error);
+        }
       }
     };
 
-    fetchSchedules();
-    fetchRecommendations();
-  }, [children]);
+    fetchData();
+  }, [children, activeChild]);
 
   const handleSetSleepReminder = async () => {
     try {
@@ -225,19 +189,18 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
   const selectedChildForChart = activeChild;
   const rawSchedule = selectedChildForChart ? (schedules[selectedChildForChart.id] || []) : [];
   
-  // Deduplicate and fallback
+  const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+  const todayIndex = new Date().getDay();
+  const currentDay = todayIndex >= 1 && todayIndex <= 5 ? DAYS[todayIndex - 1] : 'Monday';
+  
+  // Deduplicate and filter for today
   const uniqueScheduleIds = new Set();
-  const childSchedule = rawSchedule.filter(event => {
-    const idToUse = event.title || event.id; // force deduplicate by title primarily as requested
-    if (uniqueScheduleIds.has(idToUse)) return false;
-    uniqueScheduleIds.add(idToUse);
-    // Apply null fallbacks here
-    event.title = event.title || 'TBD';
-    event.time = event.time || 'TBD';
-    event.day = event.day || 'TBD';
-    event.subject = event.subject || 'TBD';
-    return true;
-  });
+  const todaySchedule = rawSchedule.filter(event => {
+    const dedupeKey = `${event.subject || event.title}-${event.day}-${event.startTime}`;
+    if (uniqueScheduleIds.has(dedupeKey)) return false;
+    uniqueScheduleIds.add(dedupeKey);
+    return event.day === currentDay;
+  }).sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
 
   const calculateDisplayScore = (assessments: any[]) => {
     if (!assessments || assessments.length === 0) return 0;
@@ -282,7 +245,7 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
             </div>
           )}
           <button 
-            onClick={() => setIsShopOpen(true)}
+            onClick={() => setActiveTab('shop')}
             className="flex items-center gap-2 bg-amber-100 text-amber-700 px-6 py-2.5 rounded-xl font-bold hover:bg-amber-200 transition-colors shadow-sm"
           >
             <Sparkles size={18} />
@@ -291,157 +254,17 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
         </div>
       </div>
 
-      {/* Bento Grid Layout */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+      {/* Bento Grid Layout - Purged Personalized Recommendations */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 max-w-5xl mx-auto w-full">
         
-        {/* Main Insight - Large Bento Box */}
-        <div className="md:col-span-8 glass-card p-8 group">
-          <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
-            <TrendingUp size={120} />
-          </div>
-          <div className="relative z-10">
-            <div className="flex items-center justify-between gap-2 mb-6">
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 bg-accent-light text-accent text-[10px] font-bold uppercase tracking-widest rounded-full">Mental State Trend</span>
-                <span className="text-text-dim text-xs">Updated just now</span>
-              </div>
-              <div className="flex bg-surface-2 border border-border p-1 rounded-xl">
-                 <button 
-                   onClick={() => setChartTimeframe('7d')}
-                   className={cn("px-3 py-1 text-xs font-bold rounded-lg transition-colors", chartTimeframe === '7d' ? "bg-accent text-white" : "text-text-dim hover:text-text-main")}
-                 >7 Days</button>
-                 <button 
-                   onClick={() => setChartTimeframe('30d')}
-                   className={cn("px-3 py-1 text-xs font-bold rounded-lg transition-colors", chartTimeframe === '30d' ? "bg-accent text-white" : "text-text-dim hover:text-text-main")}
-                 >30 Days</button>
-              </div>
+        {/* Children List */}
+        <div className="md:col-span-7 lg:col-span-8 w-full">
+          <div className="glass-card p-8 h-full">
+            <div className="flex items-center justify-between mb-8">
+              <h3 className="text-xl font-serif">{activeChild?.age >= 18 ? 'Your Student' : 'Your Profile'}</h3>
             </div>
-            <h3 className="text-2xl font-serif mb-4 leading-tight max-w-md">
-              {activeChild && dashboardAssessments.length > 0
-                ? `${activeChild.name}'s stress levels are correlating with upcoming exams.`
-                : activeChild 
-                  ? `Ready to track ${activeChild.name}'s well-being?`
-                  : "Welcome! Add your first profile to start tracking."}
-            </h3>
-            
-            {dashboardAssessments.length === 0 && activeChild ? (
-              <div className="h-[280px] mt-8 flex flex-col items-center justify-center p-8 text-center rounded-2xl border-2 border-dashed border-border bg-surface/50">
-                 <p className="text-text-muted mb-6">No data available. Complete your first check-in to generate insights.</p>
-                 <button 
-                   onClick={() => onViewProfile(activeChild)} 
-                   className="px-6 py-2.5 bg-accent text-white dark:text-white rounded-xl text-sm font-bold shadow-lg shadow-accent/20 hover:bg-accent-hover transition-all"
-                 >
-                   Go to Profile
-                 </button>
-              </div>
-            ) : (
-              <div className="h-[280px] mt-8">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-surface-2)" />
-                  <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--color-text-dim)' }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--color-text-dim)' }} domain={[0, 10]} />
-                  
-                  {/* Highlight Exam Periods from schedule */}
-                  {childSchedule.slice(0, 1).map((event, i) => (
-                    <React.Fragment key={`ref-${i}`}>
-                      <RefArea 
-                        x1={event.day && event.day !== 'TBD' ? event.day.substring(0, 3) : 'Wed'} 
-                        x2={event.day && event.day !== 'TBD' ? event.day.substring(0, 3) : 'Thu'} 
-                        fill="var(--color-accent-light)" 
-                        fillOpacity={0.3}
-                      />
-                    </React.Fragment>
-                  ))}
 
-                  <Tooltip 
-                    contentStyle={{ 
-                      borderRadius: '16px', 
-                      border: '1px solid var(--color-border)', 
-                      backgroundColor: 'var(--color-surface)',
-                      color: 'var(--color-text-main)',
-                      boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' 
-                    }}
-                  />
-                  <Area type="monotone" dataKey="score" fill="var(--color-accent-light)" stroke="none" fillOpacity={0.2} />
-                  <Line 
-                    type="monotone" 
-                    dataKey="score" 
-                    stroke="var(--color-accent)" 
-                    strokeWidth={4} 
-                    dot={{ r: 5, fill: 'var(--color-accent)', strokeWidth: 2, stroke: 'var(--color-surface)' }} 
-                    activeDot={{ r: 8, strokeWidth: 0 }} 
-                  />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
-            )}
-          </div>
-        </div>
-
-        {/* Quick Stats - Sidebar Bento Boxes */}
-        <div className="md:col-span-4 grid grid-cols-1 gap-6">
-          <div className="glass-card p-6 flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-10 h-10 bg-accent-light rounded-2xl flex items-center justify-center text-accent">
-                <Heart size={20} />
-              </div>
-              <span className="text-[10px] font-bold text-text-dim uppercase tracking-widest">Avg Score</span>
-            </div>
-            <div className="flex items-center gap-6 mt-4">
-              <div className="relative w-20 h-20 flex items-center justify-center shrink-0">
-                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                  <circle cx="50" cy="50" r="40" className="stroke-white/20" strokeWidth="8" fill="none" />
-                  <circle 
-                    cx="50" cy="50" r="40" 
-                    className="stroke-accent drop-shadow-[0_0_8px_rgba(45,122,90,0.8)] transition-all duration-1000" 
-                    strokeWidth="8" fill="none" 
-                    strokeDasharray={2 * Math.PI * 40} 
-                    strokeDashoffset={2 * Math.PI * 40 * (1 - (avgScore || 0) / 10)} 
-                    strokeLinecap="round" 
-                  />
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-2xl font-serif font-bold text-text-main">{dashboardAssessments.length === 0 ? '-' : avgScore}</span>
-                </div>
-              </div>
-              <div>
-                <p className="text-xs text-accent font-medium leading-relaxed">Based on your recent family assessments</p>
-              </div>
-            </div>
-          </div>
-
-          <div className={cn(
-            "glass-card p-6 flex flex-col justify-between",
-            alerts.length > 0 && "border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.2)]"
-          )}>
-            <div className="flex items-center justify-between mb-4">
-              <div className={cn(
-                "w-10 h-10 rounded-2xl flex items-center justify-center",
-                alerts.length > 0 ? "bg-red-100 text-red-600 animate-pulse" : "bg-blue-100 text-blue-600"
-              )}>
-                <AlertCircle size={20} />
-              </div>
-              <span className="text-[10px] font-bold text-text-dim uppercase tracking-widest">Active Alerts</span>
-            </div>
-            <div>
-              <p className={cn("text-4xl font-serif font-bold", alerts.length > 0 && "text-red-600")}>
-                {alerts.length}
-              </p>
-              <p className="text-xs text-text-muted mt-2">
-                {alerts.length > 0 ? "Requires immediate attention" : "All systems normal"}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Children List - Medium Bento Box */}
-        <div className="md:col-span-6 glass-card p-8">
-          <div className="flex items-center justify-between mb-8">
-            <h3 className="text-xl font-serif">{activeChild?.age >= 18 ? 'Your Student' : 'Your Profile'}</h3>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4">
+            <div className="grid grid-cols-1 gap-4">
             {displayChildren.map(child => (
               <div 
                 key={child.id}
@@ -510,6 +333,68 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Today's Overview Widget */}
+      <div className="md:col-span-5 lg:col-span-4 w-full">
+        <div className="glass-card p-6 h-full flex flex-col relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-6 opacity-5">
+            <BookOpen size={80} />
+          </div>
+          
+          <div className="flex items-center justify-between mb-6 relative z-10">
+            <h3 className="text-lg font-serif flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-500">
+                <BookOpen size={16} />
+              </div>
+              Today's Overview
+            </h3>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto mb-4 relative z-10 pr-2">
+            {todaySchedule.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-center p-4">
+                <div className="w-12 h-12 bg-surface text-text-muted rounded-full flex items-center justify-center mb-3">
+                  <Coffee size={20} />
+                </div>
+                <p className="font-bold text-sm text-text-main mb-1">No Classes Today</p>
+                <p className="text-xs text-text-muted">Enjoy your free time!</p>
+              </div>
+            ) : (
+              <div className="relative border-l-2 border-border ml-3 pl-4 space-y-6">
+                {todaySchedule.map((event, i) => (
+                  <div key={event.id || i} className="relative group">
+                    <div className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-indigo-500 ring-4 ring-surface-2" />
+                    <div className="bg-surface-2/50 hover:bg-surface-2 border border-border group-hover:border-indigo-500/30 p-3 rounded-xl transition-all cursor-default">
+                      <p className="font-bold text-sm text-text-main">{event.subject}</p>
+                      <div className="flex justify-between items-center mt-2">
+                        <p className="text-xs text-text-muted font-medium flex items-center gap-1">
+                          <Clock size={12} /> {event.startTime} - {event.endTime}
+                        </p>
+                        {event.room && (
+                          <p className="text-[10px] bg-white/10 dark:bg-black/20 text-text-dim px-2 py-0.5 rounded uppercase tracking-wider font-bold">
+                            {event.room}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          
+          <button
+            onClick={() => {
+              if (activeChild) onViewProfile(activeChild);
+            }}
+            className="mt-auto w-full bg-surface-2 border border-border hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all shadow-sm flex items-center justify-center gap-2 relative z-10 group"
+          >
+            View Full Schedule
+            <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+          </button>
+        </div>
+      </div>
 
         {interventionChild && (
           <InterventionModal 
@@ -518,205 +403,124 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
           />
         )}
 
-        {/* Distribution - Medium Bento Box */}
-        <div className="md:col-span-6 glass-card p-8">
-          <h3 className="text-xl font-serif mb-8">Risk Distribution</h3>
-          <div className="h-[280px] flex items-center justify-center relative">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={80}
-                  outerRadius={100}
-                  paddingAngle={8}
-                  dataKey="value"
-                  stroke="none"
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="absolute flex flex-col items-center justify-center">
-              <span className="text-4xl font-serif font-bold">{children.length}</span>
-              <span className="text-[10px] text-text-dim uppercase font-bold tracking-widest">Total</span>
+        {/* Distribution - Full Width Bento Box */}
+        <div className="md:col-span-12 max-w-5xl mx-auto w-full mt-6">
+          <div className="glass-card p-8">
+            <h3 className="text-xl font-serif mb-8 text-center">Risk Distribution</h3>
+            <div className="h-[300px] flex items-center justify-center relative">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={80}
+                    outerRadius={100}
+                    paddingAngle={8}
+                    dataKey="value"
+                    stroke="none"
+                  >
+                    {pieData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="absolute flex flex-col items-center justify-center">
+                <span className="text-4xl font-serif font-bold">{children.length}</span>
+                <span className="text-[10px] text-text-dim uppercase font-bold tracking-widest">Total</span>
+              </div>
             </div>
-          </div>
-          
-          <div className="flex justify-center gap-6 mt-4">
-            {pieData.map((d, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[i] }} />
-                <span className="text-xs text-text-muted font-medium">{d.name}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Personalized Recommendations */}
-        <div className="md:col-span-12 glass-card p-8 mb-8">
-          <div className="absolute -right-24 -bottom-24 w-96 h-96 bg-accent/5 rounded-full blur-3xl" />
-          
-          <div className="relative z-10">
-            <div className="flex items-center justify-between mb-8">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-accent-light text-accent rounded-2xl">
-                  <Lightbulb size={24} />
+            
+            <div className="flex justify-center gap-6 mt-4">
+              {pieData.map((d, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[i] }} />
+                  <span className="text-xs text-text-muted font-medium">{d.name}</span>
                 </div>
-                <div>
-                  <h3 className="text-2xl font-serif">Personalized Recommendations</h3>
-                  <p className="text-sm text-text-muted">Adaptive strategies based on {activeChild?.name}'s recent data</p>
-                </div>
-              </div>
-              <button 
-                className="p-2 hover:bg-surface-2 rounded-xl transition-colors text-text-dim"
-              >
-                <Sparkles size={20} />
-              </button>
+              ))}
             </div>
-
-            {activeChild?.privacyLevel === 'summary' ? (
-              <div className="flex items-center gap-3 text-purple-400 bg-purple-900/20 p-4 rounded-xl border border-purple-500/20">
-                <Lock size={20} />
-                <p className="text-sm font-medium">Personalized recommendations are disabled due to privacy settings.</p>
-              </div>
-            ) : isLoadingRecs ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {[1, 2, 3].map(i => (
-                  <div key={i} className="h-48 bg-surface-2 rounded-3xl animate-pulse border border-border" />
-                ))}
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {(recommendations.length > 0 ? recommendations : SHORTCUTS).map((rec: any) => (
-                  <div key={rec.id} className="group p-6 bg-surface-2 rounded-3xl border border-border hover:border-accent/30 transition-all flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-center justify-between mb-4">
-                        <span className={cn(
-                          "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest",
-                          rec.type === 'activity' ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" :
-                          rec.type === 'resource' ? "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300" :
-                          "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300"
-                        )}>
-                          {rec.type}
-                        </span>
-                        <span className={cn(
-                          "text-[10px] font-bold uppercase",
-                          rec.priority === 'high' ? "text-red-500 font-bold" : "text-text-dim dark:text-slate-300"
-                        )}>
-                          {rec.priority} priority
-                        </span>
-                      </div>
-                      <h4 className="font-bold text-lg mb-2 group-hover:text-accent transition-colors">{rec.title}</h4>
-                      <p className="text-xs text-text-muted leading-relaxed mb-4">{rec.description}</p>
-                    </div>
-                    
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-2 text-[10px] font-bold text-text-dim uppercase">
-                        <Coffee size={12} />
-                        Context: {rec.context}
-                      </div>
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (rec.onClick) {
-                            rec.onClick();
-                          } else if (rec.actionLabel === 'Start Check-in') {
-                            setActiveTab('assessment');
-                          }
-                        }}
-                        className="w-full py-3 bg-white border border-border rounded-xl text-xs font-bold flex items-center justify-center gap-2 group-hover:bg-accent group-hover:text-white group-hover:border-accent transition-all"
-                      >
-                        {rec.actionLabel}
-                        <ArrowRight size={14} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </div>
 
         {/* Wellness Garden - Full Width Bento Box */}
-        <div className="md:col-span-12 glass-card p-8">
-          <div className="absolute top-0 right-0 p-8 opacity-5">
-            <Sparkles size={120} />
-          </div>
-          <div className="relative z-10">
-            <div className="flex items-center justify-between mb-8">
-              <div>
-                <h3 className="text-2xl font-serif mb-1">{activeChild?.age >= 18 ? 'Habit Tracker' : 'Wellness Garden'}</h3>
-                <p className="text-sm text-text-muted">{activeChild?.age >= 18 ? 'Encourage positive habits through a simple credit system.' : 'Encourage positive habits through gamified rewards.'}</p>
-                {activeChild && (
-                  <div className="mt-4 inline-flex items-center gap-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-500/30 px-4 py-2 rounded-xl">
-                    <Trophy className="text-orange-500 dark:text-orange-400" size={18} />
-                    <div>
-                      <p className="text-xs font-bold text-orange-700 dark:text-orange-300 uppercase tracking-wider">Mega Prize Progress</p>
-                      <p className="text-[10px] text-orange-600 dark:text-white font-bold tracking-tight">
-                        Day {activeChild.streak || 0}/7 — {7 - (activeChild.streak || 0)} more days to unlock 70 bonus credits!
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="flex gap-2">
-                <button 
-                  onClick={() => setIsShopOpen(true)}
-                  className="px-4 py-2 bg-surface-2 border border-border rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-border transition-all"
-                >
-                  View Shop
-                </button>
-              </div>
+        <div className="md:col-span-12 max-w-5xl mx-auto w-full mt-6">
+          <div className="glass-card p-8 relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-8 opacity-5">
+              <Sparkles size={120} />
             </div>
-            
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
-              {displayChildren.map(child => (
-                <div key={child.id} className="flex flex-col items-center gap-3 p-4 bg-surface-2 rounded-[2rem] border border-border group hover:border-accent transition-all">
-                  <div className="relative">
-                    <div className="w-20 h-20 rounded-full bg-accent-light flex items-center justify-center text-4xl shadow-inner group-hover:scale-110 transition-transform">
-                      {child.age >= 18 ? <span className="font-serif text-accent">{child.name ? child.name.charAt(0).toUpperCase() : '👤'}</span> : child.avatar}
-                    </div>
-                    {child.age < 18 && (
-                      <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-surface border-2 border-accent rounded-full flex items-center justify-center text-xs font-bold text-accent shadow-lg">
-                        Lvl {child.level || 1}
-                      </div>
-                    )}
-                  </div>
-                  <div className="text-center">
-                    <p className="font-bold text-sm">{child.name}</p>
-                    <div className="flex items-center justify-center gap-2 mt-1">
-                      <div className="flex items-center gap-1 text-[10px] font-bold text-accent">
-                        <Sparkles size={10} /> {child.gems || 0} {child.age >= 18 ? 'Credits' : ''}
-                      </div>
-                      <div className="flex items-center gap-1 text-[10px] font-bold text-orange-500">
-                        <Zap size={10} /> {child.streak || 0}
+            <div className="relative z-10">
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h3 className="text-2xl font-serif mb-1">{activeChild?.age >= 18 ? 'Habit Tracker' : 'Wellness Garden'}</h3>
+                  <p className="text-sm text-text-muted">{activeChild?.age >= 18 ? 'Encourage positive habits through a simple credit system.' : 'Encourage positive habits through gamified rewards.'}</p>
+                  {activeChild && (
+                    <div className="mt-4 inline-flex items-center gap-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-500/30 px-4 py-2 rounded-xl">
+                      <Trophy className="text-orange-500 dark:text-orange-400" size={18} />
+                      <div>
+                        <p className="text-xs font-bold text-orange-700 dark:text-orange-300 uppercase tracking-wider">Mega Prize Progress</p>
+                        <p className="text-[10px] text-orange-600 dark:white font-bold tracking-tight">
+                          Day {activeChild.streak || 0}/7 — {7 - (activeChild.streak || 0)} more days to unlock 20 bonus credits!
+                        </p>
                       </div>
                     </div>
-                  </div>
-                  <div className="w-full h-1.5 bg-border rounded-full overflow-hidden mt-2">
-                    <div 
-                      className="h-full bg-accent transition-all duration-1000" 
-                      style={{ width: `${((child.gems || 0) % 500) / 5}%` }} 
-                    />
-                  </div>
+                  )}
                 </div>
-              ))}
-              {children.length === 0 && (
-                <div className="col-span-full py-12 text-center text-text-dim italic">
-                  Add a profile to start tracking progress.
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => setActiveTab('shop')}
+                    className="px-4 py-2 bg-surface-2 border border-border rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-border transition-all"
+                  >
+                    Wellness Shop
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab('assessment')}
+                    className="px-4 py-2 bg-accent text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-accent-hover transition-all"
+                  >
+                    Start Check-in
+                  </button>
                 </div>
-              )}
+              </div>
+              
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
+                {displayChildren.map(child => (
+                  <div key={child.id} className="flex flex-col items-center gap-3 p-4 bg-surface-2 rounded-[2rem] border border-border group hover:border-accent transition-all">
+                    <div className="relative">
+                      <div className="w-20 h-20 rounded-full bg-accent-light flex items-center justify-center text-4xl shadow-inner group-hover:scale-110 transition-transform">
+                        {child.age >= 18 ? <span className="font-serif text-accent">{child.name ? child.name.charAt(0).toUpperCase() : '👤'}</span> : child.avatar}
+                      </div>
+                      {child.age < 18 && (
+                        <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-surface border-2 border-accent rounded-full flex items-center justify-center text-xs font-bold text-accent shadow-lg">
+                          Lvl {child.level || 1}
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-center">
+                      <p className="font-bold text-sm">{child.name}</p>
+                      <div className="flex items-center justify-center gap-2 mt-1">
+                        <div className="flex items-center gap-1 text-[10px] font-bold text-accent">
+                          <Sparkles size={10} /> {child.gems || 0} {child.age >= 18 ? 'Credits' : ''}
+                        </div>
+                        <div className="flex items-center gap-1 text-[10px] font-bold text-orange-500">
+                          <Zap size={10} /> {child.streak || 0}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="w-full h-1.5 bg-border rounded-full overflow-hidden mt-2">
+                      <div 
+                        className="h-full bg-accent transition-all duration-1000" 
+                        style={{ width: `${((child.gems || 0) % 500) / 5}%` }} 
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
-
       </div>
 
       {selectedChildForChart && (

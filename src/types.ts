@@ -18,7 +18,8 @@ export interface Child {
   level?: number;
   consentToSchoolSharing?: boolean;
   connectedPlatforms?: string[];
-  pin?: string;
+  pin?: string | null;
+  pinSet?: boolean;
   privacyLevel?: 'full' | 'summary';
 }
 

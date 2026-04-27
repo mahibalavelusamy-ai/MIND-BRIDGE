@@ -59,10 +59,11 @@ import PrivacyEthics from './components/PrivacyEthics';
 import Forecasts from './components/Forecasts';
 import Recommendations from './components/Recommendations';
 import SchoolSync from './components/SchoolSync';
+import WellnessShop from './components/WellnessShop';
 import SOSModal from './components/SOSModal';
 
 type Page = 'landing' | 'user-type' | 'login' | 'app';
-type Tab = 'home' | 'profile' | 'assessment' | 'reports' | 'alerts' | 'privacy' | 'forecasts' | 'recommendations' | 'sync';
+type Tab = 'home' | 'profile' | 'assessment' | 'reports' | 'alerts' | 'privacy' | 'forecasts' | 'recommendations' | 'sync' | 'shop';
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>('landing');
@@ -286,7 +287,8 @@ export default function App() {
       name: auth.currentUser.displayName || 'User',
       email: auth.currentUser.email || '',
       role: role,
-      organization: ''
+      organization: '',
+      creditsEarned: 10
     };
     await setDoc(doc(db, 'users', auth.currentUser.uid), userData);
     setUser(userData);
@@ -368,9 +370,12 @@ export default function App() {
         stressLevel: 'Low',
         notes: '',
         lastCheckIn: 'Never',
-        gems: 0,
+        gems: 10,
+        creditsEarned: 10,
         streak: 0,
-        level: 1
+        level: 1,
+        pin: null,
+        pinSet: false
       });
       setIsCreatingProfile(false);
       setNewProfile({ name: '', age: '', grade: '', avatar: '👦', gender: 'male' });
@@ -1002,7 +1007,23 @@ export default function App() {
               {activeTab === 'sync' && (
                 <SchoolSync children={selectedChild ? [selectedChild] : []} />
               )}
-              {!selectedChild && activeTab !== 'home' && activeTab !== 'reports' && activeTab !== 'alerts' && activeTab !== 'privacy' && activeTab !== 'forecasts' && activeTab !== 'recommendations' && activeTab !== 'sync' && activeTab !== 'assessment' && (
+              {activeTab === 'shop' && selectedChild && (
+                <div className="flex-1 flex flex-col">
+                  <div className="mb-6 flex items-center justify-between">
+                    <div>
+                      <h2 className="text-3xl font-serif">Wellness Shop</h2>
+                      <p className="text-text-muted">Reward positive habits with credits</p>
+                    </div>
+                    <button onClick={() => setActiveTab('home')} className="p-2 hover:bg-surface-2 rounded-xl transition-colors">
+                      <X size={24} />
+                    </button>
+                  </div>
+                  <div className="flex-1 bg-surface-2 rounded-3xl p-6 border border-border">
+                    <WellnessShop isOpen={true} onClose={() => setActiveTab('home')} child={selectedChild} />
+                  </div>
+                </div>
+              )}
+              {!selectedChild && activeTab !== 'home' && activeTab !== 'reports' && activeTab !== 'alerts' && activeTab !== 'privacy' && activeTab !== 'forecasts' && activeTab !== 'recommendations' && activeTab !== 'sync' && activeTab !== 'assessment' && activeTab !== 'shop' && (
                 <div className="text-center py-20">
                   <p className="text-text-muted">Please add a child first from the dashboard.</p>
                   <button onClick={() => setActiveTab('home')} className="text-accent font-medium mt-2">Go to Dashboard</button>

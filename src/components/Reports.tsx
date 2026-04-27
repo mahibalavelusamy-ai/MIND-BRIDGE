@@ -38,10 +38,21 @@ import {
 } from 'lucide-react';
 import { Child, BehavioralPattern, Anomaly } from '../types';
 import { cn } from '../lib/utils';
-import { db, auth, collection, query, where, getDocs, orderBy, addDoc, handleFirestoreError, OperationType } from '../lib/firebase';
+import { db, auth, collection, query, where, getDocs, orderBy, addDoc, handleFirestoreError, OperationType, limit } from '../lib/firebase';
 import { detectBehavioralPatterns } from '../lib/patternService';
-import { Activity, AlertTriangle, Fingerprint, Lock } from 'lucide-react';
+import { 
+  Activity, 
+  AlertTriangle, 
+  Fingerprint, 
+  Lock,
+  BrainCircuit,
+  Target,
+  History,
+  TrendingDown
+} from 'lucide-react';
 import { getGradientForChild } from '../lib/utils';
+import { PredictiveRisk, RootCauseAnalysis } from '../types';
+import { predictFutureRisk } from '../lib/predictiveService';
 
 // ... 
 
@@ -57,8 +68,10 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
   const [schedule, setSchedule] = useState<any[]>([]);
   const [patterns, setPatterns] = useState<BehavioralPattern[]>([]);
   const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
+  const [prediction, setPrediction] = useState<PredictiveRisk | null>(null);
+  const [rootCause, setRootCause] = useState<RootCauseAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'trends' | 'patterns'>('trends');
+  const [activeTab, setActiveTab] = useState<'trends' | 'patterns' | 'history'>('trends');
   const [timeframe, setTimeframe] = useState<'7d' | '30d' | 'all'>('7d');
 
   useEffect(() => {
@@ -88,13 +101,15 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
             collection(db, 'assessments'), 
             where('childId', '==', selectedChild.id),
             where('timestamp', '>=', startDate.toISOString()),
-            orderBy('timestamp', 'desc')
+            orderBy('timestamp', 'desc'),
+            limit(20)
           );
         } else {
           qA = query(
             collection(db, 'assessments'), 
             where('childId', '==', selectedChild.id),
-            orderBy('timestamp', 'desc')
+            orderBy('timestamp', 'desc'),
+            limit(20)
           );
         }
         
@@ -111,6 +126,28 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
         const qS = query(collection(db, 'schoolSchedules'), where('childId', '==', selectedChild.id));
         const snapS = await getDocs(qS);
         setSchedule(snapS.docs.map(d => d.data()));
+
+        // Fetch Root Cause Analysis
+        const qRC = query(
+          collection(db, 'rootCauseAnalyses'),
+          where('childId', '==', selectedChild.id),
+          where('parentId', '==', auth.currentUser?.uid),
+          orderBy('timestamp', 'desc'),
+          limit(1)
+        );
+        const snapRC = await getDocs(qRC);
+        if (!snapRC.empty) {
+          setRootCause(snapRC.docs[0].data() as RootCauseAnalysis);
+        }
+
+        // Generate/Fetch Prediction
+        const pred = await predictFutureRisk(
+          selectedChild.id, 
+          assessmentData.slice(0, 7), 
+          snapS.docs.map(d => d.data())
+        );
+        setPrediction(pred);
+
       } catch (error) {
         console.error("Error fetching report data:", error);
       } finally {
@@ -328,6 +365,15 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
         >
           Patterns & Anomalies
         </button>
+        <button
+          onClick={() => setActiveTab('history')}
+          className={cn(
+            "px-6 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all",
+            activeTab === 'history' ? "bg-accent text-white shadow-lg shadow-accent/20" : "text-text-dim hover:text-text-main"
+          )}
+        >
+          Check-in History
+        </button>
       </div>
 
       {loading ? (
@@ -339,7 +385,7 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
           
           {/* AI Insights - Large Bento Box */}
-          <div className="md:col-span-8 bg-surface border border-border rounded-[2rem] p-8 shadow-sm">
+          <div className="md:col-span-12 max-w-5xl mx-auto w-full bg-surface border border-border rounded-[2rem] p-8 shadow-sm">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-accent-light flex items-center justify-center text-accent">
                 <Brain size={24} />
@@ -350,18 +396,142 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
               </div>
             </div>
             <div className="prose prose-sm max-w-none text-text-muted leading-relaxed bg-surface-2 p-6 rounded-3xl border border-border">
-              <ul className="space-y-4">
-                {(latestAssessment?.aiInsight || "No assessment data available yet. Complete a check-in to see AI insights.")
-                  .split('\n')
-                  .filter((line: string) => line.trim().length > 0)
-                  .map((line: string, i: number) => (
-                    <li key={i} className="flex items-start gap-3">
-                      <span className="w-1.5 h-1.5 rounded-full bg-accent mt-2 shrink-0" />
-                      <span>{line.replace(/^- /, '')}</span>
-                    </li>
-                  ))}
-              </ul>
+              {latestAssessment?.aiInsight && typeof latestAssessment.aiInsight === 'object' ? (
+                <div className="space-y-4">
+                  <p className="font-bold text-text-main text-base">{latestAssessment.aiInsight.status}</p>
+                  <div className="mt-4">
+                    <p className="text-xs font-bold text-accent uppercase tracking-widest mb-3 flex items-center gap-2">
+                       <Zap size={14} /> Clinical Suggestions
+                    </p>
+                    <ul className="space-y-3">
+                      {latestAssessment.aiInsight.recommendations?.map((rec: string, i: number) => (
+                        <li key={i} className="flex items-start gap-3">
+                          <span className="w-2 h-2 rounded-full bg-accent mt-1.5 shrink-0" />
+                          <span className="text-sm leading-relaxed">{rec}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              ) : (
+                <ul className="space-y-4">
+                  {(latestAssessment?.aiInsight || "No assessment data available yet. Complete a check-in to see AI insights.")
+                    .toString() // Ensure it's a string for splitting
+                    .split('\n')
+                    .filter((line: string) => line.trim().length > 0)
+                    .slice(0, 4)
+                    .map((line: string, i: number) => (
+                      <li key={i} className="flex items-start gap-3">
+                        <span className="w-1.5 h-1.5 rounded-full bg-accent mt-2 shrink-0" />
+                        <span>{line.replace(/^- /, '')}</span>
+                      </li>
+                    ))}
+                </ul>
+              )}
             </div>
+          </div>
+
+          {/* Root-Cause Analysis */}
+          <div className="md:col-span-12 max-w-5xl mx-auto w-full bg-surface border border-border rounded-[2rem] p-8 shadow-sm">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-accent-light text-accent rounded-2xl">
+                  <BrainCircuit size={24} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-serif">Root-Cause Analysis</h3>
+                  <p className="text-sm text-text-muted">Multi-factor correlation engine results</p>
+                </div>
+              </div>
+              {rootCause && (
+                <div className="flex items-center gap-2 px-4 py-2 bg-surface-2 border border-border rounded-xl w-fit">
+                  <span className="text-[10px] font-bold text-text-dim uppercase">Confidence</span>
+                  <div className="w-16 h-1.5 bg-border rounded-full overflow-hidden">
+                    <div className="h-full bg-accent" style={{ width: `${(rootCause.confidence || 0) * 100}%` }} />
+                  </div>
+                  <span className="text-xs font-bold">{Math.round((rootCause.confidence || 0) * 100)}%</span>
+                </div>
+              )}
+            </div>
+
+            {rootCause ? (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2 space-y-6">
+                  <div className="p-6 bg-surface-2 rounded-3xl border border-border">
+                    <p className="text-[10px] font-bold text-accent uppercase tracking-widest mb-2">Primary Factor</p>
+                    <h4 className="text-xl font-bold mb-4">{rootCause.primaryFactor}</h4>
+                    <p className="text-text-muted leading-relaxed">{rootCause.explanation}</p>
+                  </div>
+                </div>
+
+                <div className="bg-accent-light/10 border border-accent/20 rounded-3xl p-6">
+                  <h4 className="font-bold text-accent mb-4 flex items-center gap-2">
+                    <Zap size={18} />
+                    Actionable Logic
+                  </h4>
+                  <ul className="space-y-3">
+                    {rootCause.evidence.slice(0, 3).map((e, i) => (
+                      <li key={i} className="text-xs text-text-muted flex items-start gap-2">
+                        <div className="w-1 h-1 rounded-full bg-accent mt-1.5 shrink-0" />
+                        {e}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-12 bg-surface-2 rounded-3xl border border-dashed border-border italic text-text-dim">
+                Gathering more data for root-cause analysis...
+              </div>
+            )}
+          </div>
+
+          {/* Predictive Outlook */}
+          <div className="md:col-span-12 max-w-5xl mx-auto w-full bg-surface border border-border rounded-[2rem] p-8 shadow-sm">
+            <div className="flex items-center gap-3 mb-8">
+              <div className="p-3 bg-purple-100 text-purple-600 rounded-2xl">
+                <TrendingUp size={24} />
+              </div>
+              <div>
+                <h3 className="text-xl font-serif">Predictive Outlook</h3>
+                <p className="text-sm text-text-muted">7-day risk forecasting model</p>
+              </div>
+            </div>
+
+            {prediction ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="p-6 bg-surface-2 rounded-3xl border border-border">
+                  <h4 className="text-xs font-bold text-text-dim uppercase mb-4 flex items-center gap-2">
+                    <Target size={14} /> Potential Triggers
+                  </h4>
+                  <ul className="space-y-2">
+                    {prediction.predictedTriggers.map((t, i) => (
+                      <li key={i} className="text-xs text-text-muted flex items-start gap-2">
+                        <span className="w-1 h-1 rounded-full bg-text-dim mt-1.5 shrink-0" />
+                        {t}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="p-6 bg-surface-2 rounded-3xl border border-border">
+                  <h4 className="text-xs font-bold text-text-dim uppercase mb-4 flex items-center gap-2">
+                    <Zap size={14} /> Preemptive Actions
+                  </h4>
+                  <ul className="space-y-2">
+                    {prediction.preemptiveActions.map((a, i) => (
+                      <li key={i} className="text-xs text-text-muted flex items-start gap-2">
+                        <span className="w-1 h-1 rounded-full bg-accent mt-1.5 shrink-0" />
+                        {a}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-12 bg-surface-2 rounded-3xl border border-dashed border-border italic text-text-dim">
+                Insufficient data for reliable prediction model.
+              </div>
+            )}
           </div>
 
           {/* Key Metrics Sidebar */}
@@ -395,8 +565,8 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
           <div className="md:col-span-12 grid md:grid-cols-2 gap-6">
             <div className="bg-surface border border-border rounded-[2rem] p-8 shadow-sm">
               <h3 className="text-xl font-serif mb-8">Holistic Well-being</h3>
-              <div className="h-[350px]">
-                {radarData.length > 0 ? (
+              <div className="h-[300px]">
+                {assessments.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarData}>
                       <PolarGrid stroke="var(--color-surface-2)" />
@@ -421,15 +591,18 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
                     </RadarChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="flex items-center justify-center h-full text-text-dim italic">No data yet</div>
+                  <div className="h-full flex flex-col items-center justify-center text-text-dim bg-surface-2/50 rounded-2xl border border-dashed border-border p-6">
+                    <Activity className="opacity-10 mb-2" size={48} />
+                    <p className="text-sm font-medium">No assessment data available</p>
+                  </div>
                 )}
               </div>
             </div>
 
             <div className="bg-surface border border-border rounded-[2rem] p-8 shadow-sm">
               <h3 className="text-xl font-serif mb-8">Wellness Trend vs. Schedule</h3>
-              <div className="h-[350px]">
-                {trendData.length > 0 ? (
+              <div className="h-[300px]">
+                {assessments.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={trendData}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-surface-2)" />
@@ -468,14 +641,17 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
                     </ComposedChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="flex items-center justify-center h-full text-text-dim italic">No data yet</div>
+                  <div className="h-full flex flex-col items-center justify-center text-text-dim bg-surface-2/50 rounded-2xl border border-dashed border-border p-6">
+                    <TrendingDown className="opacity-10 mb-2" size={48} />
+                    <p className="text-sm font-medium">No trend data available</p>
+                  </div>
                 )}
               </div>
             </div>
           </div>
 
         </div>
-      ) : (
+      ) : activeTab === 'patterns' ? (
         <div className="space-y-8 animate-fade-in">
           {/* Patterns Section */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -571,6 +747,55 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
                 )}
               </div>
               )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="max-w-5xl mx-auto w-full space-y-6 animate-fade-in">
+          <div className="bg-surface border border-border rounded-[2rem] p-8 shadow-sm">
+            <div className="flex items-center gap-3 mb-8">
+              <div className="p-3 bg-blue-100 text-blue-600 rounded-2xl">
+                <History size={24} />
+              </div>
+              <h3 className="text-xl font-serif">Assessment History</h3>
+            </div>
+
+            <div className="overflow-hidden border border-border rounded-xl">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-surface-2 border-b border-border">
+                  <tr>
+                    <th className="px-6 py-4 font-bold text-text-dim uppercase tracking-wider text-[10px]">Date</th>
+                    <th className="px-6 py-4 font-bold text-text-dim uppercase tracking-wider text-[10px]">Type</th>
+                    <th className="px-6 py-4 font-bold text-text-dim uppercase tracking-wider text-[10px]">Wellness Score</th>
+                    <th className="px-6 py-4 font-bold text-text-dim uppercase tracking-wider text-[10px]">Clinical Notes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {assessments.length > 0 ? assessments.map((a) => (
+                    <tr key={a.id} className="hover:bg-surface-2 transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap font-medium">{new Date(a.timestamp).toLocaleDateString()}</td>
+                      <td className="px-6 py-4">Standard Check-in</td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-24 h-1.5 bg-border rounded-full overflow-hidden">
+                            <div className="h-full bg-accent" style={{ width: `${(6 - (a.totalScore || 0)) * 20}%` }} />
+                          </div>
+                          <span className="font-bold">{Math.round((6 - (a.totalScore || 0)) * 20)}%</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-xs text-text-muted truncate max-w-xs">
+                        {typeof a.aiInsight === 'string' 
+                          ? a.aiInsight.substring(0, 60) 
+                          : a.aiInsight?.recommendations?.[0] || 'View full report for details'}...
+                      </td>
+                    </tr>
+                  )) : (
+                    <tr>
+                      <td colSpan={4} className="px-6 py-12 text-center text-text-dim italic">No assessment history found.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
