@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged, User, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { 
   getFirestore, 
   collection, 
@@ -76,11 +76,15 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 
 // Auth Helpers
 export const loginWithGoogle = async () => {
+  await signInWithRedirect(auth, googleProvider);
+};
+
+export const handleGoogleRedirectResult = async (): Promise<User | null> => {
   try {
-    const result = await signInWithPopup(auth, googleProvider);
-    return result.user;
+    const result = await getRedirectResult(auth);
+    return result?.user ?? null;
   } catch (error) {
-    console.error("Login error:", error);
+    console.error("Redirect result error:", error);
     throw error;
   }
 };

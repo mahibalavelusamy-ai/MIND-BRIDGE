@@ -1,17 +1,67 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { AlertCircle, Bell, Info, Trash2, CheckCircle2, Check, Loader2 } from 'lucide-react';
+import { AlertCircle, Bell, Info, Trash2, CheckCircle2, Check, Loader2, BellRing, BellOff } from 'lucide-react';
 import { Alert } from '../types';
 import { cn } from '../lib/utils';
+import { db, collection, query, onSnapshot, orderBy } from '../lib/firebase';
 
 interface AlertsProps {
   alerts: Alert[];
   onDismiss: (id: string) => Promise<void>;
+  onMarkRead: (id: string) => Promise<void>;
 }
 
-export default function Alerts({ alerts, onDismiss }: AlertsProps) {
+export default function Alerts({ alerts, onDismiss, onMarkRead }: AlertsProps) {
   const [filter, setFilter] = useState<'all' | 'critical' | 'warning' | 'info'>('all');
   const [resolvingIds, setResolvingIds] = useState<Set<string>>(new Set());
+  const [readingIds, setReadingIds] = useState<Set<string>>(new Set());
+  const [notifsEnabled, setNotifsEnabled] = useState(
+    localStorage.getItem('notificationsEnabled') === 'true'
+  );
+
+  useEffect(() => {
+    // Setting up the notification listener inside Alerts.tsx as requested
+    const q = query(collection(db, 'alerts'), orderBy('timestamp', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      // Only trigger notifications if enabled and granted
+      if (notifsEnabled && 'Notification' in window && Notification.permission === 'granted') {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === 'added') {
+            const data = change.doc.data();
+            // Check if read is false, and ensure it's a new alert (not old data loaded on mount)
+            const isRecent = data.timestamp ? (new Date().getTime() - new Date(data.timestamp).getTime() < 1000 * 60) : true;
+            if (!data.read && isRecent) {
+              new Notification(data.title || 'New Alert', {
+                body: data.description ? data.description.substring(0, 100) + '...' : 'A clinical concern requires your attention.',
+                icon: '/favicon.ico'
+              });
+            }
+          }
+        });
+      }
+    });
+
+    return () => unsubscribe();
+  }, [notifsEnabled]);
+
+  const toggleNotifications = async () => {
+    if (!notifsEnabled) {
+      if ('Notification' in window) {
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          localStorage.setItem('notificationsEnabled', 'true');
+          setNotifsEnabled(true);
+        } else {
+          alert("Notification permission denied. Please enable them in your browser settings.");
+        }
+      } else {
+        alert("Your browser does not support notifications.");
+      }
+    } else {
+      localStorage.setItem('notificationsEnabled', 'false');
+      setNotifsEnabled(false);
+    }
+  };
 
   const filteredAlerts = alerts.filter(a => filter === 'all' || a.type === filter);
 
@@ -24,6 +74,21 @@ export default function Alerts({ alerts, onDismiss }: AlertsProps) {
       console.error(error);
     } finally {
       setResolvingIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  };
+
+  const handleMarkRead = async (id: string) => {
+    try {
+      setReadingIds(prev => new Set(prev).add(id));
+      await onMarkRead(id);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setReadingIds(prev => {
         const next = new Set(prev);
         next.delete(id);
         return next;
@@ -50,12 +115,26 @@ export default function Alerts({ alerts, onDismiss }: AlertsProps) {
 
   return (
     <div className="space-y-8 animate-fade-in pb-12">
-      <div className="page-header">
-        <h1 className="text-4xl font-serif tracking-tight flex items-center gap-3">
-          Alert Center
-          {alerts.length > 0 && <span className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />}
-        </h1>
-        <p className="text-text-muted mt-1">Real-time mental health notifications and expert recommendations.</p>
+      <div className="page-header flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <h1 className="text-4xl font-serif tracking-tight flex items-center gap-3">
+            Alert Center
+            {alerts.filter(a => !a.read).length > 0 && <span className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />}
+          </h1>
+          <p className="text-text-muted mt-1">Real-time mental health notifications and expert recommendations.</p>
+        </div>
+        <button
+          onClick={toggleNotifications}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm",
+            notifsEnabled 
+              ? "bg-green-100 text-green-700 hover:bg-green-200 border border-green-200"
+              : "bg-surface-2 text-text-muted border hover:text-text-main border-border"
+          )}
+        >
+          {notifsEnabled ? <BellRing size={16} /> : <BellOff size={16} />}
+          {notifsEnabled ? "Push Notifications Enabled" : "Enable Push Notifications"}
+        </button>
       </div>
 
       <div className="flex gap-2 p-1.5 bg-surface border border-border rounded-2xl w-fit shadow-sm">
@@ -77,7 +156,7 @@ export default function Alerts({ alerts, onDismiss }: AlertsProps) {
         <AnimatePresence mode="popLayout">
           {filteredAlerts.length === 0 ? (
             <motion.div 
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
               className="py-32 text-center glass-card"
             >
@@ -92,14 +171,15 @@ export default function Alerts({ alerts, onDismiss }: AlertsProps) {
               <motion.div
                 key={alert.id}
                 layout
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
+                initial={{ opacity: 0, y: -50, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 className={cn(
-                  "group relative flex flex-col md:flex-row gap-6 p-8 glass-card",
+                  "group relative flex flex-col md:flex-row gap-6 p-8 glass-card transition-all",
                   alert.type === 'critical' ? "shadow-[0_8px_32px_rgba(220,38,38,0.15)]" : 
                   alert.type === 'warning' ? "shadow-[0_8px_32px_rgba(217,119,6,0.15)]" : 
-                  ""
+                  "",
+                  alert.read ? "opacity-60" : "opacity-100"
                 )}
               >
                 <div className={cn(
@@ -121,14 +201,19 @@ export default function Alerts({ alerts, onDismiss }: AlertsProps) {
                       alert.type === 'warning' ? "text-amber-800" : 
                       "text-blue-800"
                     )}>{alert.title}</h4>
-                    <span className={cn(
-                      "text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full w-fit",
-                      alert.type === 'critical' ? "bg-red-200 text-red-800" : 
-                      alert.type === 'warning' ? "bg-amber-200 text-amber-800" : 
-                      "bg-blue-200 text-blue-800"
-                    )}>
-                      {alert.type} Priority
-                    </span>
+                    <div className="flex items-center gap-2">
+                       {!alert.read && (
+                          <span className="w-2 h-2 rounded-full bg-accent animate-pulse" title="Unread" />
+                       )}
+                       <span className={cn(
+                        "text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full w-fit",
+                        alert.type === 'critical' ? "bg-red-200 text-red-800" : 
+                        alert.type === 'warning' ? "bg-amber-200 text-amber-800" : 
+                        "bg-blue-200 text-blue-800"
+                      )}>
+                        {alert.type} Priority
+                      </span>
+                    </div>
                   </div>
                   <p className="text-base text-text-muted leading-relaxed mb-6">
                     {alert.description}
@@ -137,17 +222,29 @@ export default function Alerts({ alerts, onDismiss }: AlertsProps) {
                     <span className="text-[10px] font-bold text-text-dim uppercase tracking-widest">
                       Detected {formatDate(alert.timestamp)}
                     </span>
-                    <div className="flex gap-3">
+                    <div className="flex flex-wrap gap-3">
+                      {!alert.read && (
+                        <button 
+                          onClick={() => handleMarkRead(alert.id)}
+                          disabled={readingIds.has(alert.id)}
+                          className="flex items-center gap-1.5 px-4 py-2 bg-surface-2 border border-border text-text-main text-xs font-bold rounded-xl hover:bg-white hover:text-accent disabled:opacity-50 transition-all shadow-sm"
+                        >
+                          {readingIds.has(alert.id) ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} 
+                          Mark as Read
+                        </button>
+                      )}
+                      
                       <button 
                         onClick={() => handleDismiss(alert.id)}
                         disabled={resolvingIds.has(alert.id)}
-                        className="flex items-center gap-2 px-6 py-2.5 bg-surface-2 border border-border text-text-main text-xs font-bold rounded-xl hover:bg-white hover:text-accent disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+                        className="flex items-center gap-1.5 px-4 py-2 bg-surface-2 border border-border text-text-main text-xs font-bold rounded-xl hover:bg-white hover:text-accent disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
                       >
-                        {resolvingIds.has(alert.id) ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} 
-                        {resolvingIds.has(alert.id) ? "Resolving..." : "Mark as Resolved"}
+                        {resolvingIds.has(alert.id) ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} 
+                        {resolvingIds.has(alert.id) ? "Resolving..." : "Resolve"}
                       </button>
+                      
                       {alert.type === 'critical' && (
-                        <button className="px-6 py-2.5 bg-red-600 text-white text-xs font-bold rounded-xl hover:bg-red-700 transition-all shadow-lg shadow-red-600/20">
+                        <button className="px-5 py-2 bg-red-600 text-white text-xs font-bold rounded-xl hover:bg-red-700 transition-all shadow-lg shadow-red-600/20">
                           Take Immediate Action
                         </button>
                       )}
@@ -162,3 +259,4 @@ export default function Alerts({ alerts, onDismiss }: AlertsProps) {
     </div>
   );
 }
+

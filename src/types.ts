@@ -60,6 +60,7 @@ export interface Alert {
   description: string;
   timestamp: string;
   childId: string;
+  read?: boolean;
 }
 
 export interface PredictiveRisk {

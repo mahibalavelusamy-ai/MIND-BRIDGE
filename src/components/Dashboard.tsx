@@ -33,7 +33,7 @@ const RefArea = ReferenceArea as any;
 import { Child, Alert, Recommendation } from '../types';
 import { MOCK_MOOD_DATA } from '../constants';
 import { cn } from '../lib/utils';
-import { db, auth, collection, addDoc, OperationType, handleFirestoreError, query, where, getDocs, orderBy, limit } from '../lib/firebase';
+import { db, auth, collection, addDoc, OperationType, handleFirestoreError, query, where, getDocs, orderBy, limit, onSnapshot } from '../lib/firebase';
 import { generateRecommendations } from '../lib/recommendationService';
 import { Lightbulb, ArrowRight, BookOpen, Coffee, Wind, Lock } from 'lucide-react';
 import InterventionModal from './InterventionModal';
@@ -56,7 +56,7 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
   const displayChildren = selectedChild ? children.filter(c => c.id === selectedChild.id) : children;
   const activeChild = selectedChild || children[0];
 
-  const [schedules, setSchedules] = useState<Record<string, any[]>>({});
+  const [todayClasses, setTodayClasses] = useState<any[]>([]);
   const [interventionChild, setInterventionChild] = useState<Child | null>(null);
   const [dashboardAssessments, setDashboardAssessments] = useState<any[]>([]);
   const [isShopOpen, setIsShopOpen] = useState(false);
@@ -89,38 +89,47 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
       }));
 
   useEffect(() => {
-    const fetchData = async () => {
-      if (children.length === 0) return;
-      const newSchedules: Record<string, any[]> = {};
-      
-      for (const child of children) {
-        const q = query(collection(db, 'children', child.id, 'schedules'));
-        const snap = await getDocs(q);
-        const mappedSchedules = snap.docs.map(d => d.data());
-        console.log(`Fetched ${mappedSchedules.length} schedules for child ${child.id}`);
-        newSchedules[child.id] = mappedSchedules;
-      }
-      setSchedules(newSchedules);
+    if (!activeChild) return;
+    
+    // Listen to today's schedule for activeChild
+    const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+    const todayIndex = new Date().getDay();
+    const currentDay = todayIndex >= 1 && todayIndex <= 5 ? DAYS[todayIndex - 1] : 'Monday';
 
-      if (activeChild) {
-        try {
-          const qA = query(
-            collection(db, 'assessments'),
-            where('childId', '==', activeChild.id),
-            where('parentId', '==', auth.currentUser?.uid),
-            orderBy('timestamp', 'desc'),
-            limit(7)
-          );
-          const snapA = await getDocs(qA);
-          setDashboardAssessments(snapA.docs.map(d => d.data()));
-        } catch (error) {
-          console.error("Error fetching assessments:", error);
-        }
+    const qSchedules = query(collection(db, 'children', activeChild.id, 'schedules'));
+    const unsubscribeSchedules = onSnapshot(qSchedules, (snap) => {
+      const scheduleData = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+      const uniqueScheduleIds = new Set();
+      const filteredForToday = scheduleData.filter(event => {
+        const dedupeKey = `${event.subject || event.title}-${event.day}-${event.startTime}`;
+        if (uniqueScheduleIds.has(dedupeKey)) return false;
+        uniqueScheduleIds.add(dedupeKey);
+        return event.day === currentDay;
+      }).sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
+      
+      setTodayClasses(filteredForToday);
+    });
+
+    const fetchAssessments = async () => {
+      try {
+        const qA = query(
+          collection(db, 'assessments'),
+          where('childId', '==', activeChild.id),
+          where('parentId', '==', auth.currentUser?.uid),
+          orderBy('timestamp', 'desc'),
+          limit(7)
+        );
+        const snapA = await getDocs(qA);
+        setDashboardAssessments(snapA.docs.map(d => d.data()));
+      } catch (error) {
+        console.error("Error fetching assessments:", error);
       }
     };
 
-    fetchData();
-  }, [children, activeChild]);
+    fetchAssessments();
+
+    return () => unsubscribeSchedules();
+  }, [activeChild]);
 
   const handleSetSleepReminder = async () => {
     try {
@@ -187,20 +196,6 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
   ];
 
   const selectedChildForChart = activeChild;
-  const rawSchedule = selectedChildForChart ? (schedules[selectedChildForChart.id] || []) : [];
-  
-  const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-  const todayIndex = new Date().getDay();
-  const currentDay = todayIndex >= 1 && todayIndex <= 5 ? DAYS[todayIndex - 1] : 'Monday';
-  
-  // Deduplicate and filter for today
-  const uniqueScheduleIds = new Set();
-  const todaySchedule = rawSchedule.filter(event => {
-    const dedupeKey = `${event.subject || event.title}-${event.day}-${event.startTime}`;
-    if (uniqueScheduleIds.has(dedupeKey)) return false;
-    uniqueScheduleIds.add(dedupeKey);
-    return event.day === currentDay;
-  }).sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
 
   const calculateDisplayScore = (assessments: any[]) => {
     if (!assessments || assessments.length === 0) return 0;
@@ -352,7 +347,7 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
           </div>
           
           <div className="flex-1 overflow-y-auto mb-4 relative z-10 pr-2">
-            {todaySchedule.length === 0 ? (
+            {todayClasses.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center p-4">
                 <div className="w-12 h-12 bg-surface text-text-muted rounded-full flex items-center justify-center mb-3">
                   <Coffee size={20} />
@@ -361,10 +356,10 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
                 <p className="text-xs text-text-muted">Enjoy your free time!</p>
               </div>
             ) : (
-              <div className="relative border-l-2 border-border ml-3 pl-4 space-y-6">
-                {todaySchedule.map((event, i) => (
+              <div className="relative border-l-2 border-indigo-500/30 ml-3 pl-4 space-y-6">
+                {todayClasses.map((event, i) => (
                   <div key={event.id || i} className="relative group">
-                    <div className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-indigo-500 ring-4 ring-surface-2" />
+                    <div className="absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-indigo-500 ring-4 ring-surface-2 shadow-[0_0_8px_rgba(99,102,241,0.8)]" />
                     <div className="bg-surface-2/50 hover:bg-surface-2 border border-border group-hover:border-indigo-500/30 p-3 rounded-xl transition-all cursor-default">
                       <p className="font-bold text-sm text-text-main">{event.subject}</p>
                       <div className="flex justify-between items-center mt-2">

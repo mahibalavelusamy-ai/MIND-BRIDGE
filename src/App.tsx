@@ -30,7 +30,8 @@ import { Child, Alert } from './types';
 import { 
   auth, 
   db, 
-  loginWithGoogle, 
+  loginWithGoogle,
+  handleGoogleRedirectResult, 
   logout as firebaseLogout, 
   onAuthStateChanged,
   collection,
@@ -125,6 +126,13 @@ export default function App() {
 
     window.addEventListener('firestore-error', handleGlobalError);
     return () => window.removeEventListener('firestore-error', handleGlobalError);
+  }, []);
+
+  useEffect(() => {
+    handleGoogleRedirectResult().catch((error) => {
+      console.error("Redirect result error on mount:", error);
+      setAuthErrorContent(error?.message || "Google sign-in failed. Please try again.");
+    });
   }, []);
 
   useEffect(() => {
@@ -233,6 +241,15 @@ export default function App() {
     }
   }, [isDarkMode]);
 
+  const handleMarkRead = async (alertId: string) => {
+    try {
+      await updateDoc(doc(db, 'alerts', alertId), { read: true });
+    } catch (error) {
+      console.error(error);
+      handleFirestoreError(error, OperationType.UPDATE, 'alerts');
+    }
+  };
+
   const handleResolveAlert = async (alertId: string) => {
     const originalAlerts = [...alerts];
     
@@ -275,8 +292,9 @@ export default function App() {
   const handleLogin = async () => {
     try {
       await loginWithGoogle();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login failed", error);
+      setAuthErrorContent(error?.message || "Google sign-in failed. Please try again.");
     }
   };
 
@@ -859,7 +877,7 @@ export default function App() {
                   label="Alerts" 
                   active={activeTab === 'alerts'} 
                   onClick={() => setActiveTab('alerts')} 
-                  badge={alerts.length > 0 ? alerts.length : undefined}
+                  badge={alerts.filter(a => !a.read).length > 0 ? alerts.filter(a => !a.read).length : undefined}
                 />
               </nav>
             </div>
@@ -990,6 +1008,7 @@ export default function App() {
                 <Alerts 
                   alerts={selectedChild ? alerts.filter(a => a.childId === selectedChild.id || a.childId === 'all') : alerts} 
                   onDismiss={handleResolveAlert} 
+                  onMarkRead={handleMarkRead}
                 />
               )}
               {activeTab === 'privacy' && (
