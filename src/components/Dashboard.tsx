@@ -96,7 +96,7 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
         const qA = query(
           collection(db, 'assessments'),
           where('childId', '==', activeChild.id),
-          where('parentId', '==', auth.currentUser?.uid),
+          where('parentId', '==', activeChild.parentId),
           orderBy('timestamp', 'desc'),
           limit(7)
         );
@@ -297,31 +297,6 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
                 <div className="p-6 rounded-2xl border border-dashed border-border text-center text-text-muted">
                     No active profile
                 </div>
-            )}
-
-            {otherChildren.length > 0 && (
-              <div className="mt-6">
-                <h4 className="text-xs font-bold text-text-muted mb-3 uppercase tracking-widest flex items-center gap-2">
-                  <Users size={14} /> Switch Account
-                </h4>
-                <div className="flex flex-col gap-2">
-                  {otherChildren.map(child => (
-                    <div 
-                      key={child.id}
-                      onClick={() => onViewProfile(child)}
-                      className="flex items-center gap-3 p-3 rounded-xl border border-border hover:border-accent hover:bg-surface transition-all cursor-pointer group"
-                    >
-                      <div className="w-8 h-8 rounded-full bg-surface-2 flex items-center justify-center text-sm border border-border group-hover:border-accent transition-colors">
-                        {child.age >= 18 ? <span className="font-serif text-text-muted group-hover:text-accent">{child.name ? child.name.charAt(0).toUpperCase() : '👤'}</span> : child.avatar}
-                      </div>
-                      <div className="flex-1">
-                         <h4 className="font-bold text-sm text-text-main group-hover:text-accent transition-colors">{child.name}</h4>
-                      </div>
-                      <ChevronRight size={14} className="text-text-dim group-hover:text-accent transition-all" />
-                    </div>
-                  ))}
-                </div>
-              </div>
             )}
           </div>
         </div>

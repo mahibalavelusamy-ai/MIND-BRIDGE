@@ -6,7 +6,7 @@ import { safeJsonParse } from './aiUtils';
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 /**
- * MindBridge Root-Cause Analysis Engine
+ * Mind Bridge Root-Cause Analysis Engine
  * Correlates multi-factor data to identify drivers of emotional changes.
  */
 export async function performRootCauseAnalysis(

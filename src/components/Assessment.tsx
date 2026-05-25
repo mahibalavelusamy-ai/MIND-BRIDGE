@@ -58,12 +58,17 @@ export default function Assessment({ child, onComplete, onError, onNavigateHome 
     // Check if already completed today
     const checkCompletion = async () => {
       if (!child || !auth.currentUser) return;
-      const todayDateStr = new Date().toISOString().split('T')[0];
+      
+      const now = new Date();
+      // Start of the day in user's local timezone
+      const localStartOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      
       try {
         const qDailyCheck = query(
           collection(db, 'assessments'),
           where('childId', '==', child.id),
-          where('timestamp', '>=', todayDateStr)
+          where('parentId', '==', auth.currentUser.uid),
+          where('timestamp', '>=', localStartOfDay.toISOString())
         );
         const dailyCheckSnap = await getDocs(qDailyCheck);
         if (!dailyCheckSnap.empty) {
@@ -114,7 +119,8 @@ export default function Assessment({ child, onComplete, onError, onNavigateHome 
       const batch = writeBatch(db);
       
       let newStreak = child.streak || 0;
-      const rewardAmount = (newStreak > 0 && newStreak % 7 === 0) ? 70 : 10;
+      const newStreakCount = newStreak + 1;
+      const rewardAmount = (newStreakCount % 7 === 0) ? 30 : 5;
       const newLevel = Math.floor(((child.gems || 0) + rewardAmount) / 500) + 1;
 
       const assessmentRef = doc(collection(db, 'assessments'));
@@ -130,7 +136,7 @@ export default function Assessment({ child, onComplete, onError, onNavigateHome 
         isAdaptive: true
       });
 
-      const childRef = doc(db, 'children', child.id);
+      const childRef = doc(db, 'students', child.id);
       batch.update(childRef, {
         streak: increment(1),
         lastAssessmentTimestamp: new Date().toISOString(),
@@ -259,7 +265,7 @@ export default function Assessment({ child, onComplete, onError, onNavigateHome 
             >
               <h3 className="text-xl font-bold text-accent mb-2">Rest Secured 🌙</h3>
               <p className="text-sm text-text-muted font-medium leading-relaxed">
-                You've successfully completed your check-in today.<br />Take this time to relax and recharge.
+                You've already completed today's wellness check-in.<br />Come back tomorrow 🌱
               </p>
               <div className="mt-4 flex items-center justify-center gap-2 text-xs text-text-muted bg-surface-2 py-2 px-4 rounded-full w-fit mx-auto">
                 <CheckCircle2 size={14} className="text-accent" /> Check-in resets at midnight

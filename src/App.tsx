@@ -32,7 +32,8 @@ import {
   CheckCircle2,
   ShoppingCart,
   CalendarDays,
-  Wind
+  Wind,
+  Share2
 } from 'lucide-react';
 import { cn, getGradientForChild } from './lib/utils';
 import { Child, Alert } from './types';
@@ -49,6 +50,7 @@ import {
   onSnapshot,
   doc,
   getDoc,
+  getDocs,
   setDoc,
   addDoc,
   updateDoc,
@@ -70,12 +72,15 @@ import Reports from './components/Reports';
 import Alerts from './components/Alerts';
 import SchoolDashboard from './components/SchoolDashboard';
 import ProfileVaultModal from './components/ProfileVaultModal';
+import CaretakerDashboard from './components/CaretakerDashboard';
+
+import Connections from './components/Connections';
 
 import WellnessShop from './components/WellnessShop';
 import ScheduleAI from './components/ScheduleAI';
 
 type Page = 'landing' | 'user-type' | 'login' | 'app';
-type Tab = 'home' | 'profile' | 'assessment' | 'reports' | 'alerts' | 'shop' | 'schedule';
+export type Tab = 'home' | 'profile' | 'assessment' | 'reports' | 'alerts' | 'shop' | 'schedule' | 'connections';
 
 const APP_VERSION = "1.2.0";
 
@@ -95,7 +100,7 @@ const useDataMigration = (user: any, children: Child[], alerts: Alert[], setChil
         for (let i = 0; i < updatedChildren.length; i++) {
           const child = updatedChildren[i];
           if (child.pinSet === undefined || child.creditsEarned === undefined) {
-             const childRef = doc(db, 'children', child.id);
+             const childRef = doc(db, 'students', child.id);
              batch.update(childRef, { 
                pinSet: child.pinSet ?? false, 
                creditsEarned: child.creditsEarned ?? 10 
@@ -222,18 +227,73 @@ export default function App() {
         // Check if user exists in Firestore
         const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
         if (!userDoc.exists()) {
-          // New user logic (requires choosing role)
-          setUser({ uid: firebaseUser.uid, requiresRole: true });
-          setCurrentPage(prev => (prev === 'landing' ? 'landing' : 'user-type'));
+          const pendingRole = sessionStorage.getItem('pendingRole');
+          if (pendingRole === 'student') {
+             const userData = {
+               uid: firebaseUser.uid,
+               name: firebaseUser.displayName || 'Student',
+               email: firebaseUser.email || '',
+               role: 'student',
+               organization: '',
+               creditsEarned: 10
+             };
+             await setDoc(doc(db, 'users', firebaseUser.uid), userData);
+             try {
+               await setDoc(doc(db, 'students', firebaseUser.uid), {
+                 name: firebaseUser.displayName || 'Student',
+                 avatar: '👤',
+                 age: 18,
+                 grade: 'College',
+                 gender: 'other',
+                 parentId: firebaseUser.uid,
+                 riskLevel: 'low',
+                 moodScore: 7.0,
+                 stressLevel: 'Low',
+                 notes: '',
+                 lastCheckIn: 'Never',
+                 gems: 10,
+                 creditsEarned: 10,
+                 streak: 0,
+                 level: 1,
+                 pin: null,
+                 pinSet: false
+               });
+             } catch (err) {}
+             setUser(userData);
+             setCurrentPage('app');
+          } else if (pendingRole === 'caretaker') {
+             const userData = {
+               uid: firebaseUser.uid,
+               name: firebaseUser.displayName || 'Caretaker',
+               email: firebaseUser.email || '',
+               role: 'caretaker',
+               organization: '',
+               creditsEarned: 0
+             };
+             await setDoc(doc(db, 'users', firebaseUser.uid), userData);
+             setUser(userData);
+             setCurrentPage('app');
+          } else {
+             setUser({ uid: firebaseUser.uid, requiresRole: true });
+             setCurrentPage('user-type');
+          }
         } else {
-          setUser(userDoc.data());
-          // Only automatically jump to 'app' if we are on 'login' or 'user-type'
-          // If we are on 'landing', let the user click 'Get Started' to enter the app.
+          const userData = userDoc.data();
+          const pendingRole = sessionStorage.getItem('pendingRole');
+          
+          if (pendingRole && userData.role !== pendingRole) {
+              await firebaseLogout();
+              setAuthErrorContent(`Role mismatch: Your account is registered as a ${userData.role}, but you tried to log in as a ${pendingRole}.`);
+              setCurrentPage('login');
+              return;
+          }
+
+          setUser(userData);
           setCurrentPage(prev => (prev === 'landing' ? 'landing' : 'app'));
         }
       } else {
         setUser(null);
-        setCurrentPage('login');
+        setCurrentPage('landing');
       }
       setIsAuthReady(true);
     });
@@ -244,23 +304,52 @@ export default function App() {
     if (!user || user.requiresRole) return;
 
     // Listen for children
-    const childrenQuery = query(collection(db, 'children'), where('parentId', '==', auth.currentUser?.uid));
-    const unsubscribeChildren = onSnapshot(childrenQuery, (snapshot) => {
-      const childrenData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Child));
-      
-      setChildren(childrenData);
-      
-      if (selectedChild) {
-        const updatedSelected = childrenData.find(c => c.id === selectedChild.id);
-        if (updatedSelected) {
-          setSelectedChild(updatedSelected);
-        } else if (snapshot.size > 0 && childrenData.length > 0) {
-          // Only reset if we actually have data but the child is truly missing
+    let unsubChildren: () => void = () => {};
+    let unsubRel: (() => void) | undefined;
+    
+    if (user.role === 'caretaker') {
+      const relQuery = query(collection(db, 'relationships'), where('caretakerId', '==', auth.currentUser?.uid), where('status', '==', 'approved'));
+      unsubRel = onSnapshot(relQuery, async (snapshot) => {
+        const studentIds = snapshot.docs.map(d => d.data().studentId);
+        if (studentIds.length > 0) {
+          const studentsQuery = query(collection(db, 'students'), where('parentId', 'in', studentIds));
+          const stuSnap = await getDocs(studentsQuery);
+          const childrenData = stuSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Child));
+          setChildren(childrenData);
+          if (!selectedChild && childrenData.length > 0) {
+            setSelectedChild(childrenData[0]);
+          } else if (selectedChild) {
+             const updated = childrenData.find(c => c.id === selectedChild.id);
+             if (updated) setSelectedChild(updated);
+             else setSelectedChild(null);
+          }
+        } else {
+          setChildren([]);
           setSelectedChild(null);
-          setActiveTab('home');
         }
-      }
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'children'));
+      });
+    } else if (user.role === 'student') {
+      const childrenQuery = query(collection(db, 'students'), where('parentId', '==', auth.currentUser?.uid));
+      unsubChildren = onSnapshot(childrenQuery, (snapshot) => {
+        const childrenData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Child));
+        
+        setChildren(childrenData);
+        
+        if (childrenData.length > 0 && !selectedChild) {
+           setSelectedChild(childrenData[0]);
+           setIsAuthenticatedSession(true);
+        } else if (selectedChild) {
+          const updatedSelected = childrenData.find(c => c.id === selectedChild.id);
+          if (updatedSelected) {
+            setSelectedChild(updatedSelected);
+          } else if (snapshot.size > 0 && childrenData.length > 0) {
+            // Only reset if we actually have data but the child is truly missing
+            setSelectedChild(null);
+            setActiveTab('home');
+          }
+        }
+      }, (error) => handleFirestoreError(error, OperationType.LIST, 'students'));
+    }
 
     // Listen for alerts - Strictly filter by childId for session isolation
     const alertsConstraints: any[] = [];
@@ -291,7 +380,8 @@ export default function App() {
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'alerts'));
 
     return () => {
-      unsubscribeChildren();
+      unsubChildren();
+      if (unsubRel) unsubRel();
       unsubscribeAlerts();
     };
   }, [user, selectedChild?.id]);
@@ -304,22 +394,22 @@ export default function App() {
     let isSubscribed = true;
 
     const checkStreaks = async () => {
-      const todayDateStr = new Date().toISOString().split('T')[0];
-      const today = new Date(todayDateStr);
+      const now = new Date();
+      const localToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-      // Create an array of update promises
       const resetPromises = children.map(async (c) => {
         if (c.streak && c.streak > 0 && c.lastAssessmentTimestamp) {
-          const lastDateStr = new Date(c.lastAssessmentTimestamp).toISOString().split('T')[0];
-          const lastDate = new Date(lastDateStr);
-          const diffTime = today.getTime() - lastDate.getTime();
+          const lastDate = new Date(c.lastAssessmentTimestamp);
+          const localLastDate = new Date(lastDate.getFullYear(), lastDate.getMonth(), lastDate.getDate());
+          
+          const diffTime = localToday.getTime() - localLastDate.getTime();
           const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
           
           if (diffDays > 1) {
-            hasCheckedStreak.current = true; // Mark as checked if we found ANY child to reset
+            hasCheckedStreak.current = true;
             try {
               if (isSubscribed) {
-                await updateDoc(doc(db, 'children', c.id), { streak: 0 });
+                await updateDoc(doc(db, 'students', c.id), { streak: 0 });
               }
             } catch (error) {
               console.error("Failed to reset streak for child", c.id, error);
@@ -421,6 +511,33 @@ export default function App() {
       creditsEarned: 10
     };
     await setDoc(doc(db, 'users', auth.currentUser.uid), userData);
+
+    if (role === 'student') {
+      try {
+        await setDoc(doc(db, 'students', auth.currentUser.uid), {
+          name: auth.currentUser.displayName || 'Student',
+          avatar: '👤',
+          age: 18,
+          grade: 'College',
+          gender: 'other',
+          parentId: auth.currentUser.uid,
+          riskLevel: 'low',
+          moodScore: 7.0,
+          stressLevel: 'Low',
+          notes: '',
+          lastCheckIn: 'Never',
+          gems: 10,
+          creditsEarned: 10,
+          streak: 0,
+          level: 1,
+          pin: null,
+          pinSet: false
+        });
+      } catch (err) {
+        console.error("Failed to provision student profile", err);
+      }
+    }
+
     setUser(userData);
     setCurrentPage('app');
   };
@@ -495,7 +612,7 @@ export default function App() {
     if (!auth.currentUser) return;
     setIsSavingProfile(true);
     try {
-      await addDoc(collection(db, 'children'), {
+      await addDoc(collection(db, 'students'), {
         ...newProfile,
         age: parseInt(newProfile.age),
         parentId: auth.currentUser.uid,
@@ -514,7 +631,7 @@ export default function App() {
       setIsCreatingProfile(false);
       setNewProfile({ name: '', age: '', grade: '', avatar: '👦', gender: 'male' });
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'children');
+      handleFirestoreError(error, OperationType.CREATE, 'students');
     } finally {
       setIsSavingProfile(false);
     }
@@ -546,7 +663,12 @@ export default function App() {
   }
 
   if (currentPage === 'landing') {
-    return <LandingPage onStart={handleStart} />;
+    return (
+       <LandingPage onSelectRole={(role) => {
+         sessionStorage.setItem('pendingRole', role);
+         setCurrentPage('login');
+       }} />
+    );
   }
 
   if (currentPage === 'user-type') {
@@ -557,12 +679,12 @@ export default function App() {
           <p className="text-text-muted mb-8">Select your account type to continue</p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
             <button 
-              onClick={() => handleUserTypeSelect('parent')}
+              onClick={() => handleUserTypeSelect('caretaker')}
               className="p-8 bg-surface border-2 border-border rounded-xl hover:border-accent transition-all text-center group flex flex-col justify-between"
             >
-              <div className="text-4xl mb-4 group-hover:scale-110 transition-transform hidden sm:block">👨‍👩‍👧</div>
-              <h3 className="font-semibold mb-1">Parent</h3>
-              <p className="text-xs text-text-muted">Monitor child wellbeing</p>
+              <div className="text-4xl mb-4 group-hover:scale-110 transition-transform hidden sm:block">🛡️</div>
+              <h3 className="font-semibold mb-1">Caretaker</h3>
+              <p className="text-xs text-text-muted">Monitor student wellbeing</p>
             </button>
             <button 
               onClick={() => handleUserTypeSelect('teacher')}
@@ -594,7 +716,7 @@ export default function App() {
           <div className="max-w-md w-full glass-card p-10 bg-surface/60 border-border/50">
             <div className="mb-10 text-center">
               <h2 className="text-3xl font-serif mb-3 text-text-main tracking-tight">{isSignUpMode ? 'Create Account' : 'Welcome Back'}</h2>
-              <p className="text-text-muted">{isSignUpMode ? 'Sign up to start using NeuroFlow' : 'Sign in to NeuroFlow to continue'}</p>
+              <p className="text-text-muted">{isSignUpMode ? 'Sign up to start using Mind Bridge' : 'Sign in to Mind Bridge to continue'}</p>
             </div>
             
             <form onSubmit={handleEmailAuthSubmit} className="space-y-5 mb-8">
@@ -656,152 +778,9 @@ export default function App() {
                  <Wind className="text-accent" size={24} />
             </div>
             <h2 className="text-3xl font-serif mb-4 text-text-main">Calm intelligence for your wellness journey</h2>
-            <p className="text-text-muted leading-relaxed">NeuroFlow gives individuals and caretakers the tools to detect, understand, and respond to mental health needs — building emotional resilience.</p>
+            <p className="text-text-muted leading-relaxed">Mind Bridge gives individuals and caretakers the tools to detect, understand, and respond to mental health needs — building emotional resilience.</p>
           </div>
         </div>
-      </div>
-    );
-  }
-
-  // PREMIUM GATEWAY UI
-  if (currentPage === 'app' && !selectedChild && user?.role !== 'teacher') {
-    return (
-      <div className="min-h-screen bg-bg flex flex-col items-center justify-center text-text-main p-6 relative overflow-hidden animate-fade-in">
-        {/* Subtle background glow */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-accent-light blur-[100px] rounded-full pointer-events-none opacity-30"></div>
-        
-        <div className="relative z-10 w-full max-w-4xl flex flex-col items-center">
-          <div className="text-accent mb-12 flex justify-center">
-             <div className="text-2xl font-sans font-bold text-text-main tracking-tight flex items-center gap-2">
-                <Wind size={20} className="text-accent" />
-                <span>Neuro<span className="text-accent">Flow</span></span>
-             </div>
-          </div>
-          
-          <h1 className="text-3xl md:text-5xl font-serif mb-16 text-center tracking-tight text-text-main">
-            Who's exploring today?
-          </h1>
-          
-          <div className="flex flex-wrap items-center justify-center gap-8 md:gap-12">
-            {children.map(child => (
-              <motion.button
-                key={child.id}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => handleProfileSelect(child)}
-                className="flex flex-col items-center group cursor-pointer"
-              >
-                <div className={cn(
-                  "w-32 h-32 md:w-40 md:h-40 rounded-[2rem] border border-border group-hover:border-accent/40 shadow-xl group-hover:shadow-[0_0_20px_rgba(56,189,248,0.2)] flex items-center justify-center text-6xl mb-4 transition-all duration-300 relative overflow-hidden bg-surface-2",
-                  child.age >= 18 ? getGradientForChild(child.id) : "from-slate-700 to-slate-900"
-                )}>
-                  <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                  {child.age >= 18 ? <span className="font-sans text-text-main relative z-10">{child.name ? child.name.charAt(0).toUpperCase() : '👤'}</span> : <span className="relative z-10">{child.avatar || '👧'}</span>}
-                </div>
-                <span className="text-text-muted font-medium text-xl group-hover:text-text-main transition-colors duration-300">{child.name}</span>
-              </motion.button>
-            ))}
-            
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setIsCreatingProfile(true)}
-              className="flex flex-col items-center group cursor-pointer opacity-70 hover:opacity-100"
-            >
-              <div className="w-32 h-32 md:w-40 md:h-40 rounded-[2rem] bg-surface/50 backdrop-blur-sm border-2 border-dashed border-border group-hover:border-accent/40 group-hover:shadow-[0_0_20px_rgba(56,189,248,0.1)] flex items-center justify-center text-4xl mb-4 transition-all duration-300">
-                <Plus className="text-text-muted group-hover:text-text-main transition-colors duration-300" size={48} />
-              </div>
-              <span className="text-text-muted font-medium text-xl group-hover:text-text-main transition-colors duration-300">Add Profile</span>
-            </motion.button>
-          </div>
-          
-        </div>
-        
-        {/* Subtle Sign Out at bottom */}
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2">
-          <button onClick={handleLogout} className="text-text-dim hover:text-text-main transition-colors font-medium text-sm">
-            Sign Out
-          </button>
-        </div>
-
-        {/* Profile Creation Modal */}
-        {isCreatingProfile && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-fade-in">
-            <div className="bg-gradient-to-b from-gray-800 to-gray-900 p-8 rounded-[2rem] border border-gray-700 shadow-2xl max-w-lg w-full mx-4 backdrop-blur-xl relative overflow-hidden">
-               <div className="flex justify-between items-center mb-6 text-text-main">
-                 <h3 className="text-2xl font-serif">Create Profile</h3>
-                 <button onClick={() => setIsCreatingProfile(false)} className="text-text-dim hover:text-text-main"><X size={24} /></button>
-               </div>
-               <form onSubmit={handleCreateProfile} className="space-y-4">
-                 <div className="grid grid-cols-2 gap-4">
-                   <input required placeholder="Name" className="p-3 rounded-xl border border-border text-sm bg-surface-2 text-text-main placeholder-text-muted" value={newProfile.name} onChange={e => setNewProfile({...newProfile, name: e.target.value})} />
-                   <input required type="number" placeholder="Age" className="p-3 rounded-xl border border-border text-sm bg-surface-2 text-text-main placeholder-text-muted" value={newProfile.age} onChange={e => {
-                     const age = parseInt(e.target.value);
-                     let grade = newProfile.grade;
-                     let gender = newProfile.gender;
-                     let avatar = newProfile.avatar;
-                     if (!isNaN(age)) {
-                       if (age >= 18) {
-                         grade = 'College/University';
-                         if (gender === 'other') gender = 'male'; 
-                       }
-                       if (age > 5 && avatar === '👶') {
-                         avatar = '👦'; 
-                       }
-                     }
-                     setNewProfile({...newProfile, age: e.target.value, grade, gender, avatar});
-                   }} />
-                   <select 
-                      value={newProfile.gender || 'male'} 
-                      onChange={e => setNewProfile({...newProfile, gender: e.target.value as any})}
-                      className="p-3 rounded-xl border border-border text-sm bg-surface-2 text-text-main"
-                    >
-                      <option value="male">Boy</option>
-                      <option value="female">Girl</option>
-                      {(parseInt(newProfile.age) < 18 || !newProfile.age) && <option value="other">Other</option>}
-                    </select>
-                    <select 
-                      value={newProfile.avatar || '👦'} 
-                      onChange={e => setNewProfile({...newProfile, avatar: e.target.value})}
-                      className="p-3 rounded-xl border border-border text-sm bg-surface-2 text-text-main"
-                    >
-                      <option value="👦">👦 Boy</option>
-                      <option value="👧">👧 Girl</option>
-                      {(parseInt(newProfile.age) <= 5 || !newProfile.age) && <option value="👶">👶 Toddler</option>}
-                    </select>
-                </div>
-                <div className="mt-4">
-                    <input 
-                    placeholder="Grade" 
-                    className={cn("w-full p-3 rounded-xl border border-border text-sm bg-surface-2 text-text-main placeholder-text-muted", parseInt(newProfile.age) >= 18 && "opacity-60 cursor-not-allowed")} 
-                    value={newProfile.grade} 
-                    onChange={e => setNewProfile({...newProfile, grade: e.target.value})} 
-                    disabled={parseInt(newProfile.age) >= 18}
-                  />
-                </div>
-                <button type="submit" disabled={isSavingProfile} className="w-full bg-accent text-bg dark:text-bg py-3 rounded-xl text-sm font-bold shadow-lg shadow-accent/20 hover:bg-accent-hover transition-all mt-6 disabled:opacity-50">
-                  {isSavingProfile ? "Creating..." : "Save Profile"}
-                </button>
-               </form>
-            </div>
-          </div>
-        )}
-
-      {/* Global PIN Modal Duplicate for Gateway Early Return */}
-      <AnimatePresence>
-        {pinModalProfile && (
-          <ProfileVaultModal
-            child={pinModalProfile}
-            enteredPin={enteredPin}
-            setEnteredPin={setEnteredPin}
-            pinError={pinError}
-            isShaking={isShaking}
-            onCancel={() => { setPinModalProfile(null); setPinError(''); setEnteredPin(''); }}
-            onSubmit={handlePinSubmit}
-            onRequestAdminReset={() => alert('An email has been sent to the account administrator/parent with instructions to reset this PIN.')}
-          />
-        )}
-      </AnimatePresence>
       </div>
     );
   }
@@ -816,7 +795,7 @@ export default function App() {
       )}>
         {/* Live Status Risk Indicator */}
         <div className="p-6 border-b border-zinc-800/50 flex items-center justify-between shadow-sm">
-          <div className="text-2xl font-serif font-bold text-white tracking-widest hidden lg:block">Mind<span className="text-emerald-500">Bridge</span></div>
+          <div className="text-2xl font-serif font-bold text-white tracking-widest hidden lg:block">Mind <span className="text-emerald-500">Bridge</span></div>
           {/* Mobile close button */}
           <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden p-2 hover:bg-surface-2 rounded-lg text-text-muted">
              <X size={20} />
@@ -835,23 +814,20 @@ export default function App() {
           
           {/* Mobile Profile Display */}
           <div className="lg:hidden mb-6 flex flex-col gap-4">
-             {selectedChild && user?.role !== 'teacher' && (
-                <button 
-                  onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
-                  className="flex items-center gap-3 p-3 bg-surface-2 border border-border rounded-xl"
-                >
+             {user && (
+                <div className="flex items-center gap-3 p-3 bg-surface-2 border border-border rounded-xl">
                   <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center text-sm font-bold border border-emerald-500/50">
-                    {selectedChild.age >= 18 ? selectedChild.name.charAt(0).toUpperCase() : selectedChild.avatar}
+                    {user.name && user.name.length > 0 ? user.name.charAt(0).toUpperCase() : 'U'}
                   </div>
-                  <span className="font-medium text-sm text-white">{selectedChild.name}</span>
-                </button>
+                  <span className="font-medium text-sm text-white">{user.name}</span>
+                </div>
              )}
           </div>
 
           <div>
              <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2 px-3">Monitor</p>
              <nav className="space-y-1">
-               <SidebarLink icon={<LayoutDashboard size={18} />} label={['teacher', 'school_admin'].includes(user?.role) ? "School Overview" : "Dashboard"} active={activeTab === 'home'} onClick={() => { setActiveTab('home'); setIsSidebarOpen(false); }} />
+               <SidebarLink icon={<LayoutDashboard size={18} />} label={['teacher', 'school_admin'].includes(user?.role) ? "School Overview" : user?.role === 'caretaker' ? "Caretaker Portal" : "Dashboard"} active={activeTab === 'home'} onClick={() => { setActiveTab('home'); setIsSidebarOpen(false); }} />
                {['teacher', 'school_admin'].includes(user?.role) && <SidebarLink icon={<Users size={18} />} label="Classes" active={activeTab === 'profile'} onClick={() => { setActiveTab('profile'); setIsSidebarOpen(false); }} />}
                <SidebarLink
                  icon={<CalendarDays size={18} />}
@@ -859,17 +835,25 @@ export default function App() {
                  active={activeTab === 'schedule'}
                  onClick={() => { setActiveTab('schedule'); setIsSidebarOpen(false); }}
                />
+               {user?.role === 'student' && (
+                 <SidebarLink
+                   icon={<Share2 size={18} />}
+                   label="Connections"
+                   active={activeTab === 'connections'}
+                   onClick={() => { setActiveTab('connections'); setIsSidebarOpen(false); }}
+                 />
+               )}
              </nav>
           </div>
 
           <div>
              <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2 px-3">Assessment & Analysis</p>
              <nav className="space-y-1">
-               {!['teacher', 'school_admin'].includes(user?.role) && selectedChild && (
+               {user?.role === 'student' && selectedChild && (
                  <>
                    <SidebarLink
                      icon={<ClipboardCheck size={18} />}
-                     label={user?.role === 'student' ? "My Journey" : "Check-in"}
+                     label={"My Journey"}
                      active={activeTab === 'assessment'}
                      onClick={() => { setActiveTab('assessment'); setIsSidebarOpen(false); }}
                    />
@@ -881,7 +865,7 @@ export default function App() {
                    />
                    <SidebarLink 
                      icon={<BarChart3 size={18} />} 
-                     label={user?.role === 'student' ? "My Growth" : "Wellness Reports"} 
+                     label={"My Growth"} 
                      active={activeTab === 'reports'} 
                      onClick={() => { setActiveTab('reports'); setIsSidebarOpen(false); }} 
                    />
@@ -928,16 +912,6 @@ export default function App() {
                {isDarkMode ? <Sun size={20} strokeWidth={2.5} /> : <Moon size={20} strokeWidth={2.5} />}
              </button>
 
-             {selectedChild && !['teacher', 'school_admin'].includes(user?.role) && (
-               <button 
-                 onClick={() => setSelectedChild(null)} 
-                 title="Switch Profile"
-                 className="w-10 h-10 flex items-center justify-center rounded-xl border border-border bg-surface hover:bg-surface-2 transition-all text-accent drop-shadow-[0_0_4px_rgba(0,255,136,0.4)]"
-               >
-                 <UserCircle size={20} strokeWidth={2.5} />
-               </button>
-             )}
-
              <button 
                onClick={handleLogout} 
                title="Sign Out"
@@ -981,6 +955,7 @@ export default function App() {
                  <button 
                   onClick={() => setActiveTab('alerts')}
                   className="relative p-2.5 bg-surface-2 border border-border rounded-full text-text-muted hover:text-text-main hover:bg-surface transition-colors"
+                  title={user?.role === 'student' ? 'Inbox' : 'Alerts'}
                  >
                    <Bell size={20} />
                    {alerts.filter(a => !a.read).length > 0 && (
@@ -1022,7 +997,9 @@ export default function App() {
               ) : (
                 <>
                   {activeTab === 'home' && (
-                    ['teacher', 'school_admin'].includes(user?.role) ? (
+                    user?.role === 'caretaker' ? (
+                      <CaretakerDashboard onViewProfile={(child) => handleProfileSelect(child)} />
+                    ) : ['teacher', 'school_admin'].includes(user?.role) ? (
                       <SchoolDashboard user={user} initialTab="overview" privacyBlur={privacyBlur} />
                     ) : (
                       <Dashboard 
@@ -1055,6 +1032,9 @@ export default function App() {
                     </button>
                   </div>
                 )
+              )}
+              {activeTab === 'connections' && (
+                <Connections user={user} />
               )}
               {activeTab === 'assessment' && (
                 selectedChild ? (
@@ -1222,7 +1202,7 @@ export default function App() {
             isShaking={isShaking}
             onCancel={() => { setPinModalProfile(null); setPinError(''); setEnteredPin(''); }}
             onSubmit={handlePinSubmit}
-            onRequestAdminReset={() => alert('An email has been sent to the account administrator/parent with instructions to reset this PIN.')}
+            onRequestAdminReset={() => alert('An email has been sent to the account administrator/caretaker with instructions to reset this PIN.')}
           />
         )}
       </AnimatePresence>

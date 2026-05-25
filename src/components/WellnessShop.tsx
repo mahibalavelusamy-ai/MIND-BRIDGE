@@ -177,7 +177,7 @@ export default function WellnessShop({ isOpen, onClose, child }: WellnessShopPro
     setPurchaseState('loading');
     try {
       // Atomically deduct from both gems AND credits fields
-      await updateDoc(doc(db, 'children', child.id), {
+      await updateDoc(doc(db, 'students', child.id), {
         gems: increment(-selectedItem.cost),
         credits: increment(-selectedItem.cost),
       });
@@ -200,7 +200,7 @@ export default function WellnessShop({ isOpen, onClose, child }: WellnessShopPro
     } catch (error: any) {
       setErrorMsg(error?.message || 'Redemption failed. Please try again.');
       setPurchaseState('error');
-      handleFirestoreError(error, OperationType.UPDATE, 'children');
+      handleFirestoreError(error, OperationType.UPDATE, 'students');
     }
   };
 

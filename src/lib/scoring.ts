@@ -1,5 +1,5 @@
 /**
- * MindBridge Scoring System Utility
+ * Mind Bridge Scoring System Utility
  * Implements a weighted scoring system for child mental health assessments.
  */
 

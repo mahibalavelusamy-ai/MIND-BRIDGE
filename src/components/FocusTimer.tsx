@@ -41,6 +41,7 @@ export default function FocusTimer({ childId }: FocusTimerProps) {
         // Add a 'Study Session Complete' event to the schedule
         const newEvent = {
           childId: childId,
+          parentId: auth.currentUser?.uid,
           title: `${sessionType} Session Complete`,
           type: sessionType.toLowerCase() === 'sleep' ? 'activity' : 'class',
           day: new Date().toLocaleDateString('en-US', { weekday: 'long' }),

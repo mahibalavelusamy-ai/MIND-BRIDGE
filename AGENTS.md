@@ -1,9 +1,9 @@
-# MindBridge Architectural Guidelines
+# Mind Bridge Architectural Guidelines
 
 ## Core Philosophy
 “Emotionally supportive monitoring without making students feel clinically observed.”
 
-This is NOT a hospital system, ERP, or just a mood tracker. MindBridge combines AI-powered wellness analysis, academic stress intelligence, gamified student engagement, realtime monitoring, relationship-aware permissions, and institutional classroom infrastructure.
+This is NOT a hospital system, ERP, or just a mood tracker. Mind Bridge combines AI-powered wellness analysis, academic stress intelligence, gamified student engagement, realtime monitoring, relationship-aware permissions, and institutional classroom infrastructure.
 
 ## Permissions & Roles
 - **Roles:** student, parent, teacher, school_admin, counselor

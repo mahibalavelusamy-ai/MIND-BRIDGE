@@ -67,7 +67,7 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
     
     setIsSaving(true);
     try {
-      await updateDoc(doc(db, 'children', child.id), { 
+      await updateDoc(doc(db, 'students', child.id), { 
         pin: newPinValue, 
         pinSet: true
       });
@@ -78,7 +78,7 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
       setConfirmPinValue('');
       setShowToast(false);
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, 'children');
+      handleFirestoreError(error, OperationType.UPDATE, 'students');
     } finally {
       setIsSaving(false);
     }
@@ -129,7 +129,8 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
       // Fetch last 7 assessments
       const qA = query(
         collection(db, 'assessments'), 
-        where('childId', '==', child.id)
+        where('childId', '==', child.id),
+        where('parentId', '==', child.parentId)
       );
       const snapA = await getDocs(qA);
       const assessmentsData = snapA.docs
@@ -156,7 +157,7 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await updateDoc(doc(db, 'children', child.id), {
+      await updateDoc(doc(db, 'students', child.id), {
         name: formData.name,
         age: formData.age,
         grade: formData.grade,
@@ -166,7 +167,7 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
       });
       onUpdate(formData);
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, 'children');
+      handleFirestoreError(error, OperationType.UPDATE, 'students');
     } finally {
       setIsSaving(false);
     }
@@ -212,7 +213,7 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
       }
     } catch (error) {
       console.error("Batch delete failed:", error);
-      handleFirestoreError(error, OperationType.DELETE, 'children');
+      handleFirestoreError(error, OperationType.DELETE, 'students');
     } finally {
       setIsSaving(false);
     }
@@ -293,11 +294,11 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
               <button 
                 onClick={async () => {
                   try {
-                    await updateDoc(doc(db, 'children', child.id), {
+                    await updateDoc(doc(db, 'students', child.id), {
                       consentToSchoolSharing: !child.consentToSchoolSharing
                     });
                   } catch (error) {
-                    handleFirestoreError(error, OperationType.UPDATE, 'children');
+                    handleFirestoreError(error, OperationType.UPDATE, 'students');
                   }
                 }}
                 className={cn(
@@ -315,11 +316,11 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
                 <button 
                   onClick={async () => {
                     try {
-                      await updateDoc(doc(db, 'children', child.id), {
+                      await updateDoc(doc(db, 'students', child.id), {
                         privacyLevel: child.privacyLevel === 'summary' ? 'full' : 'summary'
                       });
                     } catch (error) {
-                      handleFirestoreError(error, OperationType.UPDATE, 'children');
+                      handleFirestoreError(error, OperationType.UPDATE, 'students');
                     }
                   }}
                   className={cn(
@@ -570,14 +571,14 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
                     
                     setIsSaving(true);
                     try {
-                      await updateDoc(doc(db, 'children', child.id), { pin: newPinInput });
+                      await updateDoc(doc(db, 'students', child.id), { pin: newPinInput });
                       alert("PIN updated successfully.");
                       onUpdate({ ...child, pin: newPinInput });
                       (document.getElementById('current-pin') as HTMLInputElement).value = '';
                       (document.getElementById('change-new-pin') as HTMLInputElement).value = '';
                       (document.getElementById('change-confirm-pin') as HTMLInputElement).value = '';
                     } catch (error) {
-                      handleFirestoreError(error, OperationType.UPDATE, 'children');
+                      handleFirestoreError(error, OperationType.UPDATE, 'students');
                     } finally {
                       setIsSaving(false);
                     }

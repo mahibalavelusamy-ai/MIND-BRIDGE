@@ -65,7 +65,13 @@ export interface Alert {
   description: string;
   timestamp: string;
   childId: string;
+  parentId?: string;
   read?: boolean;
+  actionRequired?: boolean;
+  actionType?: string;
+  relatedId?: string;
+  caretakerId?: string;
+  isConnectionRequest?: boolean;
 }
 
 export interface PredictiveRisk {

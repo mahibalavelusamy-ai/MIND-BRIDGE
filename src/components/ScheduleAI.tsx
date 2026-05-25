@@ -59,8 +59,21 @@ export default function ScheduleAI() {
       // Deduplicate events by title and date
       const uniqueEventsMap = new Map();
       fetchedEvents.forEach(evt => {
-        const title = evt.title?.toLowerCase().trim() || 'unknown';
-        const dateKey = typeof evt.start === 'string' ? evt.start.split('T')[0] : evt.start;
+        let title = (evt.title || 'unknown').toString().toLowerCase().trim();
+        // Remove trailing numbers or weird suffixes that might duplicate
+        title = title.replace(/\s*\(\d+\)\s*$/, '').trim();
+
+        let dateKey = '';
+        if (typeof evt.start === 'string') {
+          dateKey = evt.start.split('T')[0];
+        } else if (evt.start instanceof Date) {
+          dateKey = evt.start.toISOString().split('T')[0];
+        } else if (evt.start && typeof evt.start.toDate === 'function') { // Firestore Timestamp
+          dateKey = evt.start.toDate().toISOString().split('T')[0];
+        } else {
+          dateKey = String(evt.start);
+        }
+
         const key = `${title}-${dateKey}`;
         
         // Keep the one with an end time if available, or just the first one

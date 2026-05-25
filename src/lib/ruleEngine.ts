@@ -1,5 +1,5 @@
 /**
- * MindBridge Rule-Based Insight Engine
+ * Mind Bridge Rule-Based Insight Engine
  * Provides deterministic insights based on specific data patterns.
  */
 

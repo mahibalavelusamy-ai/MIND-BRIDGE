@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { AlertCircle, Bell, Info, Trash2, CheckCircle2, Check, Loader2, BellRing, BellOff } from 'lucide-react';
 import { Alert } from '../types';
 import { cn } from '../lib/utils';
-import { db, collection, query, onSnapshot, orderBy, where, auth } from '../lib/firebase';
+import { db, collection, query, onSnapshot, getDocs, orderBy, where, auth, updateDoc, addDoc, doc, deleteDoc } from '../lib/firebase';
 
 interface AlertsProps {
   alerts: Alert[];
@@ -13,7 +13,50 @@ interface AlertsProps {
 
 export default function Alerts({ alerts, onDismiss, onMarkRead }: AlertsProps) {
   const [filter, setFilter] = useState<'all' | 'critical' | 'warning' | 'info'>('all');
+  const [acceptingIds, setAcceptingIds] = useState<Set<string>>(new Set());
   const [resolvingIds, setResolvingIds] = useState<Set<string>>(new Set());
+
+  const handleAcceptConnection = async (alert: any) => {
+    if (!alert.caretakerId || !auth.currentUser) return;
+    try {
+      setAcceptingIds(prev => new Set(prev).add(alert.id));
+      
+      // Update the relationship
+      const relQuery = query(
+        collection(db, 'relationships'), 
+        where('caretakerId', '==', alert.caretakerId), 
+        where('studentId', '==', auth.currentUser.uid),
+        where('status', '==', 'pending')
+      );
+      
+      const snap = await getDocs(relQuery);
+      const updates = snap.docs.map(d => updateDoc(d.ref, { status: 'approved' }));
+      await Promise.all(updates);
+      
+      // Notify the caretaker
+      await addDoc(collection(db, 'alerts'), {
+        type: 'info',
+        title: 'Connection Accepted',
+        description: `Student ${auth.currentUser.email} has accepted your monitoring request.`,
+        parentId: alert.caretakerId,
+        timestamp: new Date().toISOString(),
+        status: 'active'
+      });
+
+      // Dismiss the request alert
+      await handleDismiss(alert.id);
+      
+    } catch (error) {
+      console.error(error);
+      alert('Failed to accept connection.');
+    } finally {
+      setAcceptingIds(prev => {
+        const next = new Set(prev);
+        next.delete(alert.id);
+        return next;
+      });
+    }
+  };
   const [readingIds, setReadingIds] = useState<Set<string>>(new Set());
   const [notifsEnabled, setNotifsEnabled] = useState(
     localStorage.getItem('notificationsEnabled') === 'true'
@@ -178,10 +221,10 @@ export default function Alerts({ alerts, onDismiss, onMarkRead }: AlertsProps) {
       <div className="page-header flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h1 className="text-4xl font-serif tracking-tight flex items-center gap-3 text-text-main">
-            Alert Center
+            {auth.currentUser && auth.currentUser.uid === alerts[0]?.parentId ? "Inbox / Requests" : "Alert Center"}
             {combinedAlerts.filter(a => !a.read).length > 0 && <span className="w-3 h-3 bg-alert-500 rounded-full animate-pulse shadow-md" />}
           </h1>
-          <p className="text-text-muted mt-1">Real-time mental health notifications and expert recommendations.</p>
+          <p className="text-text-muted mt-1">Real-time notifications and expert recommendations.</p>
         </div>
         <button
           onClick={toggleNotifications}
@@ -291,19 +334,41 @@ export default function Alerts({ alerts, onDismiss, onMarkRead }: AlertsProps) {
                         </button>
                       )}
                       
-                      <button 
-                        onClick={() => handleDismiss(alert.id)}
-                        disabled={resolvingIds.has(alert.id)}
-                        className="flex items-center gap-1.5 px-4 py-2 bg-surface-2 border border-border text-text-main text-xs font-bold rounded-xl hover:bg-bg hover:text-accent disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
-                      >
-                        {resolvingIds.has(alert.id) ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} 
-                        {resolvingIds.has(alert.id) ? "Resolving..." : "Resolve"}
-                      </button>
+                      {!alert.isConnectionRequest && (
+                        <button 
+                          onClick={() => handleDismiss(alert.id)}
+                          disabled={resolvingIds.has(alert.id)}
+                          className="flex items-center gap-1.5 px-4 py-2 bg-surface-2 border border-border text-text-main text-xs font-bold rounded-xl hover:bg-bg hover:text-accent disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+                        >
+                          {resolvingIds.has(alert.id) ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} 
+                          {resolvingIds.has(alert.id) ? "Resolving..." : "Resolve"}
+                        </button>
+                      )}
                       
-                      {alert.type === 'critical' && (
+                      {alert.type === 'critical' && !alert.isConnectionRequest && (
                         <button className="px-5 py-2 bg-alert-600 text-bg text-xs font-bold rounded-xl hover:bg-alert-700 transition-all shadow-lg shadow-alert-600/20">
                           Take Immediate Action
                         </button>
+                      )}
+                      
+                      {alert.isConnectionRequest && (
+                         <div className="flex gap-2">
+                           <button 
+                             onClick={() => handleDismiss(alert.id)}
+                             disabled={resolvingIds.has(alert.id)}
+                             className="flex items-center gap-1.5 px-6 py-2 bg-surface border border-alert-500/50 text-alert-500 text-xs font-bold rounded-xl hover:bg-alert-500/10 disabled:opacity-50 transition-all shadow-sm"
+                           >
+                             Deny
+                           </button>
+                           <button 
+                             onClick={() => handleAcceptConnection(alert)}
+                             disabled={acceptingIds.has(alert.id)}
+                             className="flex items-center gap-1.5 px-6 py-2 bg-accent text-bg text-xs font-bold rounded-xl hover:bg-accent-hover disabled:opacity-50 transition-all shadow-sm"
+                           >
+                             {acceptingIds.has(alert.id) ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} 
+                             Accept Connection
+                           </button>
+                         </div>
                       )}
                     </div>
                   </div>

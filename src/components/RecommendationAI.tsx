@@ -22,7 +22,7 @@ export default function RecommendationAI({ weightedRiskScore, childId }: Recomme
              try {
                 // we can add a document directly for testing or just show it visually
                 // Example: 'Decompression Slot'
-                await addDoc(collection(db, 'children', childId, 'schedules'), {
+                await addDoc(collection(db, 'students', childId, 'schedules'), {
                   subject: 'Decompression Break (AI Generated)',
                   day: 'Wednesday',
                   startTime: '14:00',
@@ -32,7 +32,7 @@ export default function RecommendationAI({ weightedRiskScore, childId }: Recomme
                   createdAt: serverTimestamp()
                 });
                 
-                await addDoc(collection(db, 'children', childId, 'schedules'), {
+                await addDoc(collection(db, 'students', childId, 'schedules'), {
                   subject: 'Counselor Check-in (AI Generated)',
                   day: 'Friday',
                   startTime: '15:00',

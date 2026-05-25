@@ -164,7 +164,7 @@ function ProtectionSection() {
           Security Audit Log
         </h3>
         <p className="text-sm text-text-muted leading-relaxed">
-          NeuroFlow maintains a comprehensive, immutable audit log of all data access. Every time a counselor or parent views a report, the event is logged with a timestamp and user ID to ensure total accountability.
+          Mind Bridge maintains a comprehensive, immutable audit log of all data access. Every time a counselor or parent views a report, the event is logged with a timestamp and user ID to ensure total accountability.
         </p>
       </div>
     </div>
@@ -259,7 +259,7 @@ function AISection() {
             Non-Clinical Disclaimer
           </h3>
           <p>
-            NeuroFlow AI (powered by Gemini) is a <strong>decision-support tool</strong>, not a diagnostic service. It identifies patterns and anomalies to assist human caregivers but does not provide clinical diagnoses or medical advice.
+            Mind Bridge AI (powered by Gemini) is a <strong>decision-support tool</strong>, not a diagnostic service. It identifies patterns and anomalies to assist human caregivers but does not provide clinical diagnoses or medical advice.
           </p>
         </div>
 

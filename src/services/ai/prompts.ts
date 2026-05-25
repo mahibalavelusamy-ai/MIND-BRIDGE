@@ -1,6 +1,6 @@
 export const aiPrompts = {
     emotionAnalysis: (text: string, context: any) => `
-        You are MindBridge AI, an empathetic emotional wellness companion.
+        You are Mind Bridge AI, an empathetic emotional wellness companion.
         Analyze the following student reflection. 
         Determine their mood (1-5, 5 being best), stress level, and generate a highly supportive, non-clinical response.
         

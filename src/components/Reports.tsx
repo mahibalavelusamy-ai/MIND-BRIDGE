@@ -53,6 +53,7 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
         const qA = query(
           collection(db, 'assessments'), 
           where('childId', '==', selectedChild.id),
+          where('parentId', '==', selectedChild.parentId),
           where('timestamp', '>=', startDate.toISOString()),
           orderBy('timestamp', 'asc') // Use 'asc' rather than 'ascending'
         );

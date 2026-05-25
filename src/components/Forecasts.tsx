@@ -30,7 +30,8 @@ export default function Forecasts({ children }: ForecastsProps) {
         try {
           const qA = query(
             collection(db, 'assessments'), 
-            where('childId', '==', child.id)
+            where('childId', '==', child.id),
+            where('parentId', '==', child.parentId)
           );
           const snapA = await getDocs(qA);
           const assessments = snapA.docs
@@ -40,7 +41,11 @@ export default function Forecasts({ children }: ForecastsProps) {
           
           newAssessments[child.id] = assessments;
 
-          const qS = query(collection(db, 'schoolSchedules'), where('childId', '==', child.id));
+          const qS = query(
+            collection(db, 'schoolSchedules'), 
+            where('childId', '==', child.id),
+            where('parentId', '==', child.parentId)
+          );
           const snapS = await getDocs(qS);
           const scheduleData = snapS.docs.map(d => d.data());
 

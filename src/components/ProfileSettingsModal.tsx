@@ -27,7 +27,7 @@ export default function ProfileSettingsModal({ child, userRole, isDarkMode, setI
       return;
     }
     try {
-      await updateDoc(doc(db, 'children', child.id), { pin: newPin });
+      await updateDoc(doc(db, 'students', child.id), { pin: newPin });
       setPinSuccess('PIN updated successfully');
       setNewPin('');
       setPinError('');
@@ -41,7 +41,7 @@ export default function ProfileSettingsModal({ child, userRole, isDarkMode, setI
     if (deleteConfirm !== 'DELETE') return;
     setIsDeleting(true);
     try {
-      await deleteDoc(doc(db, 'children', child.id));
+      await deleteDoc(doc(db, 'students', child.id));
       onDelete();
       onClose();
     } catch (error) {
