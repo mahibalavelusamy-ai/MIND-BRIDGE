@@ -240,99 +240,181 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
         </div>
       </div>
 
-      {/* Bento Grid Layout - Purged Personalized Recommendations */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 max-w-5xl mx-auto w-full">
+      {/* Bento Grid Layout */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 w-full">
         
-        {/* Children List */}
-        <div className="md:col-span-12 w-full">
-          <div className="glass-card p-8 h-full border-border/50">
-            <div className="flex items-center justify-between mb-8">
-              <h3 className="text-xl font-sans font-bold text-text-main">{activeChild?.age >= 18 ? 'Your Student' : 'Your Profile'}</h3>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4">
-              {/* Active Child */}
-              {activeChild && (
-                <div 
-                  className={cn(
-                    "flex items-center gap-4 p-5 rounded-2xl border border-accent bg-accent/5 transition-all text-left relative overflow-hidden",
-                    activeChild.riskLevel === 'high' && "border-alert-200 shadow-sm shadow-alert-100"
+        {/* Left Column - Profile & Quick Stats */}
+        <div className="md:col-span-4 flex flex-col gap-6">
+          <div className="glass-card p-6 border-border flex-1">
+            <h3 className="text-sm font-bold text-text-muted mb-4 uppercase tracking-widest">Active Profile</h3>
+            {activeChild ? (
+              <div 
+                className={cn(
+                  "flex flex-col items-center gap-4 p-6 rounded-2xl border bg-surface text-center",
+                  activeChild.riskLevel === 'high' ? "border-alert-200 shadow-sm shadow-alert-100" : "border-border"
+                )}
+              >
+                <div className="relative">
+                  <div className={cn(
+                    "w-20 h-20 rounded-full bg-accent-light flex items-center justify-center text-4xl z-10 relative shadow-inner",
+                    activeChild.riskLevel === 'high' && "ring-4 ring-alert-100"
+                  )}>
+                    {activeChild.age >= 18 ? <span className="font-serif text-accent">{activeChild.name ? activeChild.name.charAt(0).toUpperCase() : '👤'}</span> : activeChild.avatar}
+                  </div>
+                  {activeChild.riskLevel === 'high' && (
+                    <div className="absolute inset-0 rounded-full bg-alert-500/20 animate-ping -z-0" />
                   )}
-                >
-                  <div className="absolute top-0 right-0 px-3 py-1 bg-accent/20 text-accent text-[10px] font-bold rounded-bl-xl uppercase tracking-widest">Active Session</div>
-                  <div className="relative">
-                    <div className={cn(
-                      "w-14 h-14 rounded-full bg-accent-light flex items-center justify-center text-3xl z-10 relative",
-                      activeChild.riskLevel === 'high' && "ring-4 ring-alert-100"
-                    )}>
-                      {activeChild.age >= 18 ? <span className="font-serif text-accent">{activeChild.name ? activeChild.name.charAt(0).toUpperCase() : '👤'}</span> : activeChild.avatar}
-                    </div>
-                    {activeChild.riskLevel === 'high' && (
-                      <div className="absolute inset-0 rounded-full bg-alert-500/20 animate-ping -z-0" />
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <h4 className={cn("font-bold text-lg text-accent transition-colors student-name")}>{activeChild.name}</h4>
-                    <div className="flex items-center gap-3 mt-1">
-                      <p className="text-xs text-text-dim">{activeChild.age} years • {activeChild.age >= 18 ? 'College / University Student' : activeChild.grade}</p>
-                      <div className="flex items-center gap-1 text-[10px] font-bold text-accent">
-                        <Sparkles size={10} /> {activeChild.gems || 0} {activeChild.age >= 18 ? 'Credits' : ''}
-                      </div>
-                      <div className="flex items-center gap-1 text-[10px] font-bold text-orange-500">
-                        <Zap size={10} /> {activeChild.streak || 0}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end gap-2">
-                    <div className={cn(
-                      "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest",
-                      activeChild.riskLevel === 'low' ? "bg-alert-50 text-alert-500" : 
-                      activeChild.riskLevel === 'medium' ? "bg-alert-100 text-alert-600" : 
-                      "bg-alert-100 text-alert-700"
-                    )}>
-                      {activeChild.riskLevel}
-                    </div>
+                </div>
+                <div>
+                  <h4 className="font-bold text-xl text-text-main">{activeChild.name}</h4>
+                  <p className="text-xs text-text-dim mt-1">{activeChild.age} years • {activeChild.age >= 18 ? 'Student' : activeChild.grade}</p>
+                </div>
+                
+                <div className="grid grid-cols-2 w-full gap-3 mt-4">
+                   <div className="bg-surface-2 p-3 rounded-xl border border-border flex flex-col items-center">
+                      <Sparkles size={16} className="text-accent mb-1" />
+                      <span className="text-xs font-bold text-text-muted uppercase">Credits</span>
+                      <span className="text-lg font-bold text-text-main">{activeChild.gems || 0}</span>
+                   </div>
+                   <div className="bg-surface-2 p-3 rounded-xl border border-border flex flex-col items-center">
+                      <Zap size={16} className="text-orange-500 mb-1" />
+                      <span className="text-xs font-bold text-text-muted uppercase">Streak</span>
+                      <span className="text-lg font-bold text-text-main">{activeChild.streak || 0}</span>
+                   </div>
+                </div>
+                <div className="w-full mt-2">
+                   <div className={cn(
+                    "w-full py-2 rounded-xl text-xs font-bold uppercase tracking-widest text-center",
+                    activeChild.riskLevel === 'low' ? "bg-alert-50 text-alert-500 border border-alert-200" : 
+                    activeChild.riskLevel === 'medium' ? "bg-alert-100 text-alert-600 border border-alert-300" : 
+                    "bg-alert-200 text-alert-700 border border-alert-400"
+                  )}>
+                    Risk Level: {activeChild.riskLevel}
                   </div>
                 </div>
-              )}
+              </div>
+            ) : (
+                <div className="p-6 rounded-2xl border border-dashed border-border text-center text-text-muted">
+                    No active profile
+                </div>
+            )}
 
-              {/* Other Switchable Children */}
-              {otherChildren.length > 0 && (
-                <div className="pt-6 mt-2 border-t border-border">
-                  <h4 className="text-sm font-bold text-text-muted mb-4 uppercase tracking-widest flex items-center gap-2">
-                    <Lock size={14} className="text-accent" /> Switch Account
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {otherChildren.map(child => (
-                      <div 
-                        key={child.id}
-                        onClick={() => onViewProfile(child)}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            onViewProfile(child);
-                          }
-                        }}
-                        className="group relative flex items-center gap-4 p-4 rounded-xl border border-border hover:border-accent hover:bg-accent/5 transition-all text-left cursor-pointer"
-                      >
-                        <div className="w-10 h-10 rounded-full bg-surface-2 flex items-center justify-center text-xl border border-border group-hover:border-accent transition-colors">
-                          {child.age >= 18 ? <span className="font-serif text-text-muted group-hover:text-accent">{child.name ? child.name.charAt(0).toUpperCase() : '👤'}</span> : child.avatar}
-                        </div>
-                        <div className="flex-1">
-                          <h4 className="font-bold text-sm text-text-main group-hover:text-accent transition-colors">{child.name}</h4>
-                          <p className="text-[10px] text-text-dim">Secured Profile</p>
-                        </div>
-                        <ChevronRight size={16} className="text-text-dim group-hover:text-accent group-hover:translate-x-1 transition-all" />
+            {otherChildren.length > 0 && (
+              <div className="mt-6">
+                <h4 className="text-xs font-bold text-text-muted mb-3 uppercase tracking-widest flex items-center gap-2">
+                  <Users size={14} /> Switch Account
+                </h4>
+                <div className="flex flex-col gap-2">
+                  {otherChildren.map(child => (
+                    <div 
+                      key={child.id}
+                      onClick={() => onViewProfile(child)}
+                      className="flex items-center gap-3 p-3 rounded-xl border border-border hover:border-accent hover:bg-surface transition-all cursor-pointer group"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-surface-2 flex items-center justify-center text-sm border border-border group-hover:border-accent transition-colors">
+                        {child.age >= 18 ? <span className="font-serif text-text-muted group-hover:text-accent">{child.name ? child.name.charAt(0).toUpperCase() : '👤'}</span> : child.avatar}
                       </div>
-                    ))}
-                  </div>
+                      <div className="flex-1">
+                         <h4 className="font-bold text-sm text-text-main group-hover:text-accent transition-colors">{child.name}</h4>
+                      </div>
+                      <ChevronRight size={14} className="text-text-dim group-hover:text-accent transition-all" />
+                    </div>
+                  ))}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
+
+        {/* Right Column - Stats & Charts */}
+        <div className="md:col-span-8 flex flex-col gap-6">
+           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full">
+              <StatCard 
+                 icon={<TrendingUp size={20} />}
+                 label="Avg Wellness Score"
+                 value={avgScore > 0 ? avgScore.toString() : '--'}
+                 change="Past 7 days"
+                 color="bg-emerald-100 text-emerald-600"
+              />
+              <StatCard 
+                 icon={<AlertCircle size={20} />}
+                 label="Active Alerts"
+                 value={alerts.filter(a => a.childId === activeChild?.id && !a.read).length.toString()}
+                 change="Require attention"
+                 color="bg-alert-100 text-alert-600"
+                 isUrgent={alerts.filter(a => a.childId === activeChild?.id && !a.read).length > 0}
+              />
+              <StatCard 
+                 icon={<ClipboardCheck size={20} />}
+                 label="Assessments"
+                 value={dashboardAssessments.length.toString()}
+                 change="Completed recently"
+                 color="bg-blue-100 text-blue-600"
+              />
+           </div>
+
+           <div className="glass-card p-6 border-border flex-1 flex flex-col">
+              <div className="flex items-center justify-between mb-6">
+                 <h3 className="text-sm font-bold text-text-muted uppercase tracking-widest flex items-center gap-2">
+                    <TrendingUp size={16} /> Wellness Trends
+                 </h3>
+                 <div className="flex bg-surface-2 rounded-lg p-1 border border-border">
+                    <button 
+                      onClick={() => setChartTimeframe('7d')}
+                      className={cn("px-3 py-1 text-xs font-bold rounded-md transition-colors", chartTimeframe === '7d' ? "bg-surface shadow-sm text-text-main" : "text-text-muted hover:text-text-main")}
+                    >
+                      7 Days
+                    </button>
+                    <button 
+                      onClick={() => setChartTimeframe('30d')}
+                      className={cn("px-3 py-1 text-xs font-bold rounded-md transition-colors", chartTimeframe === '30d' ? "bg-surface shadow-sm text-text-main" : "text-text-muted hover:text-text-main")}
+                    >
+                      30 Days
+                    </button>
+                 </div>
+              </div>
+              
+              <div className="h-64 w-full">
+                 <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                       <defs>
+                          <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
+                             <stop offset="5%" stopColor="var(--color-accent)" stopOpacity={0.3}/>
+                             <stop offset="95%" stopColor="var(--color-accent)" stopOpacity={0}/>
+                          </linearGradient>
+                       </defs>
+                       <XAxis 
+                         dataKey="day" 
+                         axisLine={false} 
+                         tickLine={false} 
+                         tick={{ fontSize: 10, fill: '#888888' }} 
+                         dy={10}
+                       />
+                       <YAxis 
+                         axisLine={false} 
+                         tickLine={false} 
+                         tick={{ fontSize: 10, fill: '#888888' }}
+                       />
+                       <Tooltip 
+                         contentStyle={{ borderRadius: '12px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', fontSize: '12px', fontWeight: 'bold' }}
+                         itemStyle={{ color: 'var(--color-accent)' }}
+                       />
+                       <Area type="monotone" dataKey="score" stroke="none" fillOpacity={1} fill="url(#colorScore)" />
+                       <Line 
+                         type="monotone" 
+                         dataKey="score" 
+                         stroke="var(--color-accent)" 
+                         strokeWidth={3}
+                         dot={{ r: 4, fill: "var(--color-surface)", strokeWidth: 2 }}
+                         activeDot={{ r: 6, strokeWidth: 0, fill: "var(--color-accent)" }}
+                       />
+                    </ComposedChart>
+                 </ResponsiveContainer>
+              </div>
+           </div>
+        </div>
+
+      </div>
       
       {activeChild && (
         <RecommendationAI weightedRiskScore={avgScore / 5} childId={activeChild.id} />
@@ -346,7 +428,7 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
         )}
 
         {/* Parent Nudge System & AI Summary */}
-        <div className="md:col-span-12 max-w-5xl mx-auto w-full mt-6">
+        <div className="md:col-span-12 w-full mt-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full">
             <div className="glass-card p-8 h-full flex flex-col">
               <h3 className="text-xl font-serif mb-4 flex items-center gap-2">
@@ -403,7 +485,6 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
             </div>
           </div>
         </div>
-      </div>
 
       {/* Timer Modal */}
       {showTimerModal && (

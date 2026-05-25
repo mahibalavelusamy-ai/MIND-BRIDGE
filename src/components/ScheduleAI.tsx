@@ -39,8 +39,10 @@ export default function ScheduleAI() {
       const fetchedEvents = snapshot.docs.map(doc => {
         const data = doc.data();
         let color = '#059669'; // default accent
-        if (data.type === 'exam') color = '#ef4444'; // alert red
+        if (data.type === 'exam' || data.type === 'test') color = '#ef4444'; // alert red
         else if (data.type === 'assignment' || data.type === 'deadline') color = '#0284c7'; // blue
+        else if (data.type === 'project') color = '#f59e0b'; // amber
+        else if (data.type === 'reading') color = '#8b5cf6'; // violet
         else if (data.priority === 'high') color = '#ef4444';
 
         return {
@@ -49,11 +51,25 @@ export default function ScheduleAI() {
           start: data.start || data.startTime,
           end: data.end || data.endTime,
           color: color,
-          className: 'px-1 rounded-sm shadow-sm py-0.5 text-xs font-medium text-white',
+          className: `px-1.5 rounded shadow-sm py-0.5 text-xs font-medium text-white transition-transform hover:scale-105 cursor-pointer`,
           ...data
         };
       });
-      setEvents(fetchedEvents);
+
+      // Deduplicate events by title and date
+      const uniqueEventsMap = new Map();
+      fetchedEvents.forEach(evt => {
+        const title = evt.title?.toLowerCase().trim() || 'unknown';
+        const dateKey = typeof evt.start === 'string' ? evt.start.split('T')[0] : evt.start;
+        const key = `${title}-${dateKey}`;
+        
+        // Keep the one with an end time if available, or just the first one
+        if (!uniqueEventsMap.has(key) || (!uniqueEventsMap.get(key).end && evt.end)) {
+          uniqueEventsMap.set(key, evt);
+        }
+      });
+
+      setEvents(Array.from(uniqueEventsMap.values()));
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'schedules'));
 
     return () => unsubscribe();
@@ -230,21 +246,27 @@ export default function ScheduleAI() {
           {events.length > 0 && (
             <div className="mt-8 pt-6 border-t border-border">
               <h3 className="font-sans font-bold text-lg mb-4 text-text-main flex items-center justify-between">
-                <span>Upcoming Deadlines</span>
+                <span>Upcoming Events</span>
                 <span className="text-xs bg-accent/20 text-accent px-2 py-1 rounded-full">{events.length}</span>
               </h3>
               <div className="space-y-3 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
-                {events.slice(0, 5).map(evt => (
-                  <div key={evt.id} className="bg-surface-2 p-3 rounded-lg border border-border flex items-center justify-between group hover:border-accent/50 transition-colors">
-                    <div className="flex flex-col">
-                      <span className="text-sm font-bold text-text-main">{evt.title}</span>
-                      <span className="text-xs text-text-muted">{evt.start}</span>
+                {events.slice(0, 5).map(evt => {
+                  let typeColor = 'bg-neon-blue/20 text-neon-blue';
+                  if (evt.type === 'exam' || evt.priority === 'high') typeColor = 'bg-alert-500/20 text-alert-500';
+                  else if (evt.type === 'project') typeColor = 'bg-amber-500/20 text-amber-500';
+                  else if (evt.type === 'reading') typeColor = 'bg-violet-500/20 text-violet-500';
+
+                  return (
+                  <div key={evt.id} className="bg-surface-2 p-3 rounded-xl border border-border flex items-center justify-between group hover:border-accent/50 hover:bg-surface transition-all">
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-sm font-bold text-text-main truncate">{evt.title}</span>
+                      <span className="text-xs text-text-muted mt-0.5">{typeof evt.start === 'string' ? evt.start.split('T')[0] : evt.start}</span>
                     </div>
-                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full ${evt.type === 'exam' || evt.priority === 'high' ? 'bg-alert-500/20 text-alert-500' : 'bg-neon-blue/20 text-neon-blue'}`}>
+                    <span className={`shrink-0 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full ${typeColor}`}>
                       {evt.type || 'TASK'}
                     </span>
                   </div>
-                ))}
+                );})}
               </div>
             </div>
           )}
