@@ -1,6 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Recommendation, Child } from '../types';
 import { safeJsonParse } from './aiUtils';
+import { analyzeTextRisk } from './scoring';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
@@ -30,13 +31,29 @@ export async function generateRecommendations(
     ];
   }
 
+  let textNotes = assessments[0]?.notes || '';
+  const textRiskScore = analyzeTextRisk(textNotes);
+  const injectedRec: Recommendation = {
+     id: textRiskScore > 0.7 ? 'rec-counselor' : 'rec-breathe',
+     childId: child.id,
+     timestamp: new Date().toISOString(),
+     type: textRiskScore > 0.7 ? 'resource' : 'strategy',
+     title: textRiskScore > 0.7 ? '[COUNSELOR]' : '[BREATHE]',
+     description: textRiskScore > 0.7 
+       ? 'Immediate access to the school counselor. Schedule an urgent check-in based on high-risk indicators.'
+       : 'A 3-minute guided breathing exercise to stabilize heart rate based on current assessment.',
+     priority: textRiskScore > 0.7 ? 'high' : 'low',
+     context: textRiskScore > 0.7 ? 'Clinical' : 'Wellness',
+     actionLabel: textRiskScore > 0.7 ? 'Request Callback' : 'Start Now'
+  };
+
   try {
     const latest = assessments[0];
     const prompt = `
-      You are a child mental health coach. Generate 3 personalized, actionable recommendations for ${child.name} (Age: ${child.age}).
+      You are a child mental health coach. Generate 2 personalized, actionable recommendations for ${child.name} (Age: ${child.age}).
       
       CURRENT STATE:
-      - Latest Scores (1-5, 5 is worst): ${JSON.stringify(latest.scores)}
+      - Latest Scores (scale 1-5, higher is higher risk): ${JSON.stringify(latest.scores)}
       - School Schedule: ${JSON.stringify(schedule)}
       
       RECOMMENDATION RULES:
@@ -77,14 +94,19 @@ export async function generateRecommendations(
       }
     });
 
-    const result = safeJsonParse(response.text || "{}", { recommendations: [] });
+    const rawText = (response as any).text;
+    const textStr = typeof rawText === 'function' ? rawText.call(response) : (rawText || "{}");
+    const result = safeJsonParse(textStr, { recommendations: [] });
 
-    return (result.recommendations || []).map((r: any, i: number) => ({
-      id: `rec-${Date.now()}-${i}`,
-      childId: child.id,
-      timestamp: new Date().toISOString(),
-      ...r
-    }));
+    return [
+      injectedRec,
+      ...(result.recommendations || []).map((r: any, i: number) => ({
+        id: `rec-${Date.now()}-${i}`,
+        childId: child.id,
+        timestamp: new Date().toISOString(),
+        ...r
+      }))
+    ];
 
   } catch (error: any) {
     const errMsg = error instanceof Error ? error.message : JSON.stringify(error);

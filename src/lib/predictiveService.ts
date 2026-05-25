@@ -57,7 +57,9 @@ export async function predictFutureRisk(
       }
     });
 
-    const result = safeJsonParse(response.text || "{}", null);
+    const rawText = (response as any).text;
+    const textStr = typeof rawText === 'function' ? rawText.call(response) : (rawText || "{}");
+    const result = safeJsonParse(textStr, null);
     if (!result) return null;
     
     return {

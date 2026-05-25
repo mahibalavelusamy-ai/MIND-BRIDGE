@@ -133,6 +133,17 @@ service cloud.firestore {
              data.room is string && data.room.size() < 100;
     }
 
+    function isValidGlobalSchedule(data) {
+      return data.keys().hasAll(['userId']) &&
+             data.userId == request.auth.uid &&
+             (!('subject' in data) || (data.subject is string && data.subject.size() < 200)) &&
+             (!('title' in data) || (data.title is string && data.title.size() < 200)) &&
+             (!('start' in data) || (data.start is string && data.start.size() < 50)) &&
+             (!('end' in data) || (data.end is string && data.end.size() < 50)) &&
+             (!('startTime' in data) || (data.startTime is string && data.startTime.size() < 50)) &&
+             (!('endTime' in data) || (data.endTime is string && data.endTime.size() < 50));
+    }
+
     // ===============================================================
     // Rules
 
@@ -148,7 +159,8 @@ service cloud.firestore {
       allow read: if isAuthenticated() && (resource.data.parentId == request.auth.uid || isTeacherOrClinician());
       allow create: if isAuthenticated() && isValidChild(request.resource.data);
       allow update: if isAuthenticated() && (resource.data.parentId == request.auth.uid) && isValidChild(request.resource.data) && request.resource.data.parentId == resource.data.parentId;
-      allow delete: if isAuthenticated() && (resource.data.parentId == request.auth.uid);
+      allow delete: if request.auth != null && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['parent', 'school_admin']);
       
       match /schedules/{scheduleId} {
         allow read: if isAuthenticated() && (get(/databases/$(database)/documents/children/$(childId)).data.parentId == request.auth.uid || isTeacherOrClinician());
@@ -170,7 +182,7 @@ service cloud.firestore {
     match /alerts/{alertId} {
       allow read: if isAuthenticated() && (resource.data.parentId == request.auth.uid || isTeacherOrClinician());
       allow create: if isAuthenticated() && isValidAlert(request.resource.data) && (request.resource.data.parentId == request.auth.uid || isTeacherOrClinician());
-      allow update: if isAuthenticated() && (resource.data.parentId == request.auth.uid) && isValidAlert(request.resource.data) && request.resource.data.parentId == resource.data.parentId && request.resource.data.childId == resource.data.childId;
+      allow update: if isAuthenticated() && (resource.data.parentId == request.auth.uid || isTeacherOrClinician()) && isValidAlert(request.resource.data) && request.resource.data.parentId == resource.data.parentId && request.resource.data.childId == resource.data.childId;
       allow delete: if isAuthenticated() && (resource.data.parentId == request.auth.uid || isTeacherOrClinician());
     }
 
@@ -200,6 +212,12 @@ service cloud.firestore {
       allow create: if isAuthenticated() && isValidSession(request.resource.data);
       allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && isValidSession(request.resource.data) && request.resource.data.userId == resource.data.userId;
       allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    match /schedules/{scheduleId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      // Allow creation if the user is setting their own UID
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
     }
   }
 }

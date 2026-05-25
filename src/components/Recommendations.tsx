@@ -108,7 +108,7 @@ export default function Recommendations({ children, setActiveTab }: Recommendati
                             </span>
                             <span className={cn(
                               "text-[10px] font-bold uppercase",
-                              rec.priority === 'high' ? "text-red-500" : "text-text-dim"
+                              rec.priority === 'high' ? "text-alert-500" : "text-text-dim"
                             )}>
                               {rec.priority} priority
                             </span>
@@ -118,7 +118,7 @@ export default function Recommendations({ children, setActiveTab }: Recommendati
                         </div>
                         
                         <div className="space-y-4">
-                          <div className="flex items-center gap-2 text-xs font-bold text-text-dim uppercase bg-white/50 p-3 rounded-xl border border-border">
+                          <div className="flex items-center gap-2 text-xs font-bold text-text-dim uppercase bg-bg/50 p-3 rounded-xl border border-border">
                             <Coffee size={14} className="text-accent" />
                             <span className="flex-1 truncate" title={rec.context}>{rec.context}</span>
                           </div>
@@ -129,7 +129,7 @@ export default function Recommendations({ children, setActiveTab }: Recommendati
                                 setActiveTab('assessment');
                               }
                             }}
-                            className="w-full py-3 bg-white border border-border rounded-xl text-sm font-bold flex items-center justify-center gap-2 group-hover:bg-accent group-hover:text-white group-hover:border-accent transition-all shadow-sm"
+                            className="w-full py-3 bg-bg border border-border rounded-xl text-sm font-bold flex items-center justify-center gap-2 group-hover:bg-accent group-hover:text-bg group-hover:border-accent transition-all shadow-sm"
                           >
                             {rec.actionLabel}
                             <ArrowRight size={16} />

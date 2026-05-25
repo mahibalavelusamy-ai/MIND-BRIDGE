@@ -78,7 +78,9 @@ export async function detectBehavioralPatterns(
       }
     });
 
-    const result = safeJsonParse(response.text || "{}", { patterns: [], anomalies: [] });
+    const rawText = (response as any).text;
+    const textStr = typeof rawText === 'function' ? rawText.call(response) : (rawText || "{}");
+    const result = safeJsonParse(textStr, { patterns: [], anomalies: [] });
 
     return {
       patterns: (result.patterns || []).map((p: any, i: number) => ({

@@ -35,10 +35,8 @@ export default function FocusTimer({ childId }: FocusTimerProps) {
 
     try {
       if (childId) {
-        // Add 10 gems to the child's profile
-        await updateDoc(doc(db, 'children', childId), {
-          gems: increment(10)
-        });
+        // Record without granting credits
+        // (Credits are only granted upon a successful once-daily check in)
 
         // Add a 'Study Session Complete' event to the schedule
         const newEvent = {
@@ -98,8 +96,8 @@ export default function FocusTimer({ childId }: FocusTimerProps) {
         <button 
           onClick={toggleTimer}
           className={cn(
-            "w-12 h-12 rounded-full flex items-center justify-center text-white transition-transform hover:scale-105",
-            isActive ? "bg-amber-500" : "bg-accent"
+            "w-12 h-12 rounded-full flex items-center justify-center text-bg transition-transform hover:scale-105",
+            isActive ? "bg-alert-400" : "bg-accent"
           )}
         >
           {isActive ? <Pause size={20} /> : <Play size={20} className="ml-1" />}

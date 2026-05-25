@@ -26,13 +26,13 @@ export default function LandingPage({ onStart }: { onStart: () => void }) {
             <div className="flex flex-wrap gap-4">
               <button 
                 onClick={onStart} 
-                className="px-8 py-3 bg-accent text-white dark:text-white rounded-full font-medium hover:bg-accent-hover transition-all shadow-lg hover:shadow-accent/20 hover:-translate-y-0.5"
+                className="px-8 py-3 bg-accent text-bg dark:text-bg rounded-full font-medium hover:bg-accent-hover transition-all shadow-lg hover:shadow-accent/20 hover:-translate-y-0.5"
               >
                 Get Started →
               </button>
               <button 
                 onClick={onStart} 
-                className="px-8 py-3 bg-surface border border-border rounded-full font-medium text-slate-900 dark:text-white hover:bg-surface-2 transition-all"
+                className="px-8 py-3 bg-surface border border-border rounded-full font-medium text-text-main hover:bg-surface-2 transition-all"
               >
                 Login
               </button>
@@ -48,9 +48,9 @@ export default function LandingPage({ onStart }: { onStart: () => void }) {
             <div className="text-xs font-bold text-text-dim uppercase tracking-widest mb-6">Live Overview</div>
             <div className="space-y-4">
               <StatItem icon="😊" label="Average Mood Score" value="7.4 / 10" color="bg-accent-light" trend="+5%" />
-              <StatItem icon="⚡" label="Stress Level" value="Moderate" color="bg-amber-100" trend="Watch" />
+              <StatItem icon="⚡" label="Stress Level" value="Moderate" color="bg-alert-100" trend="Watch" />
               <StatItem icon="📊" label="Assessments This Week" value="12" color="bg-blue-100" trend="Active" />
-              <StatItem icon="🔔" label="Active Alerts" value="2" color="bg-red-100" trend="Urgent" />
+              <StatItem icon="🔔" label="Active Alerts" value="2" color="bg-alert-100" trend="Urgent" />
             </div>
             <div className="mt-8">
               <p className="text-xs text-text-dim mb-4">Weekly mood trend</p>
@@ -60,7 +60,7 @@ export default function LandingPage({ onStart }: { onStart: () => void }) {
                     key={i} 
                     className={cn(
                       "flex-1 rounded-t-sm transition-all duration-500",
-                      i === 5 ? "bg-amber-400" : "bg-accent-light"
+                      i === 5 ? "bg-alert-300" : "bg-accent-light"
                     )}
                     style={{ height: `${h}%` }}
                   />
@@ -118,7 +118,7 @@ function StatItem({ icon, label, value, color, trend }: { icon: string; label: s
         <p className="text-[10px] font-bold text-text-dim uppercase">{label}</p>
         <p className="text-lg font-serif font-bold">{value}</p>
       </div>
-      <span className="text-[10px] font-bold px-2 py-1 bg-white rounded-full shadow-sm">{trend}</span>
+      <span className="text-[10px] font-bold px-2 py-1 bg-bg rounded-full shadow-sm">{trend}</span>
     </div>
   );
 }

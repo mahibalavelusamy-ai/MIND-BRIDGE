@@ -1,11 +1,13 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged, User, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, getRedirectResult, signOut, onAuthStateChanged, User, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { 
   getFirestore, 
+  initializeFirestore,
   collection, 
   doc, 
   setDoc, 
   getDoc, 
+  getDocFromServer,
   getDocs, 
   query, 
   where, 
@@ -17,15 +19,28 @@ import {
   orderBy,
   limit,
   increment,
-  writeBatch
+  writeBatch,
+  clearIndexedDbPersistence,
+  arrayUnion
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db = initializeFirestore(app, { experimentalForceLongPolling: true, useFetchStreams: false } as any, firebaseConfig.firestoreDatabaseId);
 export const googleProvider = new GoogleAuthProvider();
+
+async function testConnection() {
+  try {
+    await getDocFromServer(doc(db, 'test', 'connection'));
+  } catch (error) {
+    if(error instanceof Error && error.message.includes('the client is offline')) {
+      console.error("Please check your Firebase configuration.");
+    }
+  }
+}
+testConnection();
 
 // Error Handling
 export enum OperationType {
@@ -76,7 +91,15 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 
 // Auth Helpers
 export const loginWithGoogle = async () => {
-  await signInWithRedirect(auth, googleProvider);
+  return await signInWithPopup(auth, googleProvider);
+};
+
+export const clearAppPersistence = async () => {
+  try {
+    await clearIndexedDbPersistence(db);
+  } catch (error) {
+    console.error("Failed to clear persistence", error);
+  }
 };
 
 export const handleGoogleRedirectResult = async (): Promise<User | null> => {
@@ -111,6 +134,7 @@ export {
   writeBatch,
   onAuthStateChanged,
   createUserWithEmailAndPassword,
-  signInWithEmailAndPassword
+  signInWithEmailAndPassword,
+  arrayUnion
 };
 export type { User };

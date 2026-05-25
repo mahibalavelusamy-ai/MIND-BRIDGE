@@ -79,7 +79,9 @@ export async function performRootCauseAnalysis(
       }
     });
 
-    const aiResult = safeJsonParse(response.text || "{}", { primaryFactor: "General Adjustment", explanation: "", confidence: 0.7 });
+    const rawText = (response as any).text;
+    const textStr = typeof rawText === 'function' ? rawText.call(response) : (rawText || "{}");
+    const aiResult = safeJsonParse(textStr, { primaryFactor: "General Adjustment", explanation: "", confidence: 0.7 });
 
     return {
       childId: child.id,

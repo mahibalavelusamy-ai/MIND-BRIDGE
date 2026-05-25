@@ -14,26 +14,8 @@ export default function InterventionModal({ child, onClose }: InterventionModalP
   const [step, setStep] = useState(1);
   const [isAwarding, setIsAwarding] = useState(false);
 
-  const handleComplete = async () => {
-    setIsAwarding(true);
-    try {
-      // Award gems to child
-      await updateDoc(doc(db, 'children', child.id), {
-        gems: increment(5)
-      });
-      // Award credits to parent
-      if (auth.currentUser) {
-        await updateDoc(doc(db, 'users', auth.currentUser.uid), {
-          creditsEarned: increment(5)
-        }).catch(e => console.warn("Parent credit update failed:", e));
-      }
-      setStep(2);
-    } catch (error) {
-      console.error("Failed to award credits:", error);
-      setStep(2); // Still show completion screen even if credit update fails
-    } finally {
-      setIsAwarding(false);
-    }
+  const handleComplete = () => {
+    setStep(2);
   };
 
   return (
@@ -42,7 +24,7 @@ export default function InterventionModal({ child, onClose }: InterventionModalP
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
-        className="w-full max-w-lg bg-white rounded-[3rem] shadow-2xl overflow-hidden relative"
+        className="w-full max-w-lg bg-bg rounded-[3rem] shadow-2xl overflow-hidden relative"
       >
         <div className="p-8 flex justify-between items-center">
           <div className="flex items-center gap-3">
@@ -74,7 +56,7 @@ export default function InterventionModal({ child, onClose }: InterventionModalP
               animate={{ scale: 1, opacity: 1 }}
               className="flex flex-col items-center justify-center py-12 space-y-6"
             >
-              <div className="w-24 h-24 bg-green-100 text-green-600 rounded-full flex items-center justify-center">
+              <div className="w-24 h-24 bg-alert-50 text-alert-400 rounded-full flex items-center justify-center">
                 <Star size={48} fill="currentColor" />
               </div>
               <div className="text-center">
@@ -86,7 +68,7 @@ export default function InterventionModal({ child, onClose }: InterventionModalP
               </div>
               <button 
                 onClick={onClose} 
-                className="mt-8 px-8 py-3 bg-accent text-white rounded-full font-bold hover:scale-105 transition-all"
+                className="mt-8 px-8 py-3 bg-accent text-bg rounded-full font-bold hover:scale-105 transition-all"
               >
                 Done
               </button>

@@ -6,12 +6,12 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 const AVATAR_GRADIENTS = [
-  'from-blue-600 to-indigo-900', // Deep Sapphire
-  'from-purple-600 to-fuchsia-900', // Amethyst
-  'from-emerald-500 to-teal-900', // Emerald
-  'from-rose-500 to-red-900', // Ruby
-  'from-slate-600 to-slate-900', // Slate
-  'from-amber-500 to-orange-900' // Topaz
+  'from-cyan-400 to-blue-900', // Cyan Neon
+  'from-fuchsia-500 to-purple-900', // Magenta Neon
+  'from-violet-500 to-indigo-900', // Deep Indigo
+  'from-teal-400 to-emerald-900', // Matrix Green
+  'from-rose-500 to-red-900', // Crimson Neon
+  'from-yellow-400 to-orange-900' // Solar Flare
 ];
 
 export const getGradientForChild = (id: string) => {

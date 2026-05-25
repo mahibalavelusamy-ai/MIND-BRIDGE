@@ -68,7 +68,7 @@ export default function MicroIntervention({ onComplete, onSkip }: MicroIntervent
         <motion.div
           animate={{ scale: getScale() }}
           transition={{ duration: phase === 'in' || phase === 'out' ? 4 : 4, ease: "linear" }}
-          className="absolute w-24 h-24 bg-blue-400 rounded-full flex items-center justify-center text-white shadow-lg shadow-blue-400/50"
+          className="absolute w-24 h-24 bg-blue-400 rounded-full flex items-center justify-center text-bg shadow-lg shadow-blue-400/50"
         >
           <Wind size={32} />
         </motion.div>

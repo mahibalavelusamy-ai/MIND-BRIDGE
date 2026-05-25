@@ -46,8 +46,9 @@ export async function getAIInsights(childData: any) {
       }
     });
 
-    const text = response.text || "";
-    const result = safeJsonParse(text, {
+    const rawText = (response as any).text;
+    const textStr = typeof rawText === 'function' ? rawText.call(response) : (rawText || "");
+    const result = safeJsonParse(textStr, {
       status: `${childData.name} is showing consistent patterns.`,
       concerns: [],
       recommendations: [

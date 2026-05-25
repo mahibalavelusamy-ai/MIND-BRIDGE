@@ -112,9 +112,9 @@ export default function Forecasts({ children }: ForecastsProps) {
                   <div className="space-y-6 relative z-10">
                     <div className={cn(
                       "p-6 rounded-2xl border flex items-center justify-between",
-                      prediction.predictedRisk === 'low' ? "bg-green-50 border-green-100 text-green-700" :
-                      prediction.predictedRisk === 'medium' ? "bg-amber-50 border-amber-100 text-amber-700" :
-                      "bg-red-50 border-red-100 text-red-700"
+                      prediction.predictedRisk === 'low' ? "bg-alert-50 border-alert-50 text-alert-500" :
+                      prediction.predictedRisk === 'medium' ? "bg-alert-50 border-alert-100 text-alert-600" :
+                      "bg-alert-50 border-alert-100 text-alert-700"
                     )}>
                       <div>
                         <p className="text-xs font-bold uppercase tracking-widest mb-1">Predicted Risk</p>

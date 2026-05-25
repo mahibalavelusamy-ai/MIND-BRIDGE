@@ -58,22 +58,22 @@ export default class ErrorBoundary extends React.Component<Props, State> {
 
       return (
         <div className="min-h-screen flex items-center justify-center bg-bg p-4">
-          <div className="max-w-md w-full bg-white rounded-[2rem] shadow-xl p-8 text-center border border-red-100">
-            <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
+          <div className="max-w-md w-full bg-surface-2 rounded-[2rem] shadow-xl p-8 text-center border border-alert-500/20">
+            <div className="w-20 h-20 bg-alert-500/10 text-alert-500 rounded-full flex items-center justify-center mx-auto mb-6">
               <AlertTriangle size={40} />
             </div>
-            <h2 className="text-2xl font-serif font-bold text-gray-900 mb-3">Oops! Something went wrong.</h2>
-            <p className="text-gray-600 mb-6">{errorMessage}</p>
+            <h2 className="text-2xl font-serif font-bold text-text-main mb-3">Oops! Something went wrong.</h2>
+            <p className="text-text-muted mb-6">{errorMessage}</p>
             
-            <div className="bg-gray-50 p-4 rounded-xl text-left mb-8 overflow-auto max-h-32">
-              <p className="text-xs text-gray-500 font-mono break-words">
+            <div className="bg-surface p-4 rounded-xl text-left mb-8 overflow-auto max-h-32 border border-border">
+              <p className="text-xs text-text-dim font-mono break-words">
                 {errorDetails}
               </p>
             </div>
 
             <button 
               onClick={this.handleReset}
-              className="w-full py-4 bg-accent text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-accent-hover transition-colors"
+              className="w-full py-4 bg-accent text-bg rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-accent-hover transition-colors"
             >
               <RefreshCw size={20} />
               Reload Application

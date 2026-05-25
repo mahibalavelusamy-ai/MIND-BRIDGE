@@ -14,6 +14,7 @@ import {
   ChevronRight,
   ChevronDown,
   Plus,
+  Settings,
   AlertCircle,
   TrendingUp,
   BrainCircuit,
@@ -23,7 +24,14 @@ import {
   LineChart,
   Lightbulb,
   Link,
-  Lock
+  Lock,
+  Eye,
+  EyeOff,
+  ChevronUp,
+  Search,
+  CheckCircle2,
+  ShoppingCart,
+  CalendarDays
 } from 'lucide-react';
 import { cn, getGradientForChild } from './lib/utils';
 import { Child, Alert } from './types';
@@ -48,24 +56,25 @@ import {
   handleFirestoreError,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  writeBatch
+  writeBatch,
+  clearAppPersistence,
+  orderBy
 } from './lib/firebase';
 import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
+import ProfileSettingsModal from './components/ProfileSettingsModal';
 import ChildProfile from './components/ChildProfile';
 import Assessment from './components/Assessment';
 import Reports from './components/Reports';
 import Alerts from './components/Alerts';
 import SchoolDashboard from './components/SchoolDashboard';
-import PrivacyEthics from './components/PrivacyEthics';
-import Forecasts from './components/Forecasts';
-import Recommendations from './components/Recommendations';
-import SchoolSync from './components/SchoolSync';
+import ProfileVaultModal from './components/ProfileVaultModal';
+
 import WellnessShop from './components/WellnessShop';
-import SOSModal from './components/SOSModal';
+import ScheduleAI from './components/ScheduleAI';
 
 type Page = 'landing' | 'user-type' | 'login' | 'app';
-type Tab = 'home' | 'profile' | 'assessment' | 'reports' | 'alerts' | 'privacy' | 'forecasts' | 'recommendations' | 'sync' | 'shop';
+type Tab = 'home' | 'profile' | 'assessment' | 'reports' | 'alerts' | 'shop' | 'schedule';
 
 const APP_VERSION = "1.2.0";
 
@@ -122,14 +131,14 @@ const useDataMigration = (user: any, children: Child[], alerts: Alert[], setChil
 };
 
 export default function App() {
-  const [currentPage, setCurrentPage] = useState<Page>('landing');
+  const [currentPage, setCurrentPage] = useState<Page>('login');
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('theme') === 'dark';
+      return localStorage.getItem('theme') !== 'light';
     }
-    return false;
+    return true;
   });
   const [user, setUser] = useState<any>(null);
   const [children, setChildren] = useState<Child[]>([]);
@@ -140,11 +149,13 @@ export default function App() {
   const [pinError, setPinError] = useState('');
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [levelUpToast, setLevelUpToast] = useState<{ show: boolean; level: number; childName: string }>({ show: false, level: 0, childName: '' });
+  const [creditsToast, setCreditsToast] = useState<{show: boolean; amount: number}>({show: false, amount: 0});
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
+  const [isProfileSettingsOpen, setIsProfileSettingsOpen] = useState(false);
   const [errorToast, setErrorToast] = useState<{ show: boolean; message: string }>({ show: false, message: '' });
   
-  // SOS State
-  const [isSOSOpen, setIsSOSOpen] = useState(false);
+
+  const [privacyBlur, setPrivacyBlur] = useState(false);
 
   // Profile Creation UI state
   const [isCreatingProfile, setIsCreatingProfile] = useState(false);
@@ -156,6 +167,16 @@ export default function App() {
   const [passwordAuth, setPasswordAuth] = useState('');
   const [isSignUpMode, setIsSignUpMode] = useState(false);
   const [authErrorContent, setAuthErrorContent] = useState('');
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const mainScrollRef = React.useRef<HTMLElement>(null);
+
+  // Privacy: State Purge
+  const clearState = () => {
+    setSelectedChild(null);
+    setChildren([]);
+    setAlerts([]);
+    setIsAuthenticatedSession(false);
+  };
 
   useDataMigration(user, children, alerts, setChildren);
 
@@ -200,14 +221,18 @@ export default function App() {
         // Check if user exists in Firestore
         const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
         if (!userDoc.exists()) {
-          setCurrentPage('user-type');
+          // New user logic (requires choosing role)
+          setUser({ uid: firebaseUser.uid, requiresRole: true });
+          setCurrentPage(prev => (prev === 'landing' ? 'landing' : 'user-type'));
         } else {
           setUser(userDoc.data());
-          setCurrentPage('app');
+          // Only automatically jump to 'app' if we are on 'login' or 'user-type'
+          // If we are on 'landing', let the user click 'Get Started' to enter the app.
+          setCurrentPage(prev => (prev === 'landing' ? 'landing' : 'app'));
         }
       } else {
         setUser(null);
-        setCurrentPage('landing');
+        setCurrentPage('login');
       }
       setIsAuthReady(true);
     });
@@ -215,31 +240,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || user.requiresRole) return;
 
     // Listen for children
     const childrenQuery = query(collection(db, 'children'), where('parentId', '==', auth.currentUser?.uid));
     const unsubscribeChildren = onSnapshot(childrenQuery, (snapshot) => {
       const childrenData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Child));
-      
-      // 1. Streak Reset Logic (Proactive check on data load)
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      childrenData.forEach(async (c) => {
-        // Streak check
-        if (c.streak && c.streak > 0 && c.lastAssessmentTimestamp) {
-          const lastDate = new Date(c.lastAssessmentTimestamp);
-          lastDate.setHours(0, 0, 0, 0);
-          const diffTime = today.getTime() - lastDate.getTime();
-          const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-          
-          if (diffDays > 1) {
-            // Missed at least one day, reset streak in Firestore
-            await updateDoc(doc(db, 'children', c.id), { streak: 0 });
-          }
-        }
-      });
       
       setChildren(childrenData);
       
@@ -256,14 +262,23 @@ export default function App() {
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'children'));
 
     // Listen for alerts - Strictly filter by childId for session isolation
-    const alertsConstraints = [
-      where('parentId', '==', auth.currentUser?.uid),
-      where('status', '==', 'active')
-    ];
+    const alertsConstraints: any[] = [];
     
-    if (selectedChild) {
-      alertsConstraints.push(where('childId', 'in', [selectedChild.id, 'all']));
+    if (user.role === 'teacher' || user.role === 'clinician') {
+      if (selectedChild) {
+        alertsConstraints.push(where('childId', 'in', [selectedChild.id, 'all']));
+      } else {
+        // Fallback for teachers with no selected child, just don't fetch alerts to avoid blanket read issues
+        alertsConstraints.push(where('childId', '==', 'no-op'));
+      }
+    } else {
+      alertsConstraints.push(where('parentId', '==', auth.currentUser?.uid));
+      if (selectedChild) {
+        alertsConstraints.push(where('childId', 'in', [selectedChild.id, 'all']));
+      }
     }
+    
+    alertsConstraints.push(orderBy('timestamp', 'desc'));
 
     const alertsQuery = query(
       collection(db, 'alerts'), 
@@ -280,12 +295,57 @@ export default function App() {
     };
   }, [user, selectedChild?.id]);
 
+  const hasCheckedStreak = React.useRef(false);
+
+  useEffect(() => {
+    if (!user || children.length === 0 || hasCheckedStreak.current) return;
+    
+    let isSubscribed = true;
+
+    const checkStreaks = async () => {
+      const todayDateStr = new Date().toISOString().split('T')[0];
+      const today = new Date(todayDateStr);
+
+      // Create an array of update promises
+      const resetPromises = children.map(async (c) => {
+        if (c.streak && c.streak > 0 && c.lastAssessmentTimestamp) {
+          const lastDateStr = new Date(c.lastAssessmentTimestamp).toISOString().split('T')[0];
+          const lastDate = new Date(lastDateStr);
+          const diffTime = today.getTime() - lastDate.getTime();
+          const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+          
+          if (diffDays > 1) {
+            hasCheckedStreak.current = true; // Mark as checked if we found ANY child to reset
+            try {
+              if (isSubscribed) {
+                await updateDoc(doc(db, 'children', c.id), { streak: 0 });
+              }
+            } catch (error) {
+              console.error("Failed to reset streak for child", c.id, error);
+            }
+          }
+        }
+      });
+      
+      // If we didn't mark it true during the loop but we have children, mark it done.
+      hasCheckedStreak.current = true;
+      
+      await Promise.all(resetPromises);
+    };
+
+    checkStreaks();
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [user, children]);
+
   useEffect(() => {
     if (isDarkMode) {
       document.documentElement.setAttribute('data-theme', 'dark');
       localStorage.setItem('theme', 'dark');
     } else {
-      document.documentElement.removeAttribute('data-theme');
+      document.documentElement.setAttribute('data-theme', 'light');
       localStorage.setItem('theme', 'light');
     }
   }, [isDarkMode]);
@@ -342,8 +402,10 @@ export default function App() {
     try {
       await loginWithGoogle();
     } catch (error: any) {
-      console.error("Login failed", error);
-      setAuthErrorContent(error?.message || "Google sign-in failed. Please try again.");
+      if (error?.code !== 'auth/popup-closed-by-user') {
+        console.error("Login failed", error);
+        setAuthErrorContent(error?.message || "Google sign-in failed. Please try again.");
+      }
     }
   };
 
@@ -364,6 +426,10 @@ export default function App() {
 
   const [isAuthenticatedSession, setIsAuthenticatedSession] = useState(false);
   const [isShaking, setIsShaking] = useState(false);
+
+  const handleAssessmentError = React.useCallback((msg: string) => {
+    setErrorToast({ show: msg !== '', message: msg });
+  }, []);
 
   // Persistence Logic: Lock session after 30 minutes of inactivity
   useEffect(() => {
@@ -454,7 +520,20 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    clearState();
     await firebaseLogout();
+  };
+
+  const handleStart = () => {
+    if (user) {
+      if (user.requiresRole) {
+        setCurrentPage('user-type');
+      } else {
+        setCurrentPage('app');
+      }
+    } else {
+      setCurrentPage('login');
+    }
   };
 
   if (!isAuthReady) {
@@ -466,7 +545,7 @@ export default function App() {
   }
 
   if (currentPage === 'landing') {
-    return <LandingPage onStart={() => setCurrentPage('login')} />;
+    return <LandingPage onStart={handleStart} />;
   }
 
   if (currentPage === 'user-type') {
@@ -475,24 +554,33 @@ export default function App() {
         <div className="max-w-xl w-full text-center">
           <h2 className="text-3xl font-serif mb-2">Who are you?</h2>
           <p className="text-text-muted mb-8">Select your account type to continue</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
             <button 
               onClick={() => handleUserTypeSelect('parent')}
-              className="p-8 bg-surface border-2 border-border rounded-xl hover:border-accent transition-all text-center group"
+              className="p-8 bg-surface border-2 border-border rounded-xl hover:border-accent transition-all text-center group flex flex-col justify-between"
             >
-              <div className="text-4xl mb-4 group-hover:scale-110 transition-transform">👨‍👩‍👧</div>
-              <h3 className="font-semibold mb-1">Parent / Individual</h3>
-              <p className="text-xs text-text-muted">Monitor your child's mental health at home</p>
+              <div className="text-4xl mb-4 group-hover:scale-110 transition-transform hidden sm:block">👨‍👩‍👧</div>
+              <h3 className="font-semibold mb-1">Parent</h3>
+              <p className="text-xs text-text-muted">Monitor child wellbeing</p>
             </button>
             <button 
               onClick={() => handleUserTypeSelect('teacher')}
-              className="p-8 bg-surface border-2 border-border rounded-xl hover:border-accent transition-all text-center group"
+              className="p-8 bg-surface border-2 border-border rounded-xl hover:border-accent transition-all text-center group flex flex-col justify-between"
             >
-              <div className="text-4xl mb-4 group-hover:scale-110 transition-transform">🏫</div>
-              <h3 className="font-semibold mb-1">Organisation</h3>
-              <p className="text-xs text-text-muted">School, hospital, or healthcare provider</p>
+              <div className="text-4xl mb-4 group-hover:scale-110 transition-transform hidden sm:block">🏫</div>
+              <h3 className="font-semibold mb-1">Teacher</h3>
+              <p className="text-xs text-text-muted">Classroom wellness</p>
+            </button>
+            <button 
+              onClick={() => handleUserTypeSelect('school_admin')}
+              className="p-8 bg-surface border-2 border-border rounded-xl hover:border-accent transition-all text-center group flex flex-col justify-between"
+            >
+              <div className="text-4xl mb-4 group-hover:scale-110 transition-transform hidden sm:block">🏢</div>
+              <h3 className="font-semibold mb-1">School Admin</h3>
+              <p className="text-xs text-text-muted">Institution intelligence</p>
             </button>
           </div>
+
         </div>
       </div>
     );
@@ -510,7 +598,7 @@ export default function App() {
             
             <form onSubmit={handleEmailAuthSubmit} className="space-y-4 mb-6">
               {authErrorContent && (
-                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-sm">
+                <div className="p-3 bg-alert-500/10 border border-alert-500/20 rounded-xl text-alert-500 text-sm">
                   {authErrorContent}
                 </div>
               )}
@@ -545,7 +633,7 @@ export default function App() {
             </div>
 
             <div className="space-y-4">
-              <button onClick={handleLogin} className="w-full bg-accent text-white p-3 rounded-xl font-medium hover:bg-accent-hover transition-colors flex items-center justify-center gap-2">
+              <button onClick={handleLogin} className="w-full bg-accent text-bg p-3 rounded-xl font-medium hover:bg-accent-hover transition-colors flex items-center justify-center gap-2">
                 Continue with Google →
               </button>
             </div>
@@ -575,16 +663,16 @@ export default function App() {
   // PREMIUM GATEWAY UI
   if (currentPage === 'app' && !selectedChild && user?.role !== 'teacher') {
     return (
-      <div className="min-h-screen bg-[#0f0f13] flex flex-col items-center justify-center text-white p-6 relative overflow-hidden animate-fade-in">
+      <div className="min-h-screen bg-bg flex flex-col items-center justify-center text-text-main p-6 relative overflow-hidden animate-fade-in">
         {/* Subtle background glow */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-accent/20 blur-[120px] rounded-full pointer-events-none opacity-50"></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-accent/20 blur-[120px] rounded-full pointer-events-none opacity-50 animate-glow"></div>
         
         <div className="relative z-10 w-full max-w-4xl flex flex-col items-center">
           <div className="text-accent mb-12 flex justify-center">
-             <div className="text-3xl font-serif font-bold text-white">Mind<span className="text-accent">Bridge</span></div>
+             <div className="text-4xl font-sans font-bold text-text-main neon-text-blue">Mind<span className="text-accent neon-text">Bridge</span></div>
           </div>
           
-          <h1 className="text-4xl md:text-5xl font-serif mb-16 text-center tracking-tight text-white shadow-sm">
+          <h1 className="text-4xl md:text-5xl font-sans mb-16 text-center tracking-tight text-white font-light">
             Who's exploring today?
           </h1>
           
@@ -592,32 +680,32 @@ export default function App() {
             {children.map(child => (
               <motion.button
                 key={child.id}
-                whileHover={{ scale: 1.1 }}
+                whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => handleProfileSelect(child)}
                 className="flex flex-col items-center group cursor-pointer"
               >
                 <div className={cn(
-                  "w-32 h-32 md:w-40 md:h-40 rounded-3xl border-2 border-transparent group-hover:border-white shadow-2xl flex items-center justify-center text-6xl mb-4 transition-all duration-300 relative overflow-hidden bg-gradient-to-br",
+                  "w-32 h-32 md:w-40 md:h-40 rounded-[2rem] border border-border group-hover:neon-border shadow-2xl flex items-center justify-center text-6xl mb-4 transition-all duration-300 relative overflow-hidden bg-surface-2",
                   child.age >= 18 ? getGradientForChild(child.id) : "from-slate-700 to-slate-900"
                 )}>
-                  <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                  {child.age >= 18 ? <span className="font-serif text-white">{child.name ? child.name.charAt(0).toUpperCase() : '👤'}</span> : (child.avatar || '👧')}
+                  <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  {child.age >= 18 ? <span className="font-sans text-text-main relative z-10">{child.name ? child.name.charAt(0).toUpperCase() : '👤'}</span> : <span className="relative z-10">{child.avatar || '👧'}</span>}
                 </div>
-                <span className="text-slate-300 font-medium text-xl group-hover:text-white transition-colors">{child.name}</span>
+                <span className="text-slate-400 font-medium text-xl group-hover:text-accent transition-colors duration-300 group-hover:neon-text">{child.name}</span>
               </motion.button>
             ))}
             
             <motion.button
-              whileHover={{ scale: 1.1 }}
+              whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => setIsCreatingProfile(true)}
               className="flex flex-col items-center group cursor-pointer opacity-70 hover:opacity-100"
             >
-              <div className="w-32 h-32 md:w-40 md:h-40 rounded-3xl bg-slate-900 border-2 border-dashed border-slate-600 group-hover:border-white shadow-2xl flex items-center justify-center text-4xl mb-4 transition-all duration-300">
-                <Plus className="text-slate-300 group-hover:text-white" size={48} />
+              <div className="w-32 h-32 md:w-40 md:h-40 rounded-[2rem] bg-surface/50 backdrop-blur-sm border-2 border-dashed border-border group-hover:neon-border flex items-center justify-center text-4xl mb-4 transition-all duration-300">
+                <Plus className="text-slate-400 group-hover:text-accent transition-colors duration-300" size={48} />
               </div>
-              <span className="text-slate-300 font-medium text-xl group-hover:text-white transition-colors">Add Profile</span>
+              <span className="text-slate-400 font-medium text-xl group-hover:text-accent transition-colors duration-300 group-hover:neon-text">Add Profile</span>
             </motion.button>
           </div>
           
@@ -625,7 +713,7 @@ export default function App() {
         
         {/* Subtle Sign Out at bottom */}
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2">
-          <button onClick={handleLogout} className="text-slate-400 hover:text-white transition-colors font-medium text-sm">
+          <button onClick={handleLogout} className="text-text-dim hover:text-text-main transition-colors font-medium text-sm">
             Sign Out
           </button>
         </div>
@@ -634,14 +722,14 @@ export default function App() {
         {isCreatingProfile && (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-fade-in">
             <div className="bg-gradient-to-b from-gray-800 to-gray-900 p-8 rounded-[2rem] border border-gray-700 shadow-2xl max-w-lg w-full mx-4 backdrop-blur-xl relative overflow-hidden">
-               <div className="flex justify-between items-center mb-6 text-white">
+               <div className="flex justify-between items-center mb-6 text-text-main">
                  <h3 className="text-2xl font-serif">Create Profile</h3>
-                 <button onClick={() => setIsCreatingProfile(false)} className="text-gray-400 hover:text-white"><X size={24} /></button>
+                 <button onClick={() => setIsCreatingProfile(false)} className="text-text-dim hover:text-text-main"><X size={24} /></button>
                </div>
                <form onSubmit={handleCreateProfile} className="space-y-4">
                  <div className="grid grid-cols-2 gap-4">
-                   <input required placeholder="Name" className="p-3 rounded-xl border border-neutral-200 dark:border-neutral-700 text-sm bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-500" value={newProfile.name} onChange={e => setNewProfile({...newProfile, name: e.target.value})} />
-                   <input required type="number" placeholder="Age" className="p-3 rounded-xl border border-neutral-200 dark:border-neutral-700 text-sm bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-500" value={newProfile.age} onChange={e => {
+                   <input required placeholder="Name" className="p-3 rounded-xl border border-border text-sm bg-surface-2 text-text-main placeholder-text-muted" value={newProfile.name} onChange={e => setNewProfile({...newProfile, name: e.target.value})} />
+                   <input required type="number" placeholder="Age" className="p-3 rounded-xl border border-border text-sm bg-surface-2 text-text-main placeholder-text-muted" value={newProfile.age} onChange={e => {
                      const age = parseInt(e.target.value);
                      let grade = newProfile.grade;
                      let gender = newProfile.gender;
@@ -660,7 +748,7 @@ export default function App() {
                    <select 
                       value={newProfile.gender || 'male'} 
                       onChange={e => setNewProfile({...newProfile, gender: e.target.value as any})}
-                      className="p-3 rounded-xl border border-neutral-200 dark:border-neutral-700 text-sm bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100"
+                      className="p-3 rounded-xl border border-border text-sm bg-surface-2 text-text-main"
                     >
                       <option value="male">Boy</option>
                       <option value="female">Girl</option>
@@ -669,7 +757,7 @@ export default function App() {
                     <select 
                       value={newProfile.avatar || '👦'} 
                       onChange={e => setNewProfile({...newProfile, avatar: e.target.value})}
-                      className="p-3 rounded-xl border border-neutral-200 dark:border-neutral-700 text-sm bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100"
+                      className="p-3 rounded-xl border border-border text-sm bg-surface-2 text-text-main"
                     >
                       <option value="👦">👦 Boy</option>
                       <option value="👧">👧 Girl</option>
@@ -677,15 +765,15 @@ export default function App() {
                     </select>
                 </div>
                 <div className="mt-4">
-                  <input 
+                    <input 
                     placeholder="Grade" 
-                    className={cn("w-full p-3 rounded-xl border border-neutral-200 dark:border-neutral-700 text-sm bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-500", parseInt(newProfile.age) >= 18 && "opacity-60 cursor-not-allowed")} 
+                    className={cn("w-full p-3 rounded-xl border border-border text-sm bg-surface-2 text-text-main placeholder-text-muted", parseInt(newProfile.age) >= 18 && "opacity-60 cursor-not-allowed")} 
                     value={newProfile.grade} 
                     onChange={e => setNewProfile({...newProfile, grade: e.target.value})} 
                     disabled={parseInt(newProfile.age) >= 18}
                   />
                 </div>
-                <button type="submit" disabled={isSavingProfile} className="w-full bg-accent text-white dark:text-white py-3 rounded-xl text-sm font-bold shadow-lg shadow-accent/20 hover:bg-accent-hover transition-all mt-6 disabled:opacity-50">
+                <button type="submit" disabled={isSavingProfile} className="w-full bg-accent text-bg dark:text-bg py-3 rounded-xl text-sm font-bold shadow-lg shadow-accent/20 hover:bg-accent-hover transition-all mt-6 disabled:opacity-50">
                   {isSavingProfile ? "Creating..." : "Save Profile"}
                 </button>
                </form>
@@ -696,76 +784,16 @@ export default function App() {
       {/* Global PIN Modal Duplicate for Gateway Early Return */}
       <AnimatePresence>
         {pinModalProfile && (
-          <motion.div 
-             initial={{ opacity: 0 }}
-             animate={{ opacity: 1 }}
-             exit={{ opacity: 0 }}
-             className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md"
-          >
-            <motion.div 
-               initial={{ scale: 0.95, y: 20 }}
-               animate={isShaking ? { x: [-10, 10, -10, 10, -5, 5, 0], scale: 1, y: 0 } : { scale: 1, y: 0 }}
-               transition={{ duration: isShaking ? 0.4 : 0.2 }}
-               className="bg-white dark:bg-[#0f0f13] p-8 rounded-[2rem] border border-neutral-200 dark:border-gray-800 shadow-2xl max-w-sm w-full mx-4 backdrop-blur-xl relative overflow-hidden"
-            >
-              <div className="absolute inset-0 bg-accent/5 opacity-50 blur-3xl rounded-full"></div>
-              <div className="relative z-10">
-                <div className="text-center mb-6">
-                  <div className={cn(
-                    "w-24 h-24 mx-auto rounded-2xl flex items-center justify-center text-5xl mb-4 shadow-inner text-white",
-                    `bg-gradient-to-br ${getGradientForChild(pinModalProfile.id)}`
-                  )}>
-                    {pinModalProfile.age >= 18 ? <span className="font-serif">{pinModalProfile.name.charAt(0).toUpperCase()}</span> : pinModalProfile.avatar}
-                  </div>
-                  <h3 className="text-2xl font-serif text-neutral-900 dark:text-white">Enter PIN</h3>
-                  <p className="text-sm text-neutral-500 dark:text-gray-400 mt-1">Unlock {pinModalProfile.name}'s profile session</p>
-                </div>
-                <form onSubmit={handlePinSubmit} className="space-y-4">
-                  <div>
-                    <input 
-                      type="password" 
-                      value={enteredPin}
-                      onChange={(e) => setEnteredPin(e.target.value)}
-                      className={cn(
-                        "w-full bg-white dark:bg-neutral-800 border-2 rounded-xl px-4 py-3 text-center text-xl tracking-widest text-neutral-900 dark:text-neutral-100 shadow-inner focus:outline-none transition-colors",
-                         pinError ? "border-red-500/50 focus:border-red-500" : "border-neutral-200 dark:border-neutral-700 focus:border-accent"
-                      )}
-                      placeholder="••••"
-                      maxLength={32}
-                      autoFocus
-                    />
-                    {pinError && <p className="text-red-400 text-xs mt-2 text-center font-bold animate-fade-in">{pinError}</p>}
-                  </div>
-                  <div className="flex gap-3">
-                    <button type="button" onClick={() => { setPinModalProfile(null); setPinError(''); setEnteredPin(''); }} className="flex-1 py-3 px-4 rounded-xl text-slate-900 dark:text-white bg-slate-100 dark:bg-white/10 font-bold hover:bg-slate-200 dark:hover:bg-white/20 transition-colors">Cancel</button>
-                    <button type="submit" disabled={enteredPin.length === 0} className="flex-1 py-3 px-4 rounded-xl bg-accent text-white dark:text-white font-bold hover:bg-accent-hover transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">Unlock</button>
-                  </div>
-                  <div className="flex flex-col gap-2 items-center text-center pt-2">
-                    <button 
-                      type="button" 
-                      onClick={() => {
-                        setSelectedChild(pinModalProfile);
-                        setPinModalProfile(null);
-                        setEnteredPin('');
-                        setIsAuthenticatedSession(true);
-                        setIsShaking(false);
-                      }}
-                      className="text-accent text-[12px] font-bold hover:text-accent-light underline transition-colors"
-                    >
-                      Parent Override: Authenticate as Admin
-                    </button>
-                    <button 
-                      type="button" 
-                      onClick={() => alert('An email has been sent to the account administrator/parent with instructions to reset this PIN.')}
-                      className="text-gray-400 text-[10px] hover:text-white underline transition-colors"
-                    >
-                      Forgot PIN? Request Admin Reset
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </motion.div>
-          </motion.div>
+          <ProfileVaultModal
+            child={pinModalProfile}
+            enteredPin={enteredPin}
+            setEnteredPin={setEnteredPin}
+            pinError={pinError}
+            isShaking={isShaking}
+            onCancel={() => { setPinModalProfile(null); setPinError(''); setEnteredPin(''); }}
+            onSubmit={handlePinSubmit}
+            onRequestAdminReset={() => alert('An email has been sent to the account administrator/parent with instructions to reset this PIN.')}
+          />
         )}
       </AnimatePresence>
       </div>
@@ -773,205 +801,191 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-bg">
-      {/* Top Nav */}
-      <nav className="h-16 bg-surface border-b border-border fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 md:px-8 shadow-sm">
-        <div className="flex items-center gap-4">
-          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="lg:hidden p-2 hover:bg-surface-2 rounded-lg">
-            {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
+    <div className="h-screen overflow-hidden flex flex-row bg-bg text-text-main">
+      {/* Sidebar - Fixed Position Navigation */}
+      <aside className={cn(
+        "fixed lg:sticky top-0 left-0 z-40 w-64 h-full border-r flex flex-col transition-transform duration-300 lg:translate-x-0 shadow-xl overflow-hidden",
+        isDarkMode ? "bg-[#050505] border-zinc-800" : "bg-white border-slate-200",
+        isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+      )}>
+        {/* Live Status Risk Indicator */}
+        <div className="p-6 border-b border-zinc-800/50 flex items-center justify-between shadow-sm">
+          <div className="text-2xl font-serif font-bold text-white tracking-widest hidden lg:block">Mind<span className="text-emerald-500">Bridge</span></div>
+          {/* Mobile close button */}
+          <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden p-2 hover:bg-surface-2 rounded-lg text-text-muted">
+             <X size={20} />
           </button>
-          <div className="text-xl font-serif font-bold text-accent hidden md:block">Mind<span className="text-text-main">Bridge</span></div>
           
-          {selectedChild && user?.role !== 'teacher' && (
-            <div className="relative">
-              <button 
-                onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
-                className="flex items-center gap-2 pl-2 pr-3 py-1.5 bg-surface-2 hover:bg-surface border border-border rounded-full transition-colors group"
-              >
-                <div className="w-8 h-8 rounded-full bg-accent text-white flex items-center justify-center text-sm font-bold">
-                  {selectedChild.age >= 18 ? selectedChild.name.charAt(0).toUpperCase() : selectedChild.avatar}
-                </div>
-                <span className="font-medium text-sm text-text-main hidden sm:block">{selectedChild.name}</span>
-                <ChevronDown size={16} className={cn("text-text-dim transition-transform duration-200", isProfileDropdownOpen ? "rotate-180" : "group-hover:text-text-main")} />
-              </button>
-
-              <AnimatePresence>
-                {isProfileDropdownOpen && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setIsProfileDropdownOpen(false)} />
-                    <motion.div
-                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                      className="absolute top-full mt-2 left-0 w-64 bg-surface backdrop-blur-xl border border-border rounded-2xl shadow-xl z-50 overflow-hidden"
-                    >
-                      <div className="p-3 border-b border-border bg-surface-2/50">
-                        <p className="text-[10px] font-bold text-text-dim uppercase tracking-widest">Switch Profile</p>
-                      </div>
-                      <div className="p-2 max-h-64 overflow-y-auto">
-                        {isAuthenticatedSession ? (
-                           <div className="p-3 text-center">
-                             <p className="text-xs text-text-muted mb-3">Profile switching is disabled while an active session is unlocked.</p>
-                             <button
-                                onClick={() => {
-                                   setIsAuthenticatedSession(false);
-                                   setIsProfileDropdownOpen(false);
-                                   setActiveTab('home');
-                                   setSelectedChild(null);
-                                }}
-                                className="text-xs w-full py-2 bg-red-500/10 text-red-500 font-bold rounded-lg hover:bg-red-500/20 transition-colors flex items-center justify-center gap-1"
-                             >
-                               <Lock size={12} /> Lock Session & Exit
-                             </button>
-                           </div>
-                        ) : (
-                          children.filter(c => c.id !== selectedChild.id).length === 0 ? (
-                             <p className="p-3 text-sm text-text-muted text-center">No other profiles.</p>
-                          ) : (
-                            children.filter(c => c.id !== selectedChild.id).map(child => (
-                              <button
-                                key={child.id}
-                                onClick={() => {
-                                  handleProfileSelect(child);
-                                  setIsProfileDropdownOpen(false);
-                                }}
-                                className="w-full flex items-center gap-3 p-3 hover:bg-surface-2 rounded-xl transition-colors text-left"
-                              >
-                                <div className="w-10 h-10 rounded-full bg-accent-light flex items-center justify-center text-lg text-accent border border-accent/20">
-                                  {child.age >= 18 ? child.name.charAt(0).toUpperCase() : child.avatar}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="font-medium text-sm text-text-main truncate">{child.name}</p>
-                                  <p className="text-[10px] text-text-dim truncate">{child.age >= 18 ? 'Adult Profile' : child.grade}</p>
-                                </div>
-                              </button>
-                            ))
-                          )
-                        )}
-                      </div>
-                      <div className="p-2 border-t border-border bg-surface-2/30">
-                        <button 
-                          onClick={() => {
-                            setSelectedChild(null);
-                            setIsAuthenticatedSession(false);
-                            setActiveTab('home');
-                            setIsProfileDropdownOpen(false);
-                          }}
-                          className="w-full flex items-center justify-center gap-2 py-2 text-sm text-text-muted hover:text-text-main transition-colors"
-                        >
-                          <LayoutDashboard size={16} /> View All Profiles
-                        </button>
-                      </div>
-                    </motion.div>
-                  </>
-                )}
-              </AnimatePresence>
-            </div>
-          )}
-        </div>
-        <div className="flex items-center gap-4">
-          <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 hover:bg-surface-2 rounded-full transition-colors">
-            {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
-          </button>
-          <div className="hidden md:flex items-center gap-2 text-sm text-text-muted">
-            <div className="w-8 h-8 rounded-full bg-accent-light flex items-center justify-center text-accent">
-              <UserCircle size={20} />
-            </div>
-            <span>{user?.name}</span>
+          <div className="flex items-center gap-2 px-3 py-1 bg-surface-2 rounded-full border border-border">
+             <div className={cn(
+               "w-2 h-2 rounded-full animate-pulse-soft",
+               alerts.length > 0 && alerts.some(a => !a.read) ? "bg-red-500" : "bg-emerald-500"
+             )} />
+             <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Live</span>
           </div>
-          <button onClick={handleLogout} className="p-2 hover:bg-red-50 text-red-500 rounded-lg transition-colors">
-            <LogOut size={20} />
-          </button>
         </div>
-      </nav>
 
-      <div className="flex flex-1 pt-16">
-        {/* Sidebar */}
-        <aside className={cn(
-          "fixed lg:static inset-y-0 left-0 z-40 w-64 bg-surface border-r border-border pt-16 lg:pt-0 transition-transform duration-300 lg:translate-x-0",
-          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6 sidebar-scroll">
+          
+          {/* Mobile Profile Display */}
+          <div className="lg:hidden mb-6 flex flex-col gap-4">
+             {selectedChild && user?.role !== 'teacher' && (
+                <button 
+                  onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
+                  className="flex items-center gap-3 p-3 bg-surface-2 border border-border rounded-xl"
+                >
+                  <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center text-sm font-bold border border-emerald-500/50">
+                    {selectedChild.age >= 18 ? selectedChild.name.charAt(0).toUpperCase() : selectedChild.avatar}
+                  </div>
+                  <span className="font-medium text-sm text-white">{selectedChild.name}</span>
+                </button>
+             )}
+          </div>
+
+          <div>
+             <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2 px-3">Monitor</p>
+             <nav className="space-y-1">
+               <SidebarLink icon={<LayoutDashboard size={18} />} label={['teacher', 'school_admin'].includes(user?.role) ? "School Overview" : "Dashboard"} active={activeTab === 'home'} onClick={() => { setActiveTab('home'); setIsSidebarOpen(false); }} />
+               {['teacher', 'school_admin'].includes(user?.role) && <SidebarLink icon={<Users size={18} />} label="Classes" active={activeTab === 'profile'} onClick={() => { setActiveTab('profile'); setIsSidebarOpen(false); }} />}
+               <SidebarLink
+                 icon={<CalendarDays size={18} />}
+                 label="Master Schedule"
+                 active={activeTab === 'schedule'}
+                 onClick={() => { setActiveTab('schedule'); setIsSidebarOpen(false); }}
+               />
+             </nav>
+          </div>
+
+          <div>
+             <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2 px-3">Assessment & Analysis</p>
+             <nav className="space-y-1">
+               {!['teacher', 'school_admin'].includes(user?.role) && selectedChild && (
+                 <>
+                   <SidebarLink
+                     icon={<ClipboardCheck size={18} />}
+                     label={user?.role === 'student' ? "My Journey" : "Check-in"}
+                     active={activeTab === 'assessment'}
+                     onClick={() => { setActiveTab('assessment'); setIsSidebarOpen(false); }}
+                   />
+                   <SidebarLink
+                     icon={<ShoppingCart size={18} />}
+                     label="Wellness Shop"
+                     active={activeTab === 'shop'}
+                     onClick={() => { setActiveTab('shop'); setIsSidebarOpen(false); }}
+                   />
+                   <SidebarLink 
+                     icon={<BarChart3 size={18} />} 
+                     label={user?.role === 'student' ? "My Growth" : "Wellness Reports"} 
+                     active={activeTab === 'reports'} 
+                     onClick={() => { setActiveTab('reports'); setIsSidebarOpen(false); }} 
+                   />
+                 </>
+               )}
+               {['teacher', 'school_admin'].includes(user?.role) && (
+                 <SidebarLink 
+                   icon={<BarChart3 size={18} />} 
+                   label="Classroom Analytics" 
+                   active={activeTab === 'reports'} 
+                   onClick={() => { setActiveTab('reports'); setIsSidebarOpen(false); }} 
+                 />
+               )}
+             </nav>
+          </div>
+        </div>
+
+        {/* Sticky Footer */}
+        <div className="mt-auto p-4 border-t border-zinc-800/50 bg-black/40">
+           {selectedChild && !['teacher', 'school_admin'].includes(user?.role) && (
+              <button 
+               onClick={() => setIsProfileSettingsOpen(true)} 
+               className="w-full mb-4 flex items-center justify-center gap-2 py-3 px-4 rounded-xl border border-border text-slate-600 dark:text-zinc-400 font-medium hover:bg-surface-2 hover:text-slate-900 dark:hover:text-zinc-100 transition-all text-sm"
+              >
+                 <Settings size={16} />
+                 Profile Settings
+              </button>
+           )}
+           
+           <div className="flex justify-between items-center mt-4 pt-4 border-t border-zinc-800/50">
+             <button 
+               onClick={() => setPrivacyBlur(!privacyBlur)}
+               title="Privacy Blur"
+               className="w-10 h-10 flex items-center justify-center rounded-xl border border-border bg-surface hover:bg-surface-2 transition-all text-cyan-500 drop-shadow-[0_0_4px_rgba(0,240,255,0.4)]"
+             >
+               {privacyBlur ? <EyeOff size={20} strokeWidth={2.5} /> : <Eye size={20} strokeWidth={2.5} />}
+             </button>
+
+             <button 
+               onClick={() => setIsDarkMode(!isDarkMode)} 
+               title="Toggle Theme"
+               className="w-10 h-10 flex items-center justify-center rounded-xl border border-border bg-surface hover:bg-surface-2 transition-all text-amber-500 drop-shadow-[0_0_4px_rgba(251,191,36,0.4)]"
+             >
+               {isDarkMode ? <Sun size={20} strokeWidth={2.5} /> : <Moon size={20} strokeWidth={2.5} />}
+             </button>
+
+             {selectedChild && !['teacher', 'school_admin'].includes(user?.role) && (
+               <button 
+                 onClick={() => setSelectedChild(null)} 
+                 title="Switch Profile"
+                 className="w-10 h-10 flex items-center justify-center rounded-xl border border-border bg-surface hover:bg-surface-2 transition-all text-accent drop-shadow-[0_0_4px_rgba(0,255,136,0.4)]"
+               >
+                 <UserCircle size={20} strokeWidth={2.5} />
+               </button>
+             )}
+
+             <button 
+               onClick={handleLogout} 
+               title="Sign Out"
+               className="w-10 h-10 flex items-center justify-center rounded-xl border border-border bg-surface hover:bg-surface-2 transition-all text-alert-500 drop-shadow-[0_0_4px_rgba(255,51,102,0.4)]"
+             >
+               <LogOut size={20} strokeWidth={2.5} />
+             </button>
+           </div>
+        </div>
+      </aside>
+
+      {/* Backdrop for mobile sidebar */}
+      {isSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/60 z-30 lg:hidden backdrop-blur-sm" 
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      {/* Main Content Workspace */}
+      <main 
+        ref={mainScrollRef}
+        onScroll={(e) => setShowScrollTop(e.currentTarget.scrollTop > 200)}
+        className={cn(
+          "flex-1 overflow-y-auto scroll-smooth relative flex flex-col",
+          activeTab === 'assessment' ? "bg-white dark:bg-black" : "bg-bg",
+          privacyBlur && "privacy-blur-active"
+        )}
+      >
+        <header className={cn(
+          "sticky top-0 z-20 backdrop-blur-md border-b border-border p-4 px-6 flex items-center justify-between",
+          activeTab === 'assessment' ? "bg-white/90 dark:bg-black/90" : "bg-bg/90"
         )}>
-          <div className="p-4 space-y-6">
-            <div>
-              <p className="text-[10px] font-bold text-text-dim uppercase tracking-wider mb-2 px-3">Main</p>
-              <nav className="space-y-1">
-                <SidebarLink 
-                  icon={<LayoutDashboard size={18} />} 
-                  label={user?.role === 'teacher' ? "School Overview" : "Home"} 
-                  active={activeTab === 'home'} 
-                  onClick={() => { setActiveTab('home'); setIsSidebarOpen(false); }} 
-                />
-                {user?.role !== 'teacher' && (
-                  <>
-                    <SidebarLink icon={<UserCircle size={18} />} label={selectedChild && selectedChild.age >= 18 ? "Student Profile" : "Child Profile"} active={activeTab === 'profile'} onClick={() => { setActiveTab('profile'); setIsSidebarOpen(false); }} />
-                    <SidebarLink icon={<ClipboardCheck size={18} />} label="Assessments" active={activeTab === 'assessment'} onClick={() => { setActiveTab('assessment'); setIsSidebarOpen(false); }} />
-                  </>
-                )}
-                {user?.role === 'teacher' && (
-                  <>
-                    <SidebarLink icon={<Users size={18} />} label="Classes" active={activeTab === 'profile'} onClick={() => { setActiveTab('profile'); setIsSidebarOpen(false); }} />
-                    <SidebarLink icon={<TrendingUp size={18} />} label="Analytics" active={activeTab === 'reports'} onClick={() => { setActiveTab('reports'); setIsSidebarOpen(false); }} />
-                  </>
-                )}
-              </nav>
-            </div>
-            <div>
-              <p className="text-[10px] font-bold text-text-dim uppercase tracking-wider mb-2 px-3">Insights</p>
-              <nav className="space-y-1">
-                <SidebarLink icon={<BarChart3 size={18} />} label="Reports" active={activeTab === 'reports'} onClick={() => { setActiveTab('reports'); setIsSidebarOpen(false); }} />
-                <SidebarLink icon={<LineChart size={18} />} label="Risk Forecasts" active={activeTab === 'forecasts'} onClick={() => { setActiveTab('forecasts'); setIsSidebarOpen(false); }} />
-                <SidebarLink icon={<Lightbulb size={18} />} label="Recommendations" active={activeTab === 'recommendations'} onClick={() => { setActiveTab('recommendations'); setIsSidebarOpen(false); }} />
-                <SidebarLink 
-                  icon={<Bell size={18} />} 
-                  label="Alerts" 
-                  active={activeTab === 'alerts'} 
-                  onClick={() => { setActiveTab('alerts'); setIsSidebarOpen(false); }} 
-                  badge={alerts.filter(a => !a.read).length > 0 ? alerts.filter(a => !a.read).length : undefined}
-                />
-              </nav>
-            </div>
-            <div>
-              <p className="text-[10px] font-bold text-text-dim uppercase tracking-wider mb-2 px-3">Compliance & Integrations</p>
-              <nav className="space-y-1">
-                <SidebarLink 
-                  icon={<Shield size={18} />} 
-                  label="Privacy & Ethics" 
-                  active={activeTab === 'privacy'} 
-                  onClick={() => { setActiveTab('privacy'); setIsSidebarOpen(false); }} 
-                />
-                <SidebarLink 
-                  icon={<Link size={18} />} 
-                  label="School Sync" 
-                  active={activeTab === 'sync'} 
-                  onClick={() => { setActiveTab('sync'); setIsSidebarOpen(false); }} 
-                />
-              </nav>
+            <div className="flex items-center gap-4">
+               <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 -ml-2 text-text-main">
+                 <Menu size={24} />
+               </button>
             </div>
             
-            {user?.role !== 'teacher' && selectedChild && (
-              <div className="pt-8 w-full">
+            <div className="flex items-center gap-3">
                  <button 
-                  onClick={() => setSelectedChild(null)} 
-                  className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl border-2 border-accent text-accent font-bold hover:bg-accent hover:text-white transition-all shadow-sm"
-                >
-                   <Users size={18} />
-                   Switch Profile
+                  onClick={() => setActiveTab('alerts')}
+                  className="relative p-2.5 bg-surface-2 border border-border rounded-full text-text-muted hover:text-text-main hover:bg-surface transition-colors"
+                 >
+                   <Bell size={20} />
+                   {alerts.filter(a => !a.read).length > 0 && (
+                     <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-alert-500 rounded-full border-2 border-surface animate-pulse-soft" />
+                   )}
                  </button>
-              </div>
-            )}
-          </div>
-        </aside>
+            </div>
+        </header>
 
-        {/* Backdrop for mobile sidebar */}
-        {isSidebarOpen && (
-          <div 
-            className="fixed inset-0 bg-black/20 z-30 lg:hidden" 
-            onClick={() => setIsSidebarOpen(false)}
-          />
-        )}
-
-        {/* Main Content */}
-        <main className="flex-1 p-4 md:p-8 overflow-y-auto">
+        <div className="p-4 md:p-8 flex-1 pb-20">
+          
           <AnimatePresence mode="wait">
             <motion.div
               key={`${selectedChild?.id || 'none'}-${activeTab}`}
@@ -979,6 +993,7 @@ export default function App() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
+              className="h-full"
             >
               {selectedChild && selectedChild.pin && !isAuthenticatedSession && activeTab !== 'home' && user?.role !== 'teacher' ? (
                 <div className="flex flex-col items-center justify-center p-20 animate-fade-in text-center h-full">
@@ -986,13 +1001,13 @@ export default function App() {
                      <div className="absolute inset-0 bg-accent/10"></div>
                      <Lock size={40} className="text-accent relative z-10" />
                   </div>
-                  <h2 className="text-4xl font-serif mb-4 text-white">Vault Locked</h2>
+                  <h2 className="text-4xl font-serif mb-4 text-text-main">Vault Locked</h2>
                   <p className="text-text-muted mb-8 max-w-md mx-auto text-lg">
                     Access to {selectedChild.name}'s protected data requires authentication.
                   </p>
                   <button 
                     onClick={() => setPinModalProfile(selectedChild)} 
-                    className="mx-auto bg-accent text-white px-8 py-4 rounded-xl font-bold text-lg hover:bg-accent-hover transition-colors shadow-lg shadow-accent/20 flex items-center gap-3"
+                    className="mx-auto bg-accent text-bg px-8 py-4 rounded-xl font-bold text-lg hover:bg-accent-hover transition-colors shadow-lg shadow-accent/20 flex items-center gap-3"
                   >
                     <Shield size={20} />
                     Unlock Session
@@ -1001,22 +1016,23 @@ export default function App() {
               ) : (
                 <>
                   {activeTab === 'home' && (
-                    user?.role === 'teacher' ? (
-                      <SchoolDashboard user={user} initialTab="overview" />
+                    ['teacher', 'school_admin'].includes(user?.role) ? (
+                      <SchoolDashboard user={user} initialTab="overview" privacyBlur={privacyBlur} />
                     ) : (
                       <Dashboard 
                         user={user} 
-                        children={selectedChild && selectedChild.id !== 'temp_new' ? [selectedChild] : []} 
+                        children={children} 
                         alerts={selectedChild && selectedChild.id !== 'temp_new' ? alerts.filter(a => a.childId === selectedChild.id || a.childId === 'all') : alerts} 
-                        onViewProfile={(child) => { handleProfileSelect(child); setActiveTab('profile'); }}
+                        onViewProfile={(child) => { handleProfileSelect(child); }}
                         selectedChild={selectedChild}
                         setActiveTab={setActiveTab}
+                        privacyBlur={privacyBlur}
                       />
                     )
                   )}
               {activeTab === 'profile' && (
-                user?.role === 'teacher' ? (
-                  <SchoolDashboard user={user} initialTab="classes" />
+                ['teacher', 'school_admin'].includes(user?.role) ? (
+                  <SchoolDashboard user={user} initialTab="classes" privacyBlur={privacyBlur} />
                 ) : selectedChild ? (
                   <ChildProfile 
                     child={selectedChild} 
@@ -1028,7 +1044,7 @@ export default function App() {
                   <div className="text-center py-20">
                     <p className="text-text-muted text-lg">No profile selected.</p>
                     <p className="text-text-dim text-sm mt-2">Go back to the dashboard and select a child profile to continue.</p>
-                    <button onClick={() => setActiveTab('home')} className="mt-6 px-6 py-2 bg-accent text-white rounded-xl font-medium hover:bg-accent-hover transition-colors">
+                    <button onClick={() => setActiveTab('home')} className="mt-6 px-6 py-2 bg-accent text-bg rounded-xl font-medium hover:bg-accent-hover transition-colors">
                       Go to Dashboard
                     </button>
                   </div>
@@ -1038,14 +1054,17 @@ export default function App() {
                 selectedChild ? (
                   <Assessment 
                     child={selectedChild}
-                    onError={(msg) => setErrorToast({ show: true, message: msg })}
-                    onComplete={(newLevel, childName) => {
+                    onError={handleAssessmentError}
+                    onNavigateHome={() => setActiveTab('home')}
+                    onComplete={(newLevel, childName, rewardAmount) => {
                       const currentLevel = selectedChild?.level || 1;
                       if (newLevel && newLevel > currentLevel) {
                         setLevelUpToast({ show: true, level: newLevel, childName: childName || 'Child' });
                         setTimeout(() => setLevelUpToast({ show: false, level: 0, childName: '' }), 5000);
+                      } else {
+                        setCreditsToast({ show: true, amount: rewardAmount || 10 });
+                        setTimeout(() => setCreditsToast({ show: false, amount: 0 }), 5000);
                       }
-                      setActiveTab('reports');
                     }}
                   />
                 ) : (
@@ -1068,38 +1087,17 @@ export default function App() {
                   onMarkRead={handleMarkRead}
                 />
               )}
-              {activeTab === 'privacy' && (
-                <PrivacyEthics user={user} />
-              )}
-              {activeTab === 'forecasts' && (
-                <Forecasts children={selectedChild ? [selectedChild] : []} />
-              )}
-              {activeTab === 'recommendations' && (
-                <Recommendations 
-                  children={selectedChild ? [selectedChild] : []} 
-                  setActiveTab={setActiveTab}
-                />
-              )}
-              {activeTab === 'sync' && (
-                <SchoolSync children={selectedChild ? [selectedChild] : []} />
+              {activeTab === 'schedule' && (
+                <ScheduleAI />
               )}
               {activeTab === 'shop' && selectedChild && (
-                <div className="flex-1 flex flex-col">
-                  <div className="mb-6 flex items-center justify-between">
-                    <div>
-                      <h2 className="text-3xl font-serif">Wellness Shop</h2>
-                      <p className="text-text-muted">Reward positive habits with credits</p>
-                    </div>
-                    <button onClick={() => setActiveTab('home')} className="p-2 hover:bg-surface-2 rounded-xl transition-colors">
-                      <X size={24} />
-                    </button>
-                  </div>
-                  <div className="flex-1 bg-surface-2 rounded-3xl p-6 border border-border">
-                    <WellnessShop isOpen={true} onClose={() => setActiveTab('home')} child={selectedChild} />
-                  </div>
-                </div>
+                <WellnessShop
+                  isOpen={true}
+                  onClose={() => setActiveTab('home')}
+                  child={selectedChild}
+                />
               )}
-              {!selectedChild && activeTab !== 'home' && activeTab !== 'reports' && activeTab !== 'alerts' && activeTab !== 'privacy' && activeTab !== 'forecasts' && activeTab !== 'recommendations' && activeTab !== 'sync' && activeTab !== 'assessment' && activeTab !== 'shop' && (
+              {!selectedChild && activeTab !== 'home' && activeTab !== 'reports' && activeTab !== 'alerts' && activeTab !== 'assessment' && activeTab !== 'shop' && activeTab !== 'schedule' && (
                 <div className="text-center py-20">
                   <p className="text-text-muted">Please add a child first from the dashboard.</p>
                   <button onClick={() => setActiveTab('home')} className="text-accent font-medium mt-2">Go to Dashboard</button>
@@ -1109,8 +1107,23 @@ export default function App() {
               )}
             </motion.div>
           </AnimatePresence>
-        </main>
-      </div>
+        </div>
+        
+        {/* Scroll To Top */}
+        <AnimatePresence>
+          {showScrollTop && (
+            <motion.button
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              onClick={() => mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}
+              className="fixed bottom-8 right-8 z-50 p-3 bg-accent text-bg shadow-lg shadow-accent/20 rounded-full hover:bg-accent-hover transition-colors"
+            >
+              <ChevronUp size={24} />
+            </motion.button>
+          )}
+        </AnimatePresence>
+      </main>
       {/* Level Up Toast */}
       <AnimatePresence>
         {levelUpToast.show && (
@@ -1118,14 +1131,31 @@ export default function App() {
             initial={{ opacity: 0, y: 50, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 50, scale: 0.9 }}
-            className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] bg-accent text-white px-8 py-4 rounded-2xl shadow-2xl flex items-center gap-4 border-2 border-white/20"
+            className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] bg-accent text-bg px-8 py-4 rounded-2xl shadow-2xl flex items-center gap-4 border-2 border-white/20"
           >
             <div className="text-4xl animate-bounce">🎉</div>
             <div>
               <p className="text-xs font-bold uppercase tracking-widest opacity-80">Level Up!</p>
               <p className="font-serif text-lg">{levelUpToast.childName} reached Level {levelUpToast.level}</p>
             </div>
-            <button onClick={() => setLevelUpToast({ ...levelUpToast, show: false })} className="ml-4 p-1 hover:bg-white/10 rounded-lg">
+            <button onClick={() => setLevelUpToast({ ...levelUpToast, show: false })} className="ml-4 p-1 hover:bg-bg/10 rounded-lg">
+              <X size={20} />
+            </button>
+          </motion.div>
+        )}
+        {creditsToast.show && (
+          <motion.div 
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 50, scale: 0.9 }}
+            className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] bg-emerald-500 text-bg px-8 py-4 rounded-2xl shadow-[0_0_20px_rgba(16,185,129,0.3)] flex items-center gap-4 border-2 border-emerald-400"
+          >
+            <div className="text-2xl"><CheckCircle2 size={32} /></div>
+            <div>
+              <p className="font-bold text-lg">Check-in Verified</p>
+              <p className="text-sm font-medium opacity-90">+{creditsToast.amount} Credits Earned!</p>
+            </div>
+            <button onClick={() => setCreditsToast({ show: false, amount: 0 })} className="ml-4 p-1 hover:bg-bg/10 rounded-lg">
               <X size={20} />
             </button>
           </motion.div>
@@ -1134,115 +1164,58 @@ export default function App() {
 
       {/* Error Toast */}
       <AnimatePresence>
-        {errorToast.show && (
+        {errorToast.show && !!errorToast.message && (
           <motion.div 
+            id="error-toast-container"
             initial={{ opacity: 0, y: -50, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -50, scale: 0.9 }}
-            className="fixed top-8 left-1/2 -translate-x-1/2 z-[100] bg-red-50 text-red-700 px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 border border-red-200"
+            className="fixed top-8 left-1/2 -translate-x-1/2 z-[100] bg-alert-50 text-alert-700 px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 border border-alert-200"
           >
-            <div className="text-red-500">
+            <div className="text-alert-500">
               <AlertCircle size={24} />
             </div>
             <div>
               <p className="text-xs font-bold uppercase tracking-widest opacity-80">Error</p>
               <p className="font-medium text-sm">{errorToast.message}</p>
             </div>
-            <button onClick={() => setErrorToast({ ...errorToast, show: false })} className="ml-4 p-1 hover:bg-red-100 rounded-lg transition-colors">
+            <button onClick={() => setErrorToast({ ...errorToast, show: false })} className="ml-4 p-1 hover:bg-alert-100 rounded-lg transition-colors">
               <X size={20} />
             </button>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Global SOS Button */}
-      {selectedChild && (
-        <button 
-          onClick={() => setIsSOSOpen(true)}
-          className="fixed bottom-8 right-8 z-[90] bg-red-600 text-white w-16 h-16 rounded-full shadow-[0_0_20px_rgba(220,38,38,0.4)] flex items-center justify-center hover:scale-110 hover:bg-red-500 transition-all group"
-        >
-          <div className="absolute inset-0 bg-red-500 rounded-full animate-ping opacity-20 pointer-events-none" />
-          <AlertCircle size={28} className="group-hover:animate-pulse" />
-        </button>
-      )}
 
-      {isSOSOpen && (
-        <SOSModal onClose={() => setIsSOSOpen(false)} selectedChild={selectedChild} />
+
+      {isProfileSettingsOpen && selectedChild && (
+        <ProfileSettingsModal
+          child={selectedChild}
+          userRole={user?.role}
+          onClose={() => setIsProfileSettingsOpen(false)}
+          onDelete={() => {
+             setSelectedChild(null);
+             setIsProfileSettingsOpen(false);
+             setActiveTab('home');
+          }}
+        />
       )}
+      
+
 
       {/* Global PIN Modal */}
       <AnimatePresence>
         {pinModalProfile && (
-          <motion.div 
-             initial={{ opacity: 0 }}
-             animate={{ opacity: 1 }}
-             exit={{ opacity: 0 }}
-             className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md"
-          >
-                    <motion.div 
-                       initial={{ scale: 0.95, y: 20 }}
-                       animate={isShaking ? { x: [-10, 10, -10, 10, -5, 5, 0], scale: 1, y: 0 } : { scale: 1, y: 0 }}
-                       transition={{ duration: isShaking ? 0.4 : 0.2 }}
-                       className="bg-white dark:bg-[#0f0f13] p-8 rounded-[2rem] border border-neutral-200 dark:border-gray-800 shadow-2xl max-w-sm w-full mx-4 backdrop-blur-xl relative overflow-hidden"
-                    >
-                      <div className="absolute inset-0 bg-accent/5 opacity-50 blur-3xl rounded-full"></div>
-                      <div className="relative z-10">
-                        <div className="text-center mb-6">
-                          <div className={cn(
-                            "w-24 h-24 mx-auto rounded-2xl flex items-center justify-center text-5xl mb-4 shadow-inner text-white",
-                            `bg-gradient-to-br ${getGradientForChild(pinModalProfile.id)}`
-                          )}>
-                            {pinModalProfile.age >= 18 ? <span className="font-serif">{pinModalProfile.name.charAt(0).toUpperCase()}</span> : pinModalProfile.avatar}
-                          </div>
-                          <h3 className="text-2xl font-serif text-neutral-900 dark:text-white">Enter PIN</h3>
-                          <p className="text-sm text-neutral-500 dark:text-gray-400 mt-1">Unlock {pinModalProfile.name}'s profile session</p>
-                        </div>
-                        <form onSubmit={handlePinSubmit} className="space-y-4">
-                          <div>
-                            <input 
-                              type="password" 
-                              value={enteredPin}
-                              onChange={(e) => setEnteredPin(e.target.value)}
-                              className={cn(
-                                "w-full bg-white dark:bg-neutral-800 border-2 rounded-xl px-4 py-3 text-center text-xl tracking-widest text-neutral-900 dark:text-neutral-100 shadow-inner focus:outline-none transition-colors",
-                                 pinError ? "border-red-500/50 focus:border-red-500" : "border-neutral-200 dark:border-neutral-700 focus:border-accent"
-                              )}
-                              placeholder="••••"
-                              maxLength={32}
-                              autoFocus
-                            />
-                            {pinError && <p className="text-red-400 text-xs mt-2 text-center font-bold animate-fade-in">{pinError}</p>}
-                          </div>
-                          <div className="flex gap-3">
-                            <button type="button" onClick={() => { setPinModalProfile(null); setPinError(''); setEnteredPin(''); }} className="flex-1 py-3 px-4 rounded-xl text-slate-900 dark:text-white bg-slate-100 dark:bg-white/10 font-bold hover:bg-slate-200 dark:hover:bg-white/20 transition-colors">Cancel</button>
-                            <button type="submit" disabled={enteredPin.length === 0} className="flex-1 py-3 px-4 rounded-xl bg-accent text-white dark:text-white font-bold hover:bg-accent-hover transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">Unlock</button>
-                          </div>
-                  <div className="flex flex-col gap-2 items-center text-center pt-2">
-                    <button 
-                      type="button" 
-                      onClick={() => {
-                        setSelectedChild(pinModalProfile);
-                        setPinModalProfile(null);
-                        setEnteredPin('');
-                        setIsAuthenticatedSession(true);
-                        setIsShaking(false);
-                      }}
-                      className="text-accent text-[12px] font-bold hover:text-accent-light underline transition-colors"
-                    >
-                      Parent Override: Authenticate as Admin
-                    </button>
-                    <button 
-                      type="button" 
-                      onClick={() => alert('An email has been sent to the account administrator/parent with instructions to reset this PIN.')}
-                      className="text-gray-400 text-[10px] hover:text-white underline transition-colors"
-                    >
-                      Forgot PIN? Request Admin Reset
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </motion.div>
-          </motion.div>
+          <ProfileVaultModal
+            child={pinModalProfile}
+            enteredPin={enteredPin}
+            setEnteredPin={setEnteredPin}
+            pinError={pinError}
+            isShaking={isShaking}
+            onCancel={() => { setPinModalProfile(null); setPinError(''); setEnteredPin(''); }}
+            onSubmit={handlePinSubmit}
+            onRequestAdminReset={() => alert('An email has been sent to the account administrator/parent with instructions to reset this PIN.')}
+          />
         )}
       </AnimatePresence>
     </div>
@@ -1260,14 +1233,17 @@ function SidebarLink({ icon, label, active, onClick, badge }: {
     <button 
       onClick={onClick}
       className={cn(
-        "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all",
-        active ? "bg-accent-light text-accent shadow-sm" : "text-text-muted hover:bg-surface-2 hover:text-text-main"
+        "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all relative overflow-hidden group",
+        active ? "bg-emerald-500/10 text-emerald-400" : "text-text-muted hover:bg-surface-2 hover:text-text-main"
       )}
     >
-      <span className={cn("transition-colors", active ? "text-accent" : "text-text-dim")}>{icon}</span>
+      {active && (
+         <div className="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500 shadow-[0_0_10px_#10b981]" />
+      )}
+      <span className={cn("transition-colors", active ? "text-emerald-500" : "text-zinc-500 group-hover:text-zinc-400")}>{icon}</span>
       <span>{label}</span>
       {badge !== undefined && (
-        <span className="ml-auto bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+        <span className="ml-auto bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-[0_0_8px_#ef4444]">
           {badge}
         </span>
       )}

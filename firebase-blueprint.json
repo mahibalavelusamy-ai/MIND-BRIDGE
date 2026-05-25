@@ -120,6 +120,22 @@
         "evidence": { "type": "array", "items": { "type": "string" } }
       },
       "required": ["childId", "parentId", "timestamp", "primaryFactor"]
+    },
+    "schedules": {
+      "title": "Schedule Event",
+      "description": "Calendar schedule events",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "subject": { "type": "string" },
+        "title": { "type": "string" },
+        "start": { "type": "string", "format": "date-time" },
+        "end": { "type": "string", "format": "date-time" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" }
+      },
+      "required": ["userId"]
     }
   },
   "firestore": {
@@ -150,6 +166,10 @@
     "/rootCauseAnalyses/{analysisId}": {
       "schema": "rootCauseAnalyses",
       "description": "Root cause analysis records"
+    },
+    "/schedules/{scheduleId}": {
+      "schema": "schedules",
+      "description": "Schedules collection"
     }
   }
 }

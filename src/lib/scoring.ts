@@ -33,13 +33,21 @@ export interface AssessmentResult {
  * @param scores - Object containing scores (1-5) for each category.
  * @returns AssessmentResult object.
  */
-export function calculateAssessmentResult(scores: CategoryScores): AssessmentResult {
+export function calculateAssessmentResult(scores: CategoryScores, textNotes?: string): AssessmentResult {
   let weightedScore = 0;
   
   // Calculate weighted sum
   for (const [category, weight] of Object.entries(CATEGORY_WEIGHTS)) {
     const score = scores[category as keyof CategoryScores] || 3; // Default to neutral if missing
     weightedScore += score * weight;
+  }
+
+  // Apply NLP Sentiment / Weightage Matrix Modifier
+  if (textNotes) {
+    const modifier = analyzeTextRisk(textNotes);
+    weightedScore += modifier;
+    // ensure score stays within 1-5 boundary
+    weightedScore = Math.max(1, Math.min(5, weightedScore));
   }
 
   // Round to 2 decimal places
@@ -60,9 +68,59 @@ export function calculateAssessmentResult(scores: CategoryScores): AssessmentRes
   };
 }
 
-export function generateAlerts(childId: string, scores: CategoryScores, childName: string) {
+/**
+ * Sentiment & Risk Rectification Weightage Matrix
+ * Calculates a risk modifier from text (e.g. notes or intake text) based on predefined keyword weightages.
+ */
+export function analyzeTextRisk(text: string): number {
+  if (!text) return 0;
+  const lower = text.toLowerCase();
+  let riskModifier = 0;
+  
+  // Direct Self-Harm Keywords: Weight = +1.0
+  const severeKeywords = ['self-harm', 'suicide', 'kill', 'die', 'hurt myself', 'end it', 'worthless'];
+  // Isolation/Sleep Keywords: Weight = +0.6
+  const elevatedKeywords = ['isolate', 'isolation', 'alone', 'lonely', 'sleep', 'insomnia', 'tired', 'exhausted', 'withdrawn'];
+  // Positive Growth Keywords: Weight = -0.2
+  const positiveKeywords = ['growth', 'better', 'improve', 'happy', 'positive', 'good', 'healing', 'progress', 'calm'];
+
+  if (severeKeywords.some(kw => lower.includes(kw))) riskModifier += 1.0;
+  if (elevatedKeywords.some(kw => lower.includes(kw))) riskModifier += 0.6;
+  if (positiveKeywords.some(kw => lower.includes(kw))) riskModifier -= 0.2;
+
+  // Cap risk modifier
+  return Math.max(-1, Math.min(riskModifier, 2.0));
+}
+
+export function generateAlerts(childId: string, scores: CategoryScores, childName: string, textNotes?: string) {
   const alerts = [];
   const timestamp = new Date().toISOString();
+
+  if (textNotes) {
+    const lower = textNotes.toLowerCase();
+    const severeKeywords = ['self-harm', 'suicide', 'kill', 'die', 'hurt myself', 'end it', 'worthless'];
+    const elevatedKeywords = ['isolate', 'isolation', 'alone', 'lonely', 'sleep', 'insomnia', 'tired', 'exhausted', 'withdrawn'];
+    
+    if (severeKeywords.some(kw => lower.includes(kw))) {
+      alerts.push({
+        childId,
+        type: 'critical' as const,
+        title: `CRITICAL ALARM — ${childName}`,
+        description: `Severe risk keywords detected in notes. Immediate intervention required.`,
+        timestamp,
+        status: 'active'
+      });
+    } else if (elevatedKeywords.some(kw => lower.includes(kw))) {
+      alerts.push({
+        childId,
+        type: 'warning' as const,
+        title: `Isolation/Anxiety detected — ${childName}`,
+        description: `Elevated risk keywords detected in notes. Consider checking in.`,
+        timestamp,
+        status: 'active'
+      });
+    }
+  }
 
   if (scores.stress >= 4) {
     alerts.push({

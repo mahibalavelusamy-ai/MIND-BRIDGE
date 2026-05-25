@@ -106,19 +106,19 @@ function NavButton({ active, onClick, icon, label, description }: { active: bool
       className={cn(
         "w-full text-left p-6 rounded-3xl border transition-all flex items-center gap-4 group",
         active 
-          ? "bg-accent text-white border-accent shadow-lg shadow-accent/20" 
+          ? "bg-accent text-bg border-accent shadow-lg shadow-accent/20" 
           : "bg-surface border-border hover:border-accent/50 text-text-main"
       )}
     >
       <div className={cn(
         "w-12 h-12 rounded-2xl flex items-center justify-center transition-colors",
-        active ? "bg-white/20" : "bg-accent-light text-accent"
+        active ? "bg-bg/20" : "bg-accent-light text-accent"
       )}>
         {icon}
       </div>
       <div className="flex-1">
         <p className="font-bold">{label}</p>
-        <p className={cn("text-xs", active ? "text-white/80" : "text-text-dim")}>{description}</p>
+        <p className={cn("text-xs", active ? "text-bg/80" : "text-text-dim")}>{description}</p>
       </div>
       <ChevronRight className={cn("transition-transform", active ? "translate-x-1" : "text-text-dim")} size={18} />
     </button>
@@ -175,7 +175,7 @@ function ConsentSection({ user }: { user: any }) {
   return (
     <div className="space-y-8 animate-fade-in">
       <div className="flex items-center gap-3 mb-6">
-        <div className="p-3 bg-green-100 text-green-600 rounded-2xl">
+        <div className="p-3 bg-alert-50 text-alert-400 rounded-2xl">
           <UserCheck size={24} />
         </div>
         <h2 className="text-2xl font-serif">Consent & Data Rights</h2>
@@ -246,7 +246,7 @@ function AISection() {
   return (
     <div className="space-y-8 animate-fade-in">
       <div className="flex items-center gap-3 mb-6">
-        <div className="p-3 bg-amber-100 text-amber-600 rounded-2xl">
+        <div className="p-3 bg-alert-100 text-alert-500 rounded-2xl">
           <Brain size={24} />
         </div>
         <h2 className="text-2xl font-serif">Ethical AI Framework</h2>
@@ -255,7 +255,7 @@ function AISection() {
       <div className="prose prose-sm max-w-none text-text-muted space-y-6">
         <div className="p-6 bg-surface-2 rounded-3xl border border-border">
           <h3 className="text-lg font-serif text-text-main mb-4 flex items-center gap-2">
-            <Scale size={20} className="text-amber-600" />
+            <Scale size={20} className="text-alert-500" />
             Non-Clinical Disclaimer
           </h3>
           <p>
@@ -266,7 +266,7 @@ function AISection() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-4">
             <h4 className="font-bold text-text-main flex items-center gap-2">
-              <CheckCircle2 size={16} className="text-green-600" />
+              <CheckCircle2 size={16} className="text-alert-400" />
               What AI Does
             </h4>
             <ul className="text-xs space-y-2 list-disc pl-4">
@@ -278,7 +278,7 @@ function AISection() {
           </div>
           <div className="space-y-4">
             <h4 className="font-bold text-text-main flex items-center gap-2">
-              <AlertCircle size={16} className="text-red-600" />
+              <AlertCircle size={16} className="text-alert-600" />
               What AI Does NOT Do
             </h4>
             <ul className="text-xs space-y-2 list-disc pl-4">
@@ -290,8 +290,8 @@ function AISection() {
           </div>
         </div>
 
-        <div className="p-6 bg-amber-50 rounded-3xl border border-amber-100">
-          <h4 className="font-bold text-amber-800 mb-2">Bias Mitigation</h4>
+        <div className="p-6 bg-alert-50 rounded-3xl border border-alert-100">
+          <h4 className="font-bold text-alert-700 mb-2">Bias Mitigation</h4>
           <p className="text-xs">
             We continuously audit our AI prompts to prevent socio-economic, racial, or gender bias in behavioral analysis. Our models are tuned to prioritize child safety while maintaining cultural sensitivity.
           </p>
@@ -429,7 +429,7 @@ function RecommendationsSection() {
 
 function RuleCard({ title, rule, impact }: { title: string; rule: string; impact: string }) {
   return (
-    <div className="p-4 bg-white rounded-2xl border border-border">
+    <div className="p-4 bg-bg rounded-2xl border border-border">
       <h4 className="text-xs font-bold text-purple-600 uppercase mb-2">{title}</h4>
       <p className="text-xs text-text-main font-medium mb-1">{rule}</p>
       <p className="text-[10px] text-text-dim italic">{impact}</p>
@@ -439,7 +439,7 @@ function RuleCard({ title, rule, impact }: { title: string; rule: string; impact
 
 function ExampleBox({ scenario, prediction, logic }: { scenario: string; prediction: string; logic: string }) {
   return (
-    <div className="p-4 bg-white/50 rounded-2xl border border-purple-200">
+    <div className="p-4 bg-bg/50 rounded-2xl border border-purple-200">
       <p className="text-[10px] font-bold text-purple-800 uppercase mb-1">Scenario</p>
       <p className="text-xs font-medium mb-2">{scenario}</p>
       <div className="flex items-center gap-4">
@@ -459,7 +459,7 @@ function ExampleBox({ scenario, prediction, logic }: { scenario: string; predict
 function FeatureCard({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {
   return (
     <div className="p-6 bg-surface-2 rounded-3xl border border-border hover:border-accent/30 transition-colors">
-      <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-accent mb-4 shadow-sm">
+      <div className="w-10 h-10 rounded-xl bg-bg flex items-center justify-center text-accent mb-4 shadow-sm">
         {icon}
       </div>
       <h4 className="font-bold text-sm mb-2">{title}</h4>
@@ -492,16 +492,16 @@ function RBACRow({ label, parent, teacher, counselor }: { label: string; parent:
     <tr className="hover:bg-surface-2 transition-colors">
       <td className="py-4 text-sm font-medium text-text-main">{label}</td>
       <td className="py-4 text-xs">
-        <span className="px-2 py-1 bg-green-100 text-green-700 rounded-md font-bold">{parent}</span>
+        <span className="px-2 py-1 bg-alert-50 text-alert-500 rounded-md font-bold">{parent}</span>
       </td>
       <td className="py-4 text-xs">
         <span className={cn(
           "px-2 py-1 rounded-md font-bold",
-          teacher === 'None' ? "bg-red-50 text-red-600" : "bg-amber-100 text-amber-700"
+          teacher === 'None' ? "bg-alert-50 text-alert-600" : "bg-alert-100 text-alert-600"
         )}>{teacher}</span>
       </td>
       <td className="py-4 text-xs">
-        <span className="px-2 py-1 bg-green-100 text-green-700 rounded-md font-bold">{counselor}</span>
+        <span className="px-2 py-1 bg-alert-50 text-alert-500 rounded-md font-bold">{counselor}</span>
       </td>
     </tr>
   );

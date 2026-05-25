@@ -22,7 +22,6 @@ import { cn, getGradientForChild } from '../lib/utils';
 import { db, auth, collection, addDoc, deleteDoc, doc, query, where, onSnapshot, OperationType, handleFirestoreError, updateDoc, getDocs, orderBy, limit, increment, writeBatch } from '../lib/firebase';
 import { getAIInsights } from '../services/geminiService';
 import { predictFutureRisk } from '../lib/predictiveService';
-import ScheduleSection from './ScheduleSection';
 import { ShieldAlert, Zap, Target } from 'lucide-react';
 import FocusTimer from './FocusTimer';
 
@@ -70,11 +69,10 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
     try {
       await updateDoc(doc(db, 'children', child.id), { 
         pin: newPinValue, 
-        pinSet: true,
-        gems: increment(5)
+        pinSet: true
       });
-      alert("PIN created successfully! You earned 5 credits.");
-      onUpdate({ ...child, pin: newPinValue, pinSet: true, gems: (child.gems || 0) + 5 });
+      alert("PIN created successfully!");
+      onUpdate({ ...child, pin: newPinValue, pinSet: true });
       setShowCreatePinModal(false);
       setNewPinValue('');
       setConfirmPinValue('');
@@ -233,22 +231,22 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
   })();
 
   return (
-    <div className="space-y-8 animate-fade-in">
+    <div className="space-y-8 animate-fade-in pb-12">
       {/* Header */}
-      <div className="glass-card p-8 relative overflow-hidden">
+      <div className="glass-card p-8 relative overflow-hidden border-accent/20">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center gap-8">
           <div className={cn(
-            "w-24 h-24 rounded-2xl flex items-center justify-center text-5xl shadow-inner",
-            child.age >= 18 ? `text-white bg-gradient-to-br ${getGradientForChild(child.id)}` : "bg-accent-light"
+            "w-24 h-24 rounded-[2rem] flex items-center justify-center text-5xl shadow-2xl",
+            child.age >= 18 ? `text-bg bg-gradient-to-br ${getGradientForChild(child.id)} neon-border-blue` : "bg-surface-2 border border-accent neon-border"
           )}>
-            {child.age >= 18 ? <span className="font-serif">{child.name ? child.name.charAt(0).toUpperCase() : '👤'}</span> : child.avatar}
+            {child.age >= 18 ? <span className="font-sans relative z-10">{child.name ? child.name.charAt(0).toUpperCase() : '👤'}</span> : <span className="relative z-10">{child.avatar}</span>}
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2">
-              <h1 className="text-4xl font-serif">{child.name}</h1>
+              <h1 className="text-4xl font-sans tracking-tight font-bold neon-text">{child.name}</h1>
               <span className={cn(
                 "px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest",
-                child.riskLevel === 'low' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                child.riskLevel === 'low' ? "bg-alert-50 text-alert-500" : "bg-alert-100 text-alert-700"
               )}>
                 {child.riskLevel} risk
               </span>
@@ -256,25 +254,36 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
             <p className="text-text-muted mb-6">{child.age} years old • {getStatus(child.age)}{child.age >= 18 ? '' : ` • Grade ${child.grade}`}</p>
             <div className="flex flex-wrap gap-3">
               {(() => {
-                const todayDate = new Date().toISOString().split('T')[0];
-                const hasCheckedInToday = child.lastCheckInDate === todayDate;
+                const today = new Date();
+                const todayDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                
+                let lastCheckInDateString = '';
+                if (child.lastAssessmentTimestamp) {
+                  const d = new Date(child.lastAssessmentTimestamp);
+                  lastCheckInDateString = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                }
+                const hasCheckedInToday = child.lastAssessmentDate === todayDate || lastCheckInDateString === todayDate;
                 
                 return (
                   <div className="flex flex-col gap-2">
-                    <button 
-                      onClick={onStartAssessment}
-                      disabled={hasCheckedInToday}
-                      className={cn(
-                        "px-6 py-2.5 rounded-xl text-sm font-bold uppercase tracking-wider transition-all shadow-lg",
-                        hasCheckedInToday 
-                          ? "bg-slate-100 dark:bg-neutral-800 text-slate-400 dark:text-neutral-500 border border-border cursor-not-allowed" 
-                          : "bg-accent text-white dark:text-white hover:bg-accent-hover shadow-accent/10"
-                      )}
-                    >
-                      {hasCheckedInToday ? 'Check-in Complete for Today' : 'Start Assessment'}
-                    </button>
+                    {hasCheckedInToday ? (
+                      <div className="px-6 py-2.5 rounded-xl text-sm font-bold uppercase tracking-wider transition-all shadow-sm bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 dark:text-emerald-400 flex items-center justify-center gap-2">
+                         <span className="relative flex h-2 w-2">
+                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                           <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                         </span>
+                         Check-in Complete
+                      </div>
+                    ) : (
+                      <button 
+                        onClick={onStartAssessment}
+                        className="px-6 py-2.5 rounded-xl text-sm font-bold uppercase tracking-wider transition-all shadow-lg bg-accent text-bg dark:text-bg hover:bg-accent-hover shadow-accent/10"
+                      >
+                        Start Assessment
+                      </button>
+                    )}
                     {hasCheckedInToday && (
-                      <p className="text-[10px] font-bold text-accent dark:text-slate-200 animate-fade-in text-center">
+                      <p className="text-[10px] font-bold text-accent dark:text-emerald-400 animate-fade-in text-center mt-1">
                         Great job maintaining your streak! See you tomorrow.
                       </p>
                     )}
@@ -294,7 +303,7 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
                 className={cn(
                   "px-6 py-2.5 rounded-xl text-sm font-bold uppercase tracking-wider transition-all border flex items-center gap-2",
                   child.consentToSchoolSharing 
-                    ? "bg-green-50 text-green-700 border-green-200" 
+                    ? "bg-alert-50 text-alert-500 border-alert-100" 
                     : "bg-surface border-border text-text-dim hover:text-text-main"
                 )}
               >
@@ -338,7 +347,7 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
               {!child.pinSet ? (
                 <button
                   onClick={() => setShowCreatePinModal(true)}
-                  className="px-6 py-2.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-xl text-sm font-bold uppercase tracking-wider hover:bg-amber-100 transition-all flex items-center gap-2"
+                  className="px-6 py-2.5 bg-alert-50 text-alert-600 border border-alert-100 rounded-xl text-sm font-bold uppercase tracking-wider hover:bg-alert-100 transition-all flex items-center gap-2"
                   title="Earn +5 credits!"
                 >
                   <Lock size={16} /> Create Profile PIN
@@ -363,7 +372,7 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
             </div>
             <div className="p-4 bg-surface-2 rounded-xl border border-border text-center">
               <p className="text-[10px] font-bold text-text-dim uppercase mb-1">Stress</p>
-              <p className="text-2xl font-serif font-bold text-amber-600">{child.stressLevel}</p>
+              <p className="text-2xl font-serif font-bold text-alert-500">{child.stressLevel}</p>
             </div>
             <div className="p-4 bg-surface-2 rounded-xl border border-border text-center">
               <p className="text-[10px] font-bold text-text-dim uppercase mb-1">{child.age >= 18 ? 'Credits' : 'Mind Gems'}</p>
@@ -476,14 +485,14 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
             <div className="mt-8 flex justify-between items-center">
               <button 
                 onClick={() => setShowDeleteConfirm(true)}
-                className="flex items-center gap-2 px-6 py-2.5 text-red-500 bg-red-50 hover:bg-red-100 rounded-lg font-medium transition-all"
+                className="flex items-center gap-2 px-6 py-2.5 text-alert-500 bg-alert-50 hover:bg-alert-100 rounded-lg font-medium transition-all"
               >
                 <Trash2 size={18} /> Delete Profile
               </button>
               <button 
                 onClick={handleSave}
                 disabled={isSaving}
-                className="flex items-center gap-2 px-6 py-2.5 bg-accent text-white rounded-lg font-medium hover:bg-accent-hover transition-all disabled:opacity-50"
+                className="flex items-center gap-2 px-6 py-2.5 bg-accent text-bg rounded-lg font-medium hover:bg-accent-hover transition-all disabled:opacity-50"
               >
                 {isSaving ? "Saving..." : <><Save size={18} /> Save Changes</>}
               </button>
@@ -520,8 +529,6 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
               </div>
             </div>
           </div>
-
-          <ScheduleSection childId={child.id} />
         </div>
 
         <div className="space-y-6">
@@ -601,7 +608,7 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
                   <button 
                     type="submit"
                     disabled={isSaving}
-                    className="w-full bg-accent text-white py-3 rounded-xl text-sm font-bold shadow hover:bg-accent-hover transition-all disabled:opacity-50"
+                    className="w-full bg-accent text-bg py-3 rounded-xl text-sm font-bold shadow hover:bg-accent-hover transition-all disabled:opacity-50"
                   >
                     {isSaving ? "Updating..." : "Update PIN"}
                   </button>
@@ -611,14 +618,14 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
           )}
 
           {/* Danger Zone */}
-          <div className="glass-card p-6 border-red-100 dark:border-red-900/30">
-            <div className="flex items-center gap-2 text-red-600 font-bold text-xs uppercase tracking-widest mb-4">
+          <div className="glass-card p-6 border-alert-100 dark:border-alert-900/30">
+            <div className="flex items-center gap-2 text-alert-600 font-bold text-xs uppercase tracking-widest mb-4">
               <AlertCircle size={14} /> Danger Zone
             </div>
             <p className="text-xs text-text-muted mb-4">Once you delete a profile, there is no going back. Please be certain.</p>
             <button 
               onClick={() => setShowDeleteConfirm(true)}
-              className="w-full py-3 border border-red-200 text-red-600 rounded-xl text-sm font-bold hover:bg-red-50 transition-all flex items-center justify-center gap-2 uppercase tracking-wide"
+              className="w-full py-3 border border-alert-200 text-alert-600 rounded-xl text-sm font-bold hover:bg-alert-50 transition-all flex items-center justify-center gap-2 uppercase tracking-wide"
             >
               <Trash2 size={16} />
               Delete Profile
@@ -630,32 +637,12 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-          <div className="bg-surface rounded-3xl w-full max-w-sm p-8 shadow-2xl relative overflow-hidden animate-fade-in text-center border border-border">
-            <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Trash2 size={32} />
-            </div>
-            <h2 className="text-2xl font-serif font-bold text-text-main mb-2">Delete Profile?</h2>
-            <p className="text-sm text-text-muted mb-8 text-center px-4">
-              This action is irreversible. All data for <strong>{child.name}</strong> will be permanently removed.
-            </p>
-            <div className="flex gap-4">
-              <button 
-                onClick={() => setShowDeleteConfirm(false)}
-                className="flex-1 py-3 px-4 bg-surface-2 border border-border rounded-xl text-sm font-bold hover:bg-border transition-all"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={handleDelete}
-                disabled={isSaving}
-                className="flex-1 py-3 px-4 bg-red-600 text-white rounded-xl text-sm font-bold hover:bg-red-700 transition-all shadow-lg shadow-red-200 disabled:opacity-50"
-              >
-                {isSaving ? "Deleting..." : "Delete"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <DeleteConfirmModal 
+          childName={child.name} 
+          onCancel={() => setShowDeleteConfirm(false)} 
+          onConfirm={handleDelete} 
+          isSaving={isSaving} 
+        />
       )}
 
       {/* Create PIN Modal */}
@@ -696,7 +683,7 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
                 <button 
                   type="submit"
                   disabled={isSaving}
-                  className="flex-1 py-3 px-4 bg-accent text-white rounded-xl text-sm font-bold hover:bg-accent-hover transition-all shadow-lg shadow-accent/20 disabled:opacity-50"
+                  className="flex-1 py-3 px-4 bg-accent text-bg rounded-xl text-sm font-bold hover:bg-accent-hover transition-all shadow-lg shadow-accent/20 disabled:opacity-50"
                 >
                   {isSaving ? "Saving..." : "Save PIN"}
                 </button>
@@ -729,6 +716,46 @@ function SummaryBox({ label, value, color }: { label: string; value: string; col
     <div className="bg-surface-2 p-4 rounded-lg text-center">
       <p className="text-[10px] font-bold text-text-dim uppercase mb-1">{label}</p>
       <p className={cn("text-xl font-serif font-bold", color)}>{value}</p>
+    </div>
+  );
+}
+
+function DeleteConfirmModal({ childName, onCancel, onConfirm, isSaving }: { childName: string; onCancel: () => void; onConfirm: () => void; isSaving: boolean; }) {
+  const [confirmText, setConfirmText] = useState("");
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+      <div className="bg-surface rounded-3xl w-full max-w-sm p-8 shadow-2xl relative overflow-hidden animate-fade-in text-center border border-border">
+        <div className="w-16 h-16 bg-alert-100 text-alert-600 rounded-full flex items-center justify-center mx-auto mb-6">
+          <Trash2 size={32} />
+        </div>
+        <h2 className="text-2xl font-serif font-bold text-text-main mb-2">Delete Profile?</h2>
+        <p className="text-sm text-text-muted mb-4 text-center px-4">
+          This action is irreversible. All data for <strong>{childName}</strong> will be permanently removed.
+        </p>
+        <p className="text-sm font-bold text-alert-600 mb-2">Type "DELETE" to confirm:</p>
+        <input 
+          type="text" 
+          value={confirmText}
+          onChange={(e) => setConfirmText(e.target.value)}
+          placeholder="DELETE"
+          className="w-full p-3 rounded-lg border border-border bg-surface-2 mb-6 text-center tracking-widest font-bold focus:border-alert-500 outline-none"
+        />
+        <div className="flex gap-4">
+          <button 
+            onClick={onCancel}
+            className="flex-1 py-3 px-4 bg-surface-2 border border-border rounded-xl text-sm font-bold hover:bg-border transition-all"
+          >
+            Cancel
+          </button>
+          <button 
+            onClick={onConfirm}
+            disabled={isSaving || confirmText !== "DELETE"}
+            className="flex-1 py-3 px-4 bg-alert-600 text-bg rounded-xl text-sm font-bold hover:bg-alert-700 transition-all shadow-lg shadow-alert-200 disabled:opacity-50"
+          >
+            {isSaving ? "Deleting..." : "Delete"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

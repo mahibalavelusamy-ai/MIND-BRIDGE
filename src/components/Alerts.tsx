@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { AlertCircle, Bell, Info, Trash2, CheckCircle2, Check, Loader2, BellRing, BellOff } from 'lucide-react';
 import { Alert } from '../types';
 import { cn } from '../lib/utils';
-import { db, collection, query, onSnapshot, orderBy } from '../lib/firebase';
+import { db, collection, query, onSnapshot, orderBy, where, auth } from '../lib/firebase';
 
 interface AlertsProps {
   alerts: Alert[];
@@ -18,31 +18,68 @@ export default function Alerts({ alerts, onDismiss, onMarkRead }: AlertsProps) {
   const [notifsEnabled, setNotifsEnabled] = useState(
     localStorage.getItem('notificationsEnabled') === 'true'
   );
+  
+  const [showToast, setShowToast] = useState(false);
+  const [mockDismissed, setMockDismissed] = useState<Set<string>>(new Set());
+  const [mockRead, setMockRead] = useState<Set<string>>(new Set());
+
+  // Assessment mock alerts
+  const assessmentMockAlerts: Alert[] = [
+    {
+      id: 'mock-1',
+      title: 'Maddy completed the Anxiety Screening',
+      description: 'The anxiety screening was completed today with a score within the moderate range. Please review the detailed assessment below to see localized trends regarding generalized anxiety over the last term.',
+      type: 'warning',
+      timestamp: new Date().toISOString(),
+      read: false,
+      childId: 'all'
+    },
+    {
+      id: 'mock-2',
+      title: 'Action Plan updated for Mike',
+      description: 'The clinical team has updated the action plan for Mike, putting more focus on reducing sleep deprivation before big test days. Tap to review the adjusted recommendations.',
+      type: 'info',
+      timestamp: new Date(Date.now() - 3600000).toISOString(),
+      read: true,
+      childId: 'all'
+    },
+    {
+      id: 'mock-3',
+      title: 'Assessment Overdue',
+      description: 'A required bi-weekly routine assessment has not been completed. This lapse delays the algorithm from building an accurate baseline of the current mood trend.',
+      type: 'critical',
+      timestamp: new Date(Date.now() - 86400000).toISOString(),
+      read: false,
+      childId: 'all'
+    }
+  ];
+
+  const combinedAlerts = [
+    ...assessmentMockAlerts
+       .filter(a => !mockDismissed.has(a.id))
+       .map(a => ({ ...a, read: mockRead.has(a.id) ? true : a.read })),
+    ...alerts
+  ];
 
   useEffect(() => {
-    // Setting up the notification listener inside Alerts.tsx as requested
-    const q = query(collection(db, 'alerts'), orderBy('timestamp', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      // Only trigger notifications if enabled and granted
-      if (notifsEnabled && 'Notification' in window && Notification.permission === 'granted') {
-        snapshot.docChanges().forEach((change) => {
-          if (change.type === 'added') {
-            const data = change.doc.data();
-            // Check if read is false, and ensure it's a new alert (not old data loaded on mount)
-            const isRecent = data.timestamp ? (new Date().getTime() - new Date(data.timestamp).getTime() < 1000 * 60) : true;
-            if (!data.read && isRecent) {
-              new Notification(data.title || 'New Alert', {
-                body: data.description ? data.description.substring(0, 100) + '...' : 'A clinical concern requires your attention.',
-                icon: '/favicon.ico'
-              });
-            }
-          }
-        });
-      }
-    });
-
-    return () => unsubscribe();
-  }, [notifsEnabled]);
+    // Only trigger notifications if enabled and granted
+    if (notifsEnabled && 'Notification' in window && Notification.permission === 'granted') {
+      alerts.forEach((alert) => {
+        // Check if read is false, and ensure it's a new alert (not old data loaded on mount)
+        const isRecent = alert.timestamp ? (new Date().getTime() - new Date(alert.timestamp).getTime() < 1000 * 60 * 5) : true;
+        
+        // Use a simple tracking mechanism using localStorage or session to avoid duplicate notifications
+        const notifiedKey = `notified_${alert.id}`;
+        if (!alert.read && isRecent && !sessionStorage.getItem(notifiedKey)) {
+          new Notification(alert.title || 'New Alert', {
+            body: alert.description ? alert.description.substring(0, 100) + '...' : 'A clinical concern requires your attention.',
+            icon: '/favicon.ico'
+          });
+          sessionStorage.setItem(notifiedKey, 'true');
+        }
+      });
+    }
+  }, [alerts, notifsEnabled]);
 
   const toggleNotifications = async () => {
     if (!notifsEnabled) {
@@ -51,6 +88,8 @@ export default function Alerts({ alerts, onDismiss, onMarkRead }: AlertsProps) {
         if (permission === 'granted') {
           localStorage.setItem('notificationsEnabled', 'true');
           setNotifsEnabled(true);
+          setShowToast(true);
+          setTimeout(() => setShowToast(false), 3000);
         } else {
           alert("Notification permission denied. Please enable them in your browser settings.");
         }
@@ -63,9 +102,13 @@ export default function Alerts({ alerts, onDismiss, onMarkRead }: AlertsProps) {
     }
   };
 
-  const filteredAlerts = alerts.filter(a => filter === 'all' || a.type === filter);
+  const filteredAlerts = combinedAlerts.filter(a => filter === 'all' || a.type === filter);
 
   const handleDismiss = async (id: string) => {
+    if (id.startsWith('mock-')) {
+       setMockDismissed(prev => new Set(prev).add(id));
+       return;
+    }
     try {
       setResolvingIds(prev => new Set(prev).add(id));
       await onDismiss(id);
@@ -82,6 +125,10 @@ export default function Alerts({ alerts, onDismiss, onMarkRead }: AlertsProps) {
   };
 
   const handleMarkRead = async (id: string) => {
+    if (id.startsWith('mock-')) {
+       setMockRead(prev => new Set(prev).add(id));
+       return;
+    }
     try {
       setReadingIds(prev => new Set(prev).add(id));
       await onMarkRead(id);
@@ -114,22 +161,35 @@ export default function Alerts({ alerts, onDismiss, onMarkRead }: AlertsProps) {
   };
 
   return (
-    <div className="space-y-8 animate-fade-in pb-12">
+    <div className="space-y-8 animate-fade-in pb-12 relative">
+      <AnimatePresence>
+        {showToast && (
+           <motion.div 
+             initial={{ opacity: 0, y: -20 }}
+             animate={{ opacity: 1, y: 0 }}
+             exit={{ opacity: 0, scale: 0.9 }}
+             className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] bg-surface-2 border-2 border-emerald-500/50 text-emerald-400 px-6 py-3 rounded-2xl shadow-xl flex items-center gap-3 font-bold text-sm"
+           >
+             <CheckCircle2 size={18} />
+             Notifications successfully enabled!
+           </motion.div>
+        )}
+      </AnimatePresence>
       <div className="page-header flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-serif tracking-tight flex items-center gap-3">
+          <h1 className="text-4xl font-serif tracking-tight flex items-center gap-3 text-text-main">
             Alert Center
-            {alerts.filter(a => !a.read).length > 0 && <span className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />}
+            {combinedAlerts.filter(a => !a.read).length > 0 && <span className="w-3 h-3 bg-alert-500 rounded-full animate-pulse shadow-md" />}
           </h1>
           <p className="text-text-muted mt-1">Real-time mental health notifications and expert recommendations.</p>
         </div>
         <button
           onClick={toggleNotifications}
           className={cn(
-            "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm",
+            "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm border",
             notifsEnabled 
-              ? "bg-green-100 text-green-700 hover:bg-green-200 border border-green-200"
-              : "bg-surface-2 text-text-muted border hover:text-text-main border-border"
+              ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border-emerald-500/50"
+              : "bg-surface-2 text-text-muted hover:text-text-main border-border hover:border-accent"
           )}
         >
           {notifsEnabled ? <BellRing size={16} /> : <BellOff size={16} />}
@@ -143,11 +203,11 @@ export default function Alerts({ alerts, onDismiss, onMarkRead }: AlertsProps) {
             key={f}
             onClick={() => setFilter(f)}
             className={cn(
-              "px-6 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all",
-              filter === f ? "bg-accent text-white shadow-lg shadow-accent/20" : "text-text-dim hover:text-text-muted"
+              "px-6 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all border",
+              filter === f ? "border-accent bg-accent text-bg shadow-lg shadow-accent/20" : "border-border text-text-dim hover:text-text-main hover:border-accent/50 bg-surface-2"
             )}
           >
-            {f} ({f === 'all' ? alerts.length : alerts.filter(a => a.type === f).length})
+            {f} ({f === 'all' ? combinedAlerts.length : combinedAlerts.filter(a => a.type === f).length})
           </button>
         ))}
       </div>
@@ -175,18 +235,18 @@ export default function Alerts({ alerts, onDismiss, onMarkRead }: AlertsProps) {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 className={cn(
-                  "group relative flex flex-col md:flex-row gap-6 p-8 glass-card transition-all",
-                  alert.type === 'critical' ? "shadow-[0_8px_32px_rgba(220,38,38,0.15)]" : 
-                  alert.type === 'warning' ? "shadow-[0_8px_32px_rgba(217,119,6,0.15)]" : 
-                  "",
+                  "group relative flex flex-col md:flex-row gap-6 p-8 bg-surface-2 border border-border border-l-4 transition-all rounded-[2rem]",
+                  alert.type === 'critical' ? "border-l-alert-500 shadow-lg hover:border-alert-500/50" : 
+                  alert.type === 'warning' ? "border-l-alert-300 shadow-md hover:border-alert-300/50" : 
+                  "border-l-accent shadow-sm hover:border-accent/50",
                   alert.read ? "opacity-60" : "opacity-100"
                 )}
               >
                 <div className={cn(
-                  "w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm",
-                  alert.type === 'critical' ? "bg-red-100 text-red-600 border border-red-200" : 
-                  alert.type === 'warning' ? "bg-amber-100 text-amber-600 border border-amber-200" : 
-                  "bg-blue-100 text-blue-600 border border-blue-200"
+                  "w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm border",
+                  alert.type === 'critical' ? "bg-alert-100 text-alert-600 border-alert-200" : 
+                  alert.type === 'warning' ? "bg-alert-50 text-alert-500 border-alert-100" : 
+                  "bg-accent-light text-accent border-accent/20"
                 )}>
                   {alert.type === 'critical' ? <AlertCircle size={28} /> : 
                    alert.type === 'warning' ? <Bell size={28} /> : 
@@ -195,21 +255,18 @@ export default function Alerts({ alerts, onDismiss, onMarkRead }: AlertsProps) {
                 
                 <div className="flex-1">
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-3">
-                    <h4 className={cn(
-                      "text-xl font-serif font-semibold",
-                      alert.type === 'critical' ? "text-red-800" : 
-                      alert.type === 'warning' ? "text-amber-800" : 
-                      "text-blue-800"
-                    )}>{alert.title}</h4>
+                    <h4 className="text-xl font-serif font-bold text-text-main">
+                      {alert.title}
+                    </h4>
                     <div className="flex items-center gap-2">
                        {!alert.read && (
-                          <span className="w-2 h-2 rounded-full bg-accent animate-pulse" title="Unread" />
+                          <span className="w-2 h-2 rounded-full bg-accent animate-pulse shadow-sm" title="Unread" />
                        )}
                        <span className={cn(
                         "text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full w-fit",
-                        alert.type === 'critical' ? "bg-red-200 text-red-800" : 
-                        alert.type === 'warning' ? "bg-amber-200 text-amber-800" : 
-                        "bg-blue-200 text-blue-800"
+                        alert.type === 'critical' ? "bg-alert-200 text-alert-700" : 
+                        alert.type === 'warning' ? "bg-alert-100 text-alert-600" : 
+                        "bg-accent-light text-accent"
                       )}>
                         {alert.type} Priority
                       </span>
@@ -227,7 +284,7 @@ export default function Alerts({ alerts, onDismiss, onMarkRead }: AlertsProps) {
                         <button 
                           onClick={() => handleMarkRead(alert.id)}
                           disabled={readingIds.has(alert.id)}
-                          className="flex items-center gap-1.5 px-4 py-2 bg-surface-2 border border-border text-text-main text-xs font-bold rounded-xl hover:bg-white hover:text-accent disabled:opacity-50 transition-all shadow-sm"
+                          className="flex items-center gap-1.5 px-4 py-2 bg-surface-2 border border-border text-text-main text-xs font-bold rounded-xl hover:bg-bg hover:text-accent disabled:opacity-50 transition-all shadow-sm"
                         >
                           {readingIds.has(alert.id) ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} 
                           Mark as Read
@@ -237,14 +294,14 @@ export default function Alerts({ alerts, onDismiss, onMarkRead }: AlertsProps) {
                       <button 
                         onClick={() => handleDismiss(alert.id)}
                         disabled={resolvingIds.has(alert.id)}
-                        className="flex items-center gap-1.5 px-4 py-2 bg-surface-2 border border-border text-text-main text-xs font-bold rounded-xl hover:bg-white hover:text-accent disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+                        className="flex items-center gap-1.5 px-4 py-2 bg-surface-2 border border-border text-text-main text-xs font-bold rounded-xl hover:bg-bg hover:text-accent disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
                       >
                         {resolvingIds.has(alert.id) ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} 
                         {resolvingIds.has(alert.id) ? "Resolving..." : "Resolve"}
                       </button>
                       
                       {alert.type === 'critical' && (
-                        <button className="px-5 py-2 bg-red-600 text-white text-xs font-bold rounded-xl hover:bg-red-700 transition-all shadow-lg shadow-red-600/20">
+                        <button className="px-5 py-2 bg-alert-600 text-bg text-xs font-bold rounded-xl hover:bg-alert-700 transition-all shadow-lg shadow-alert-600/20">
                           Take Immediate Action
                         </button>
                       )}

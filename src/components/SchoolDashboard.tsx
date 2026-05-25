@@ -56,32 +56,39 @@ const MOCK_HEATMAP_DATA = [
 interface SchoolDashboardProps {
   user: any;
   initialTab?: 'overview' | 'classes' | 'analytics';
+  privacyBlur?: boolean;
 }
 
 const COLORS = ['#2d7a5a', '#c47a1e', '#c0392b'];
 
-export default function SchoolDashboard({ user, initialTab = 'overview' }: SchoolDashboardProps) {
-  const [isAnonymized, setIsAnonymized] = useState(false);
+export default function SchoolDashboard({ user, initialTab = 'overview', privacyBlur = false }: SchoolDashboardProps) {
+  const [isAnonymized, setIsAnonymized] = useState(privacyBlur);
   const [activeView, setActiveView] = useState(initialTab);
   const [selectedGrade, setSelectedGrade] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
 
   useEffect(() => {
+    setIsAnonymized(privacyBlur);
+  }, [privacyBlur]);
+
+  useEffect(() => {
     setActiveView(initialTab);
   }, [initialTab]);
 
-  const selectedClass = MOCK_CLASSES.find(c => c.id === selectedClassId);
+  const displayClasses = user?.role === 'school_admin' ? MOCK_CLASSES : MOCK_CLASSES.slice(0, 3);
 
-  const filteredClasses = MOCK_CLASSES.filter(c => 
+  const selectedClass = displayClasses.find(c => c.id === selectedClassId);
+
+  const filteredClasses = displayClasses.filter(c => 
     (selectedGrade === 'All' || c.grade === selectedGrade) &&
     (c.name.toLowerCase().includes(searchQuery.toLowerCase()) || c.teacher.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const riskDistribution = [
-    { name: 'Low Risk', value: MOCK_CLASSES.filter(c => c.riskLevel === 'low').length },
-    { name: 'Medium Risk', value: MOCK_CLASSES.filter(c => c.riskLevel === 'medium').length },
-    { name: 'High Risk', value: MOCK_CLASSES.filter(c => c.riskLevel === 'high').length },
+    { name: 'Low Risk', value: displayClasses.filter(c => c.riskLevel === 'low').length || 1 },
+    { name: 'Medium Risk', value: displayClasses.filter(c => c.riskLevel === 'medium').length || 0 },
+    { name: 'High Risk', value: displayClasses.filter(c => c.riskLevel === 'high').length || 0 },
   ];
 
   if (selectedClass) {
@@ -114,7 +121,7 @@ export default function SchoolDashboard({ user, initialTab = 'overview' }: Schoo
                 <p className="text-[10px] font-bold text-text-dim uppercase mb-1">Risk Level</p>
                 <p className={cn(
                   "text-2xl font-serif font-bold capitalize",
-                  selectedClass.riskLevel === 'low' ? "text-green-600" : selectedClass.riskLevel === 'medium' ? "text-amber-600" : "text-red-600"
+                  selectedClass.riskLevel === 'low' ? "text-alert-400" : selectedClass.riskLevel === 'medium' ? "text-alert-500" : "text-alert-600"
                 )}>{selectedClass.riskLevel}</p>
               </div>
             </div>
@@ -124,7 +131,7 @@ export default function SchoolDashboard({ user, initialTab = 'overview' }: Schoo
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-surface border border-border rounded-[2rem] p-8 shadow-sm">
             <h3 className="text-xl font-serif mb-6">Class Mood Trend</h3>
-            <div className="h-[300px]">
+            <div className="min-h-[350px] w-full h-[350px]">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={[
                   { day: 'Mon', score: 7.5 },
@@ -143,23 +150,41 @@ export default function SchoolDashboard({ user, initialTab = 'overview' }: Schoo
             </div>
           </div>
           
-          <div className="bg-surface border border-border rounded-[2rem] p-8 shadow-sm">
-            <h3 className="text-xl font-serif mb-6">Student Risk Breakdown</h3>
-            <div className="space-y-4">
-              {[
-                { label: 'High Risk (Immediate Action)', count: 2, color: 'bg-red-500' },
-                { label: 'Medium Risk (Monitor)', count: 5, color: 'bg-amber-500' },
-                { label: 'Low Risk (Stable)', count: 21, color: 'bg-accent' },
-              ].map((item, i) => (
-                <div key={i} className="p-4 bg-surface-2 rounded-2xl border border-border flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={cn("w-3 h-3 rounded-full", item.color)} />
-                    <span className="text-sm font-medium">{item.label}</span>
+          <div className="bg-surface border border-border rounded-[2rem] p-8 shadow-sm flex flex-col justify-between">
+            <div>
+              <h3 className="text-xl font-serif mb-6">Student Risk Breakdown</h3>
+              <div className="space-y-4">
+                {[
+                  { label: 'High Risk (Immediate Action)', count: 2, color: 'bg-alert-500' },
+                  { label: 'Medium Risk (Monitor)', count: 5, color: 'bg-alert-400' },
+                  { label: 'Low Risk (Stable)', count: 21, color: 'bg-accent' },
+                ].map((item, i) => (
+                  <div key={i} className="p-4 bg-surface-2 rounded-2xl border border-border flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={cn("w-3 h-3 rounded-full", item.color)} />
+                      <span className="text-sm font-medium">{item.label}</span>
+                    </div>
+                    <span className="font-bold">{item.count} Students</span>
                   </div>
-                  <span className="font-bold">{item.count} Students</span>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
+            {user?.role === 'teacher' && (
+              <div className="mt-8 pt-6 border-t border-border">
+                <h4 className="font-sans font-bold text-sm mb-3 text-text-main flex items-center gap-2">
+                  <Activity size={16} className="text-accent" />
+                  Nudge System
+                </h4>
+                <div className="flex gap-2">
+                  <button className="flex-1 bg-surface-2 hover:bg-border text-text-main text-xs font-bold py-2 px-3 rounded-xl border border-border transition-colors">
+                    Send Encouragement
+                  </button>
+                  <button className="flex-1 bg-surface-2 hover:bg-border text-text-main text-xs font-bold py-2 px-3 rounded-xl border border-border transition-colors">
+                    Planner Reminder
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -171,11 +196,13 @@ export default function SchoolDashboard({ user, initialTab = 'overview' }: Schoo
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <h1 className="text-4xl font-serif tracking-tight flex items-center gap-3">
+          <h1 className="text-4xl font-sans tracking-tight font-bold flex items-center gap-3 text-white">
             <School className="text-accent" size={36} />
-            School Wellness Portal
+            {user?.role === 'school_admin' ? 'School Admin Portal' : 'Teacher Portal'}
           </h1>
-          <p className="text-text-muted mt-1">Institutional overview of student mental health and behavioral trends.</p>
+          <p className="text-text-muted mt-1">
+            {user?.role === 'school_admin' ? 'Institutional overview of student mental health and behavioral trends.' : 'Classroom engagement, wellness monitoring, and early support orchestration.'}
+          </p>
         </div>
         
         <div className="flex items-center gap-3 bg-surface border border-border p-2 rounded-2xl shadow-sm">
@@ -183,7 +210,7 @@ export default function SchoolDashboard({ user, initialTab = 'overview' }: Schoo
             onClick={() => setIsAnonymized(!isAnonymized)}
             className={cn(
               "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all",
-              isAnonymized ? "bg-accent text-white" : "bg-surface-2 text-text-dim hover:text-text-main"
+              isAnonymized ? "bg-accent text-bg" : "bg-surface-2 text-text-dim hover:text-text-main"
             )}
           >
             {isAnonymized ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -205,7 +232,7 @@ export default function SchoolDashboard({ user, initialTab = 'overview' }: Schoo
             className={cn(
               "px-6 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all",
               activeView === v 
-                ? "bg-accent text-white shadow-lg shadow-accent/20" 
+                ? "bg-accent text-bg shadow-lg shadow-accent/20" 
                 : "text-text-dim hover:text-text-main"
             )}
           >
@@ -218,32 +245,32 @@ export default function SchoolDashboard({ user, initialTab = 'overview' }: Schoo
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <StatCard 
             icon={<Users size={20} />} 
-            label="Total Students" 
-            value={MOCK_SCHOOL_STATS.totalStudents.toString()} 
-            subValue="Across 12 Classes"
-            color="bg-blue-50 text-blue-600"
+            label={user?.role === 'school_admin' ? "Total Students" : "My Students"} 
+            value={user?.role === 'school_admin' ? MOCK_SCHOOL_STATS.totalStudents.toString() : "86"} 
+            subValue={user?.role === 'school_admin' ? "Across 12 Classes" : "Across 3 Classes"}
+            color="bg-neon-blue-light text-neon-blue"
           />
           <StatCard 
             icon={<AlertTriangle size={20} />} 
             label="Students At Risk" 
-            value={MOCK_SCHOOL_STATS.atRiskCount.toString()} 
+            value={user?.role === 'school_admin' ? MOCK_SCHOOL_STATS.atRiskCount.toString() : "4"} 
             subValue="Requires Attention"
-            color="bg-red-50 text-red-600"
-            isUrgent={MOCK_SCHOOL_STATS.atRiskCount > 10}
+            color="bg-alert-500/20 text-alert-500"
+            isUrgent={user?.role === 'school_admin' ? MOCK_SCHOOL_STATS.atRiskCount > 10 : false}
           />
           <StatCard 
             icon={<Activity size={20} />} 
-            label="Avg School Mood" 
+            label={user?.role === 'school_admin' ? "Avg School Mood" : "Avg Class Mood"} 
             value={`${MOCK_SCHOOL_STATS.avgMood}/10`} 
             subValue={`${MOCK_SCHOOL_STATS.moodTrend > 0 ? '↑' : '↓'} ${Math.abs(MOCK_SCHOOL_STATS.moodTrend)} from last week`}
             color="bg-accent-light text-accent"
           />
           <StatCard 
             icon={<ShieldCheck size={20} />} 
-            label="Compliance Status" 
+            label="Data Protection" 
             value="Secure" 
-            subValue="GDPR & HIPAA Compliant"
-            color="bg-green-50 text-green-600"
+            subValue="HIPAA / FERPA Ready"
+            color="bg-accent-light text-accent"
           />
         </div>
       )}
@@ -251,69 +278,91 @@ export default function SchoolDashboard({ user, initialTab = 'overview' }: Schoo
       {/* Main Bento Grid */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
         
-        {/* Class Wellness Heatmap */}
+        {/* Dashboard Analytics & Admin Alerts */}
         {(activeView === 'overview' || activeView === 'analytics') && (
-          <div className="md:col-span-8 bg-surface border border-border rounded-[2rem] p-8 shadow-sm">
-            <div className="flex items-center justify-between mb-8">
-              <div>
-                <h3 className="text-xl font-serif">Class Wellness Heatmap</h3>
-                <p className="text-xs text-text-dim">Daily average mood scores per class</p>
+          <>
+            <div className="md:col-span-8 bg-surface border border-border rounded-[2rem] p-8 shadow-sm">
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h3 className="text-xl font-serif">Class Wellness Heatmap</h3>
+                  <p className="text-xs text-text-dim">Daily average mood scores per class</p>
+                </div>
+                <div className="flex gap-2">
+                  {['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map(day => (
+                    <span key={day} className="text-[10px] font-bold text-text-dim uppercase w-8 text-center">{day}</span>
+                  ))}
+                </div>
               </div>
-              <div className="flex gap-2">
-                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map(day => (
-                  <span key={day} className="text-[10px] font-bold text-text-dim uppercase w-8 text-center">{day}</span>
+              
+              <div className="space-y-4">
+                {MOCK_HEATMAP_DATA.map((row, i) => (
+                  <div key={i} className="flex items-center gap-4">
+                    <div className="w-20 text-xs font-bold text-text-muted">{isAnonymized ? `Class ${i+1}` : row.class}</div>
+                    <div className="flex-1 flex gap-2">
+                      {[row.Mon, row.Tue, row.Wed, row.Thu, row.Fri].map((score, j) => (
+                        <div 
+                          key={j}
+                          className="flex-1 h-12 rounded-xl transition-all hover:scale-105 cursor-help relative group"
+                          style={{ 
+                            backgroundColor: score >= 8 ? 'var(--color-accent)' : 
+                                             score >= 6 ? 'var(--color-accent-light)' : 
+                                             score >= 4 ? '#f39c12' : '#e74c3c',
+                            opacity: 0.2 + (score / 10) * 0.8
+                          }}
+                        >
+                          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 text-bg font-bold text-xs transition-opacity">
+                            {score}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
+              
+              <div className="mt-8 flex items-center justify-end gap-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded bg-[#e74c3c]" />
+                  <span className="text-[10px] text-text-dim font-bold uppercase">Critical</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded bg-[#f39c12]" />
+                  <span className="text-[10px] text-text-dim font-bold uppercase">Warning</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded bg-accent" />
+                  <span className="text-[10px] text-text-dim font-bold uppercase">Healthy</span>
+                </div>
+              </div>
             </div>
-            
-            <div className="space-y-4">
-              {MOCK_HEATMAP_DATA.map((row, i) => (
-                <div key={i} className="flex items-center gap-4">
-                  <div className="w-20 text-xs font-bold text-text-muted">{isAnonymized ? `Class ${i+1}` : row.class}</div>
-                  <div className="flex-1 flex gap-2">
-                    {[row.Mon, row.Tue, row.Wed, row.Thu, row.Fri].map((score, j) => (
-                      <div 
-                        key={j}
-                        className="flex-1 h-12 rounded-xl transition-all hover:scale-105 cursor-help relative group"
-                        style={{ 
-                          backgroundColor: score >= 8 ? 'var(--color-accent)' : 
-                                           score >= 6 ? 'var(--color-accent-light)' : 
-                                           score >= 4 ? '#f39c12' : '#e74c3c',
-                          opacity: 0.2 + (score / 10) * 0.8
-                        }}
-                      >
-                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 text-white font-bold text-xs transition-opacity">
-                          {score}
-                        </div>
-                      </div>
-                    ))}
+
+            {user?.role === 'school_admin' && (
+              <div className="md:col-span-4 bg-surface border border-border rounded-[2rem] p-8 shadow-sm flex flex-col">
+                <h3 className="text-xl font-serif mb-6 text-white">Institutional Alerts</h3>
+                <div className="space-y-4 flex-1">
+                  <div className="bg-alert-500/10 border border-alert-500/20 p-4 rounded-xl">
+                    <p className="text-xs font-bold text-alert-500 uppercase flex items-center gap-2 mb-1"><AlertTriangle size={14}/> Stress Spike</p>
+                    <p className="text-sm text-text-main font-medium">Grade 9 shows elevated stress during assessment week.</p>
+                  </div>
+                  <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-xl">
+                    <p className="text-xs font-bold text-amber-500 uppercase flex items-center gap-2 mb-1"><AlertTriangle size={14}/> Exam Overload</p>
+                    <p className="text-sm text-text-main font-medium">3 classes report high burnout risk for upcoming midterms.</p>
+                  </div>
+                  <div className="bg-neon-blue-light/10 border border-neon-blue-light/20 p-4 rounded-xl">
+                    <p className="text-xs font-bold text-neon-blue uppercase flex items-center gap-2 mb-1"><Activity size={14}/> Engagement Anomaly</p>
+                    <p className="text-sm text-text-main font-medium">Class 5-B engagement dropped by 15% this week.</p>
                   </div>
                 </div>
-              ))}
-            </div>
-            
-            <div className="mt-8 flex items-center justify-end gap-4">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded bg-[#e74c3c]" />
-                <span className="text-[10px] text-text-dim font-bold uppercase">Critical</span>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded bg-[#f39c12]" />
-                <span className="text-[10px] text-text-dim font-bold uppercase">Warning</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded bg-accent" />
-                <span className="text-[10px] text-text-dim font-bold uppercase">Healthy</span>
-              </div>
-            </div>
-          </div>
+            )}
+          </>
         )}
 
         {/* Risk Distribution */}
-        {(activeView === 'overview' || activeView === 'analytics') && (
+        {user?.role !== 'school_admin' && (activeView === 'overview' || activeView === 'analytics') && (
           <div className="md:col-span-4 bg-surface border border-border rounded-[2rem] p-8 shadow-sm flex flex-col">
             <h3 className="text-xl font-serif mb-8">Risk Distribution</h3>
-            <div className="h-[300px] flex items-center justify-center relative">
+            <div className="min-h-[350px] w-full h-[350px] flex items-center justify-center relative">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -336,7 +385,7 @@ export default function SchoolDashboard({ user, initialTab = 'overview' }: Schoo
                 </PieChart>
               </ResponsiveContainer>
               <div className="absolute flex flex-col items-center justify-center">
-                <span className="text-3xl font-serif font-bold">{MOCK_CLASSES.length}</span>
+                <span className="text-3xl font-serif font-bold">{displayClasses.length}</span>
                 <span className="text-[10px] text-text-dim uppercase font-bold tracking-widest">Classes</span>
               </div>
             </div>
@@ -380,9 +429,9 @@ export default function SchoolDashboard({ user, initialTab = 'overview' }: Schoo
                       {['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map((day) => {
                         const val = (row as any)[day];
                         // Inverse color scaling (lower mood/higher stress is red)
-                        const bgColor = val >= 8 ? 'bg-green-100 text-green-800' :
-                                        val >= 6 ? 'bg-amber-100 text-amber-800' :
-                                        'bg-red-200 text-red-900';
+                        const bgColor = val >= 8 ? 'bg-alert-50 text-alert-800' :
+                                        val >= 6 ? 'bg-alert-100 text-alert-700' :
+                                        'bg-alert-200 text-alert-900';
                         return (
                           <td key={day} className="px-1 text-center">
                             <div className={cn("py-3 rounded-lg font-bold text-sm shadow-sm transition-all hover:scale-105", bgColor)}>
@@ -397,9 +446,9 @@ export default function SchoolDashboard({ user, initialTab = 'overview' }: Schoo
               </table>
               <div className="mt-6 flex justify-end items-center gap-4 text-[10px] font-bold text-text-dim uppercase tracking-widest">
                 <span>Legend: </span>
-                <div className="flex items-center gap-1"><div className="w-3 h-3 bg-red-200 rounded" /> High Risk</div>
-                <div className="flex items-center gap-1"><div className="w-3 h-3 bg-amber-100 rounded" /> Caution</div>
-                <div className="flex items-center gap-1"><div className="w-3 h-3 bg-green-100 rounded" /> Stable</div>
+                <div className="flex items-center gap-1"><div className="w-3 h-3 bg-alert-200 rounded" /> High Risk</div>
+                <div className="flex items-center gap-1"><div className="w-3 h-3 bg-alert-100 rounded" /> Caution</div>
+                <div className="flex items-center gap-1"><div className="w-3 h-3 bg-alert-50 rounded" /> Stable</div>
               </div>
             </div>
           </div>
@@ -468,7 +517,7 @@ export default function SchoolDashboard({ user, initialTab = 'overview' }: Schoo
                             <div 
                               className={cn(
                                 "h-full rounded-full",
-                                cls.avgMood >= 7 ? "bg-accent" : cls.avgMood >= 5 ? "bg-amber-500" : "bg-red-500"
+                                cls.avgMood >= 7 ? "bg-accent" : cls.avgMood >= 5 ? "bg-alert-400" : "bg-alert-500"
                               )}
                               style={{ width: `${cls.avgMood * 10}%` }}
                             />
@@ -479,9 +528,9 @@ export default function SchoolDashboard({ user, initialTab = 'overview' }: Schoo
                       <td className="py-5">
                         <span className={cn(
                           "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest",
-                          cls.riskLevel === 'low' ? "bg-green-100 text-green-700" : 
-                          cls.riskLevel === 'medium' ? "bg-amber-100 text-amber-700" : 
-                          "bg-red-100 text-red-700"
+                          cls.riskLevel === 'low' ? "bg-alert-50 text-alert-500" : 
+                          cls.riskLevel === 'medium' ? "bg-alert-100 text-alert-600" : 
+                          "bg-alert-100 text-alert-700"
                         )}>
                           {cls.riskLevel}
                         </span>
@@ -507,7 +556,7 @@ export default function SchoolDashboard({ user, initialTab = 'overview' }: Schoo
           <div className="absolute -right-12 -bottom-12 w-64 h-64 bg-accent/5 rounded-full blur-3xl" />
           <div className="relative z-10">
             <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 bg-green-100 text-green-700 rounded-xl">
+              <div className="p-2 bg-alert-50 text-alert-500 rounded-xl">
                 <ShieldCheck size={20} />
               </div>
               <h3 className="text-xl font-serif">Privacy & Compliance Controls</h3>
@@ -555,7 +604,7 @@ function StatCard({ icon, label, value, subValue, color, isUrgent }: {
         {icon}
       </div>
       <p className="text-[10px] font-bold text-text-dim uppercase tracking-widest mb-1">{label}</p>
-      <p className={cn("text-3xl font-serif font-bold", isUrgent && "text-red-600")}>{value}</p>
+      <p className={cn("text-3xl font-serif font-bold", isUrgent && "text-alert-600")}>{value}</p>
       <p className="text-xs text-text-muted mt-2">{subValue}</p>
     </div>
   );
@@ -574,7 +623,7 @@ function PrivacyToggle({ label, description, enabled, onChange }: { label: strin
           )}
         >
           <div className={cn(
-            "absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
+            "absolute top-1 w-4 h-4 bg-bg rounded-full transition-all",
             enabled ? "left-7" : "left-1"
           )} />
         </button>
