@@ -151,7 +151,7 @@ service cloud.firestore {
 
     match /relationships/{relId} {
       allow read: if request.auth != null && (resource.data.caretakerId == request.auth.uid || resource.data.studentId == request.auth.uid);
-      allow create: if request.auth != null && request.resource.data.caretakerId == request.auth.uid;
+      allow create: if request.auth != null && (request.resource.data.caretakerId == request.auth.uid || request.resource.data.studentId == request.auth.uid);
       allow update: if request.auth != null && (resource.data.caretakerId == request.auth.uid || resource.data.studentId == request.auth.uid);
       allow delete: if request.auth != null && (resource.data.caretakerId == request.auth.uid || resource.data.studentId == request.auth.uid);
     }

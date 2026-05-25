@@ -292,6 +292,20 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
                     Risk Level: {activeChild.riskLevel}
                   </div>
                 </div>
+                {user?.role === 'student' && (
+                  <div className="w-full mt-4">
+                    <button 
+                      onClick={() => setActiveTab('connections')}
+                      className="w-full flex items-center justify-between p-3 bg-surface-2 border border-border rounded-xl hover:border-accent hover:text-accent transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                         <span className="text-xl">🤝</span>
+                         <span className="text-sm font-bold text-text-main">Monitor Access</span>
+                      </div>
+                      <ChevronRight size={16} className="text-text-dim" />
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
                 <div className="p-6 rounded-2xl border border-dashed border-border text-center text-text-muted">
