@@ -248,7 +248,7 @@ export default function SchoolDashboard({ user, initialTab = 'overview', privacy
             label={user?.role === 'school_admin' ? "Total Students" : "My Students"} 
             value={user?.role === 'school_admin' ? MOCK_SCHOOL_STATS.totalStudents.toString() : "86"} 
             subValue={user?.role === 'school_admin' ? "Across 12 Classes" : "Across 3 Classes"}
-            color="bg-neon-blue-light text-neon-blue"
+            color="bg-indigo-500/10 text-indigo-400"
           />
           <StatCard 
             icon={<AlertTriangle size={20} />} 
@@ -348,8 +348,8 @@ export default function SchoolDashboard({ user, initialTab = 'overview', privacy
                     <p className="text-xs font-bold text-amber-500 uppercase flex items-center gap-2 mb-1"><AlertTriangle size={14}/> Exam Overload</p>
                     <p className="text-sm text-text-main font-medium">3 classes report high burnout risk for upcoming midterms.</p>
                   </div>
-                  <div className="bg-neon-blue-light/10 border border-neon-blue-light/20 p-4 rounded-xl">
-                    <p className="text-xs font-bold text-neon-blue uppercase flex items-center gap-2 mb-1"><Activity size={14}/> Engagement Anomaly</p>
+                  <div className="bg-indigo-500/10 border border-indigo-500/20 p-4 rounded-xl">
+                    <p className="text-xs font-bold text-indigo-400 uppercase flex items-center gap-2 mb-1"><Activity size={14}/> Engagement Anomaly</p>
                     <p className="text-sm text-text-main font-medium">Class 5-B engagement dropped by 15% this week.</p>
                   </div>
                 </div>

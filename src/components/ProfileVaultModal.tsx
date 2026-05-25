@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Child } from '../types';
 import { getGradientForChild, cn } from '../lib/utils';
-import { X, Lock, Keypad, Delete } from 'lucide-react';
+import { X, Lock, Delete } from 'lucide-react';
 
 interface ProfileVaultModalProps {
   child: Child;

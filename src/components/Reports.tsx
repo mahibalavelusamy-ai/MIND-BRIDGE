@@ -54,10 +54,10 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
           collection(db, 'assessments'), 
           where('childId', '==', selectedChild.id),
           where('timestamp', '>=', startDate.toISOString()),
-          orderBy('timestamp', 'ascending') // Ascending so oldest is first for chart
+          orderBy('timestamp', 'asc') // Use 'asc' rather than 'ascending'
         );
         const snapA = await getDocs(qA);
-        const assessmentData = snapA.docs.map(d => ({ id: d.id, ...(d.data() as object) }));
+        const assessmentData = snapA.docs.map(d => ({ id: d.id, ...d.data() } as any));
         setAssessments(assessmentData);
         
         // Generate a role-aware insight based on latest data

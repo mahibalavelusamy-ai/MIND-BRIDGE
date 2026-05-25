@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
-import { X, Lock, Trash2, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { X, Lock, Trash2, AlertTriangle, ShieldCheck, Sun, Moon, Palette } from 'lucide-react';
 import { Child } from '../types';
 import { db, doc, deleteDoc, updateDoc } from '../lib/firebase';
 
 interface ProfileSettingsModalProps {
   child: Child;
   userRole?: string;
+  isDarkMode?: boolean;
+  setIsDarkMode?: (isDark: boolean) => void;
   onClose: () => void;
   onDelete: () => void;
 }
 
-export default function ProfileSettingsModal({ child, userRole, onClose, onDelete }: ProfileSettingsModalProps) {
+export default function ProfileSettingsModal({ child, userRole, isDarkMode, setIsDarkMode, onClose, onDelete }: ProfileSettingsModalProps) {
   const [newPin, setNewPin] = useState('');
   const [pinError, setPinError] = useState('');
   const [pinSuccess, setPinSuccess] = useState('');
@@ -88,6 +90,29 @@ export default function ProfileSettingsModal({ child, userRole, onClose, onDelet
                </div>
             </div>
           </section>
+
+          {/* Appearance Section */}
+          {setIsDarkMode && (
+            <section className="space-y-4">
+               <h3 className="text-sm font-bold border-b border-border/50 pb-2 flex items-center gap-2">
+                  <Palette size={16} className="text-accent" />
+                  <span className="text-text-dim uppercase tracking-widest">Appearance</span>
+               </h3>
+               <div className="bg-surface-2 rounded-2xl p-4 border border-border flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-bold text-text-main">Interface Theme</h4>
+                    <p className="text-xs text-text-muted">Toggle between dark and light modes</p>
+                  </div>
+                  <button 
+                    onClick={() => setIsDarkMode(!isDarkMode)} 
+                    title="Toggle Theme"
+                    className="w-12 h-12 flex items-center justify-center rounded-xl border border-border bg-surface hover:bg-surface-3 transition-all text-accent shadow-sm"
+                  >
+                    {isDarkMode ? <Sun size={24} strokeWidth={2} /> : <Moon size={24} strokeWidth={2} />}
+                  </button>
+               </div>
+            </section>
+          )}
 
           {/* PIN Management */}
           <section className="space-y-4">

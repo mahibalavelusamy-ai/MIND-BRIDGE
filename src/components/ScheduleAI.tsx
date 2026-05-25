@@ -120,12 +120,12 @@ export default function ScheduleAI() {
   return (
     <div className="flex flex-col lg:flex-row h-full gap-8 p-4 md:p-6 animate-fade-in relative z-10 w-full overflow-hidden">
       {/* Calendar Column */}
-      <div className="flex-[2] glass-card p-6 md:p-8 flex flex-col bg-surface-2/40 border-accent/20 min-h-[500px]">
+      <div className="flex-[2] glass-card p-6 md:p-8 flex flex-col bg-surface-2/40 border-border/50 min-h-[500px]">
         <h2 className="text-2xl font-sans font-bold tracking-tight mb-8 flex items-center gap-3 text-text-main">
           <CalendarDays className="text-accent" size={28} />
           Master Schedule
         </h2>
-        <div className="flex-1 bg-surface ring-1 ring-border shadow-inner p-4 rounded-[1.5rem] overflow-hidden neon-border">
+        <div className="flex-1 bg-surface ring-1 ring-border shadow-inner p-4 rounded-[1.5rem] overflow-hidden">
           <FullCalendar
             plugins={[dayGridPlugin, timeGridPlugin]}
             initialView="dayGridMonth"
@@ -142,9 +142,9 @@ export default function ScheduleAI() {
       </div>
 
       {/* AI Uploader Column */}
-      <div className="flex-1 glass-card p-6 md:p-8 flex flex-col bg-surface border-accent/20 h-full min-h-[400px]">
-        <h2 className="text-xl font-sans font-bold tracking-tight mb-4 flex items-center gap-3 text-text-main neon-text-blue">
-          <Sparkles className="text-neon-blue" size={24} />
+      <div className="flex-1 glass-card p-6 md:p-8 flex flex-col bg-surface border-border/50 h-full min-h-[400px]">
+        <h2 className="text-xl font-sans font-bold tracking-tight mb-4 flex items-center gap-3 text-text-main">
+          <Sparkles className="text-accent" size={24} />
           AI Plan Uploader
         </h2>
         

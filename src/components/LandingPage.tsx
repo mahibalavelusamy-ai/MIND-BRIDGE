@@ -21,7 +21,7 @@ export default function LandingPage({ onStart }: { onStart: () => void }) {
               Early support for <em className="italic text-accent">every child's</em> mental well-being
             </h1>
             <p className="text-lg text-text-muted leading-relaxed mb-8 max-w-lg">
-              MindBridge helps parents, teachers, and clinicians detect emotional patterns early — with gentle assessments, real-time tracking, and AI-guided insights.
+              NeuroFlow helps parents, teachers, and clinicians detect emotional patterns early — with gentle assessments, real-time tracking, and AI-guided insights.
             </p>
             <div className="flex flex-wrap gap-4">
               <button 
@@ -95,7 +95,7 @@ export default function LandingPage({ onStart }: { onStart: () => void }) {
       {/* Footer */}
       <footer className="py-12 border-t border-border bg-surface px-6">
         <div className="max-w-6xl mx-auto text-center">
-          <div className="text-2xl font-serif font-bold text-accent mb-4">MindBridge</div>
+          <div className="text-2xl font-serif font-bold text-accent mb-4">NeuroFlow</div>
           <p className="text-sm text-text-muted mb-8">Child Mental Health Monitoring & Tracking System</p>
           <div className="flex justify-center gap-8 text-sm text-text-muted mb-8">
             <a href="#" className="hover:text-accent transition-colors">About</a>
@@ -103,7 +103,7 @@ export default function LandingPage({ onStart }: { onStart: () => void }) {
             <a href="#" className="hover:text-accent transition-colors">Privacy</a>
             <a href="#" className="hover:text-accent transition-colors">Contact</a>
           </div>
-          <p className="text-xs text-text-dim">© 2025 MindBridge. For educational use only. Not a clinical diagnostic tool.</p>
+          <p className="text-xs text-text-dim">© 2025 NeuroFlow. For educational use only. Not a clinical diagnostic tool.</p>
         </div>
       </footer>
     </div>

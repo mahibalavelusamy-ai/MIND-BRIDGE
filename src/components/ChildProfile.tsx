@@ -233,17 +233,17 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
   return (
     <div className="space-y-8 animate-fade-in pb-12">
       {/* Header */}
-      <div className="glass-card p-8 relative overflow-hidden border-accent/20">
+      <div className="glass-card p-8 relative overflow-hidden border-border/50">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center gap-8">
           <div className={cn(
-            "w-24 h-24 rounded-[2rem] flex items-center justify-center text-5xl shadow-2xl",
-            child.age >= 18 ? `text-bg bg-gradient-to-br ${getGradientForChild(child.id)} neon-border-blue` : "bg-surface-2 border border-accent neon-border"
+            "w-24 h-24 rounded-[2rem] flex items-center justify-center text-5xl shadow-lg border border-border/50",
+            child.age >= 18 ? `text-bg bg-gradient-to-br ${getGradientForChild(child.id)}` : "bg-surface-2"
           )}>
             {child.age >= 18 ? <span className="font-sans relative z-10">{child.name ? child.name.charAt(0).toUpperCase() : '👤'}</span> : <span className="relative z-10">{child.avatar}</span>}
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2">
-              <h1 className="text-4xl font-sans tracking-tight font-bold neon-text">{child.name}</h1>
+              <h1 className="text-4xl font-sans tracking-tight font-bold text-text-main">{child.name}</h1>
               <span className={cn(
                 "px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest",
                 child.riskLevel === 'low' ? "bg-alert-50 text-alert-500" : "bg-alert-100 text-alert-700"

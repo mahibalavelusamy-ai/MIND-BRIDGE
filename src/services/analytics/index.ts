@@ -31,7 +31,7 @@ export const AnalyticsPipeline = {
     let alerts = AlertEngine.evaluateRiskProfile(input.userId, currentRisk, previousRisk);
     
     // 5. AI Interpretation
-    const aiInsight = await AIInterpreter.generateSupportiveSummary(currentRisk, viewerRole);
+    const aiInsight = await AIInterpreter.generateSupportiveSummary(currentRisk, viewerRole as "parent" | "teacher" | "student");
     
     // 6. Permission Filtering
     const rawOutput = {

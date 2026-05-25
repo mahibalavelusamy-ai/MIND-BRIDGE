@@ -177,7 +177,7 @@ export default function Assessment({ child, onComplete, onError, onNavigateHome 
         >
           <Trophy size={48} />
         </motion.div>
-        <h2 className="text-4xl font-serif mb-4 text-text-main neon-text">Awesome Job! 🌟</h2>
+        <h2 className="text-4xl font-serif mb-4 text-text-main tracking-tight">Awesome Job! 🌟</h2>
         <p className="text-text-muted max-w-sm mb-8 text-balance">
           {child.age >= 18 
             ? `Your wellness profile is updated, ${child.name}. Small consistent check-ins lead to big growth.` 
@@ -235,13 +235,13 @@ export default function Assessment({ child, onComplete, onError, onNavigateHome 
     return (
       <div className="max-w-xl mx-auto py-12 px-4 animate-fade-in flex flex-col items-center text-center">
         <div className={cn(
-          "w-32 h-32 md:w-40 md:h-40 rounded-3xl shadow-2xl flex items-center justify-center text-6xl mb-8 transition-all duration-300 relative overflow-hidden bg-gradient-to-br text-black border border-accent/30 neon-border",
+          "w-32 h-32 md:w-40 md:h-40 rounded-3xl shadow-lg border-border/50 flex items-center justify-center text-6xl mb-8 transition-all duration-300 relative overflow-hidden bg-gradient-to-br text-black border",
           getGradientForChild(child.id)
         )}>
           <div className="absolute inset-0 bg-black/10" />
           {child.age >= 18 ? <span className="font-serif text-white">{child.name ? child.name.charAt(0).toUpperCase() : '👤'}</span> : child.avatar}
         </div>
-        <h1 className="text-3xl md:text-4xl font-serif mb-4 text-text-main neon-text-blue">
+        <h1 className="text-3xl md:text-4xl font-serif mb-4 text-text-main tracking-tight">
           {isAlreadyCompleted ? 'Daily Summary' : `Your Wellness Journey`}
         </h1>
         <p className="text-text-muted mb-8 max-w-sm text-balance">

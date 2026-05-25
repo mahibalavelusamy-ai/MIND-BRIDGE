@@ -245,9 +245,9 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
         
         {/* Children List */}
         <div className="md:col-span-12 w-full">
-          <div className="glass-card p-8 h-full border-accent/20">
+          <div className="glass-card p-8 h-full border-border/50">
             <div className="flex items-center justify-between mb-8">
-              <h3 className="text-xl font-sans font-bold neon-text">{activeChild?.age >= 18 ? 'Your Student' : 'Your Profile'}</h3>
+              <h3 className="text-xl font-sans font-bold text-text-main">{activeChild?.age >= 18 ? 'Your Student' : 'Your Profile'}</h3>
             </div>
 
             <div className="grid grid-cols-1 gap-4">
@@ -380,9 +380,9 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
                 </button>
                 <button 
                   onClick={() => alert(`Reminder sent to ${activeChild?.name}`)}
-                  className="bg-surface-2 hover:border-neon-blue text-text-main text-sm font-bold py-3 px-4 rounded-xl border border-border transition-colors text-left flex flex-col gap-1"
+                  className="bg-surface-2 hover:border-indigo-400 text-text-main text-sm font-bold py-3 px-4 rounded-xl border border-border transition-colors text-left flex flex-col gap-1"
                 >
-                  <span className="text-neon-blue">"Don't forget to pack!"</span>
+                  <span className="text-indigo-400">"Don't forget to pack!"</span>
                   <span className="text-[10px] text-text-dim uppercase">Planner Nudge</span>
                 </button>
                 <button 

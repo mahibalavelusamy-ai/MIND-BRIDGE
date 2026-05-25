@@ -31,7 +31,8 @@ import {
   Search,
   CheckCircle2,
   ShoppingCart,
-  CalendarDays
+  CalendarDays,
+  Wind
 } from 'lucide-react';
 import { cn, getGradientForChild } from './lib/utils';
 import { Child, Alert } from './types';
@@ -588,17 +589,17 @@ export default function App() {
 
   if (currentPage === 'login') {
     return (
-      <div className="min-h-screen flex bg-bg">
-        <div className="flex-1 flex items-center justify-center p-8">
-          <div className="max-w-md w-full">
-            <div className="mb-8">
-              <h2 className="text-3xl font-serif mb-2">{isSignUpMode ? 'Create Account' : 'Welcome Back'}</h2>
-              <p className="text-text-muted">{isSignUpMode ? 'Sign up to start using MindBridge' : 'Sign in to MindBridge to continue'}</p>
+      <div className="min-h-screen flex bg-bg relative overflow-hidden animate-fade-in">
+        <div className="flex-1 flex items-center justify-center p-8 z-10">
+          <div className="max-w-md w-full glass-card p-10 bg-surface/60 border-border/50">
+            <div className="mb-10 text-center">
+              <h2 className="text-3xl font-serif mb-3 text-text-main tracking-tight">{isSignUpMode ? 'Create Account' : 'Welcome Back'}</h2>
+              <p className="text-text-muted">{isSignUpMode ? 'Sign up to start using NeuroFlow' : 'Sign in to NeuroFlow to continue'}</p>
             </div>
             
-            <form onSubmit={handleEmailAuthSubmit} className="space-y-4 mb-6">
+            <form onSubmit={handleEmailAuthSubmit} className="space-y-5 mb-8">
               {authErrorContent && (
-                <div className="p-3 bg-alert-500/10 border border-alert-500/20 rounded-xl text-alert-500 text-sm">
+                <div className="p-4 bg-alert-500/10 border border-alert-500/20 rounded-xl text-alert-500 text-sm font-medium">
                   {authErrorContent}
                 </div>
               )}
@@ -608,7 +609,7 @@ export default function App() {
                 required
                 value={emailAuth}
                 onChange={(e) => setEmailAuth(e.target.value)}
-                className="w-full bg-surface border border-border rounded-xl px-4 py-3 focus:outline-none focus:border-accent text-text-main"
+                className="w-full bg-surface-2/50 border border-border rounded-xl px-5 py-4 focus:outline-none focus:border-accent text-text-main hover:border-border/80 transition-colors"
               />
               <input
                 type="password"
@@ -616,32 +617,32 @@ export default function App() {
                 required
                 value={passwordAuth}
                 onChange={(e) => setPasswordAuth(e.target.value)}
-                className="w-full bg-surface border border-border rounded-xl px-4 py-3 focus:outline-none focus:border-accent text-text-main"
+                className="w-full bg-surface-2/50 border border-border rounded-xl px-5 py-4 focus:outline-none focus:border-accent text-text-main hover:border-border/80 transition-colors"
               />
-              <button type="submit" className="w-full bg-surface-2 text-text-main border border-border p-3 rounded-xl font-medium hover:bg-border transition-colors">
+              <button type="submit" className="w-full bg-surface-2 text-text-main border border-border p-4 rounded-xl font-bold hover:bg-border transition-colors shadow-sm">
                 {isSignUpMode ? 'Sign Up with Email' : 'Sign In with Email'}
               </button>
             </form>
 
-            <div className="relative mb-6">
+            <div className="relative mb-8">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border"></div>
+                <div className="w-full border-t border-border/80"></div>
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-bg text-text-muted">Or</span>
+                <span className="px-4 bg-transparent text-text-muted font-medium">Or</span>
               </div>
             </div>
 
             <div className="space-y-4">
-              <button onClick={handleLogin} className="w-full bg-accent text-bg p-3 rounded-xl font-medium hover:bg-accent-hover transition-colors flex items-center justify-center gap-2">
-                Continue with Google →
+              <button onClick={handleLogin} className="w-full bg-accent text-bg p-4 rounded-xl font-bold hover:bg-accent-hover transition-colors flex items-center justify-center gap-2 shadow-lg shadow-accent/20">
+                Continue with Google
               </button>
             </div>
             
-            <div className="mt-8 flex flex-col items-center gap-2">
+            <div className="mt-10 flex flex-col items-center gap-2">
               <button 
                 onClick={() => { setIsSignUpMode(!isSignUpMode); setAuthErrorContent(''); }} 
-                className="text-text-muted text-sm hover:text-accent transition-colors"
+                className="text-text-muted text-sm hover:text-accent transition-colors font-medium"
               >
                 {isSignUpMode ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
               </button>
@@ -651,9 +652,11 @@ export default function App() {
         </div>
         <div className="hidden lg:flex flex-1 bg-accent-light items-center justify-center p-12">
           <div className="max-w-sm">
-            <div className="text-5xl mb-6">🌱</div>
-            <h2 className="text-3xl font-serif mb-4">Every child deserves to feel heard</h2>
-            <p className="text-text-muted leading-relaxed">MindBridge gives caregivers the tools to detect, understand, and respond to children's mental health needs — before a crisis occurs.</p>
+            <div className="w-12 h-12 rounded-xl bg-accent/20 flex items-center justify-center border border-accent/30 shadow-sm mb-6">
+                 <Wind className="text-accent" size={24} />
+            </div>
+            <h2 className="text-3xl font-serif mb-4 text-text-main">Calm intelligence for your wellness journey</h2>
+            <p className="text-text-muted leading-relaxed">NeuroFlow gives individuals and caretakers the tools to detect, understand, and respond to mental health needs — building emotional resilience.</p>
           </div>
         </div>
       </div>
@@ -665,14 +668,17 @@ export default function App() {
     return (
       <div className="min-h-screen bg-bg flex flex-col items-center justify-center text-text-main p-6 relative overflow-hidden animate-fade-in">
         {/* Subtle background glow */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-accent/20 blur-[120px] rounded-full pointer-events-none opacity-50 animate-glow"></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-accent-light blur-[100px] rounded-full pointer-events-none opacity-30"></div>
         
         <div className="relative z-10 w-full max-w-4xl flex flex-col items-center">
           <div className="text-accent mb-12 flex justify-center">
-             <div className="text-4xl font-sans font-bold text-text-main neon-text-blue">Mind<span className="text-accent neon-text">Bridge</span></div>
+             <div className="text-2xl font-sans font-bold text-text-main tracking-tight flex items-center gap-2">
+                <Wind size={20} className="text-accent" />
+                <span>Neuro<span className="text-accent">Flow</span></span>
+             </div>
           </div>
           
-          <h1 className="text-4xl md:text-5xl font-sans mb-16 text-center tracking-tight text-white font-light">
+          <h1 className="text-3xl md:text-5xl font-serif mb-16 text-center tracking-tight text-text-main">
             Who's exploring today?
           </h1>
           
@@ -686,13 +692,13 @@ export default function App() {
                 className="flex flex-col items-center group cursor-pointer"
               >
                 <div className={cn(
-                  "w-32 h-32 md:w-40 md:h-40 rounded-[2rem] border border-border group-hover:neon-border shadow-2xl flex items-center justify-center text-6xl mb-4 transition-all duration-300 relative overflow-hidden bg-surface-2",
+                  "w-32 h-32 md:w-40 md:h-40 rounded-[2rem] border border-border group-hover:border-accent/40 shadow-xl group-hover:shadow-[0_0_20px_rgba(56,189,248,0.2)] flex items-center justify-center text-6xl mb-4 transition-all duration-300 relative overflow-hidden bg-surface-2",
                   child.age >= 18 ? getGradientForChild(child.id) : "from-slate-700 to-slate-900"
                 )}>
                   <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
                   {child.age >= 18 ? <span className="font-sans text-text-main relative z-10">{child.name ? child.name.charAt(0).toUpperCase() : '👤'}</span> : <span className="relative z-10">{child.avatar || '👧'}</span>}
                 </div>
-                <span className="text-slate-400 font-medium text-xl group-hover:text-accent transition-colors duration-300 group-hover:neon-text">{child.name}</span>
+                <span className="text-text-muted font-medium text-xl group-hover:text-text-main transition-colors duration-300">{child.name}</span>
               </motion.button>
             ))}
             
@@ -702,10 +708,10 @@ export default function App() {
               onClick={() => setIsCreatingProfile(true)}
               className="flex flex-col items-center group cursor-pointer opacity-70 hover:opacity-100"
             >
-              <div className="w-32 h-32 md:w-40 md:h-40 rounded-[2rem] bg-surface/50 backdrop-blur-sm border-2 border-dashed border-border group-hover:neon-border flex items-center justify-center text-4xl mb-4 transition-all duration-300">
-                <Plus className="text-slate-400 group-hover:text-accent transition-colors duration-300" size={48} />
+              <div className="w-32 h-32 md:w-40 md:h-40 rounded-[2rem] bg-surface/50 backdrop-blur-sm border-2 border-dashed border-border group-hover:border-accent/40 group-hover:shadow-[0_0_20px_rgba(56,189,248,0.1)] flex items-center justify-center text-4xl mb-4 transition-all duration-300">
+                <Plus className="text-text-muted group-hover:text-text-main transition-colors duration-300" size={48} />
               </div>
-              <span className="text-slate-400 font-medium text-xl group-hover:text-accent transition-colors duration-300 group-hover:neon-text">Add Profile</span>
+              <span className="text-text-muted font-medium text-xl group-hover:text-text-main transition-colors duration-300">Add Profile</span>
             </motion.button>
           </div>
           
@@ -1192,6 +1198,8 @@ export default function App() {
         <ProfileSettingsModal
           child={selectedChild}
           userRole={user?.role}
+          isDarkMode={isDarkMode}
+          setIsDarkMode={setIsDarkMode}
           onClose={() => setIsProfileSettingsOpen(false)}
           onDelete={() => {
              setSelectedChild(null);
