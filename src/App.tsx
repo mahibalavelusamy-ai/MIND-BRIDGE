@@ -474,8 +474,8 @@ export default function App() {
     }
   };
 
-  const handlePinSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handlePinSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (pinModalProfile && enteredPin === pinModalProfile.pin) {
       setSelectedChild(pinModalProfile);
       setPinModalProfile(null);

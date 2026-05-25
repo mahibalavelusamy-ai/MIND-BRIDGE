@@ -25,18 +25,6 @@ export default function ProfileVaultModal({
   onSubmit,
   onRequestAdminReset
 }: ProfileVaultModalProps) {
-  const handleKeyClick = (num: number) => {
-    if (enteredPin.length < 4) {
-      setEnteredPin(enteredPin + num);
-    }
-  };
-
-  const handleBackspace = () => {
-    if (enteredPin.length > 0) {
-      setEnteredPin(enteredPin.slice(0, -1));
-    }
-  };
-
   useEffect(() => {
     if (enteredPin.length === 4) {
       onSubmit();
@@ -77,57 +65,37 @@ export default function ProfileVaultModal({
             <p className="text-sm text-text-muted mt-2 font-medium">Authentication required for {child.name}</p>
           </div>
 
-          <div className="flex justify-center gap-4 mb-8">
-            {[0, 1, 2, 3].map((index) => (
-              <div 
-                key={index}
-                className={cn(
-                  "w-5 h-5 rounded-full transition-all duration-300 border-2",
-                  enteredPin.length > index 
-                    ? "bg-accent border-accent ring-4 ring-accent/30 scale-110 shadow-[0_0_10px_var(--color-accent)]" 
-                    : enteredPin.length === index
-                      ? "border-accent bg-accent/20 ring-4 ring-accent/10 scale-110"
-                      : pinError
-                        ? "border-amber-500 bg-amber-500/20 ring-4 ring-amber-500/20"
-                        : "border-border bg-surface-2"
-                )}
-              />
-            ))}
+          <div className="mb-6">
+            <input
+              autoFocus
+              type="password"
+              inputMode="numeric"
+              pattern="\d*"
+              maxLength={4}
+              value={enteredPin}
+              onChange={(e) => {
+                const val = e.target.value.replace(/\D/g, '');
+                setEnteredPin(val);
+              }}
+              className={cn(
+                "w-full h-16 bg-surface-2 border rounded-xl text-center text-4xl tracking-[0.5em] font-mono text-text-main focus:outline-none transition-colors shadow-inner",
+                pinError ? "border-amber-500 text-amber-500 focus:border-amber-500" : "border-border focus:border-accent"
+              )}
+              placeholder="••••"
+            />
           </div>
 
           {pinError && (
             <p className="text-amber-500 text-xs text-center font-bold animate-fade-in mb-4">{pinError}</p>
           )}
 
-          <div className="grid grid-cols-3 gap-3 mb-6">
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
-              <button
-                key={num}
-                onClick={() => handleKeyClick(num)}
-                className="h-16 rounded-2xl bg-surface-2 border border-border hover:bg-surface hover:border-accent hover:text-accent flex items-center justify-center text-2xl font-mono text-text-main transition-all group"
-              >
-                <span className="group-active:scale-90 transition-transform">{num}</span>
-              </button>
-            ))}
+          <div className="flex justify-center mt-2">
             <button
                onClick={() => onRequestAdminReset()}
-               className="h-16 rounded-2xl flex items-center justify-center text-text-muted hover:text-accent transition-colors"
+               className="text-sm text-text-muted hover:text-accent transition-colors flex items-center gap-2"
                title="Forgot PIN?"
             >
-               <Lock size={20} />
-            </button>
-            <button
-                onClick={() => handleKeyClick(0)}
-                className="h-16 rounded-2xl bg-surface-2 border border-border hover:bg-surface hover:border-accent hover:text-accent flex items-center justify-center text-2xl font-mono text-text-main transition-all group"
-              >
-                <span className="group-active:scale-90 transition-transform">0</span>
-            </button>
-            <button
-               onClick={handleBackspace}
-               className="h-16 rounded-2xl flex items-center justify-center text-text-muted hover:text-amber-500 transition-colors"
-               title="Backspace"
-            >
-               <Delete size={24} />
+               <Lock size={16} /> Forgot PIN?
             </button>
           </div>
           
