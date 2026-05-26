@@ -141,7 +141,7 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
       setAssessments(assessmentsData);
 
       // Fetch schedule from new subcollection
-      const qS = query(collection(db, `children/${child.id}/schedules`));
+      const qS = query(collection(db, `students/${child.id}/schedules`));
       const snapS = await getDocs(qS);
       const scheduleData = snapS.docs.map(d => d.data());
 
@@ -187,11 +187,19 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
       const batch = writeBatch(db);
 
       // 1. Atomic Cleanup: Query all associated sub-collections
-      const collectionsToCleanup = ['assessments', 'schoolSchedules', 'rootCauseAnalyses', 'alerts', 'sessions', 'history'];
+      const collectionsToCleanup = ['assessments', 'schoolSchedules', 'rootCauseAnalyses', 'alerts', 'sessions'];
       
       for (const collName of collectionsToCleanup) {
         try {
-          const q = query(collection(db, collName), where('childId', '==', child.id));
+          const authUid = auth.currentUser?.uid;
+          if (!authUid) continue;
+
+          let q;
+          if (collName === 'sessions') {
+            q = query(collection(db, collName), where('childId', '==', child.id), where('userId', '==', authUid));
+          } else {
+            q = query(collection(db, collName), where('childId', '==', child.id), where('parentId', '==', authUid));
+          }
           const snap = await getDocs(q);
           snap.docs.forEach(d => {
             batch.delete(doc(db, collName, d.id));
@@ -202,7 +210,7 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
       }
 
       // 2. Add profile document deletion to batch
-      batch.delete(doc(db, "children", child.id));
+      batch.delete(doc(db, "students", child.id));
       
       // 3. Commit the batch
       await batch.commit();

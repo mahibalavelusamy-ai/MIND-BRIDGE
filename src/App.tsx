@@ -303,7 +303,6 @@ export default function App() {
   useEffect(() => {
     if (!user || user.requiresRole) return;
 
-    // Listen for children
     let unsubChildren: () => void = () => {};
     let unsubRel: (() => void) | undefined;
     
@@ -351,14 +350,28 @@ export default function App() {
       }, (error) => handleFirestoreError(error, OperationType.LIST, 'students'));
     }
 
+    return () => {
+      unsubChildren();
+      if (unsubRel) unsubRel();
+    };
+  }, [user, selectedChild?.id]);
+
+  useEffect(() => {
+    if (!user || user.requiresRole) return;
+
     // Listen for alerts - Strictly filter by childId for session isolation
     const alertsConstraints: any[] = [];
     
-    if (user.role === 'teacher' || user.role === 'clinician') {
+    if (user.role === 'teacher' || user.role === 'clinician' || user.role === 'caretaker') {
       if (selectedChild) {
         alertsConstraints.push(where('childId', 'in', [selectedChild.id, 'all']));
+      } else if (children && children.length > 0) {
+        // Fallback to fetch all related students' alerts if possible
+        const ids = children.map(c => c.id).slice(0, 9); // 'in' limits to 10
+        ids.push('all');
+        alertsConstraints.push(where('childId', 'in', ids));
       } else {
-        // Fallback for teachers with no selected child, just don't fetch alerts to avoid blanket read issues
+        // Fallback for teachers/caretakers with no selected child/children
         alertsConstraints.push(where('childId', '==', 'no-op'));
       }
     } else {
@@ -380,11 +393,9 @@ export default function App() {
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'alerts'));
 
     return () => {
-      unsubChildren();
-      if (unsubRel) unsubRel();
       unsubscribeAlerts();
     };
-  }, [user, selectedChild?.id]);
+  }, [user, selectedChild?.id, children]);
 
   const hasCheckedStreak = React.useRef(false);
 
@@ -493,7 +504,7 @@ export default function App() {
     try {
       await loginWithGoogle();
     } catch (error: any) {
-      if (error?.code !== 'auth/popup-closed-by-user') {
+      if (error?.code !== 'auth/popup-closed-by-user' && error?.code !== 'auth/cancelled-popup-request') {
         console.error("Login failed", error);
         setAuthErrorContent(error?.message || "Google sign-in failed. Please try again.");
       }

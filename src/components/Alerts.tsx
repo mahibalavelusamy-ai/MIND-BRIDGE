@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { AlertCircle, Bell, Info, Trash2, CheckCircle2, Check, Loader2, BellRing, BellOff } from 'lucide-react';
+import { AlertCircle, Bell, Info, Trash2, CheckCircle2, Check, Loader2, BellRing, BellOff, Settings, X } from 'lucide-react';
 import { Alert } from '../types';
 import { cn } from '../lib/utils';
 import { db, collection, query, onSnapshot, getDocs, orderBy, where, auth, updateDoc, addDoc, doc, deleteDoc } from '../lib/firebase';
@@ -13,6 +13,18 @@ interface AlertsProps {
 
 export default function Alerts({ alerts, onDismiss, onMarkRead }: AlertsProps) {
   const [filter, setFilter] = useState<'all' | 'critical' | 'warning' | 'info'>('all');
+  const [showSettings, setShowSettings] = useState(false);
+  const [thresholds, setThresholds] = useState({
+    critical: Number(localStorage.getItem('alert_threshold_critical') ?? 80),
+    warning: Number(localStorage.getItem('alert_threshold_warning') ?? 50),
+    info: Number(localStorage.getItem('alert_threshold_info') ?? 0)
+  });
+  
+  const handleThresholdChange = (type: 'critical' | 'warning' | 'info', value: number) => {
+    setThresholds(prev => ({ ...prev, [type]: value }));
+    localStorage.setItem(`alert_threshold_${type}`, value.toString());
+  };
+
   const [acceptingIds, setAcceptingIds] = useState<Set<string>>(new Set());
   const [resolvingIds, setResolvingIds] = useState<Set<string>>(new Set());
 
@@ -39,6 +51,7 @@ export default function Alerts({ alerts, onDismiss, onMarkRead }: AlertsProps) {
         title: 'Connection Accepted',
         description: `Student ${auth.currentUser.email} has accepted your monitoring request.`,
         parentId: alert.caretakerId,
+        childId: auth.currentUser?.uid || 'all',
         timestamp: new Date().toISOString(),
         status: 'active'
       });
@@ -63,46 +76,6 @@ export default function Alerts({ alerts, onDismiss, onMarkRead }: AlertsProps) {
   );
   
   const [showToast, setShowToast] = useState(false);
-  const [mockDismissed, setMockDismissed] = useState<Set<string>>(new Set());
-  const [mockRead, setMockRead] = useState<Set<string>>(new Set());
-
-  // Assessment mock alerts
-  const assessmentMockAlerts: Alert[] = [
-    {
-      id: 'mock-1',
-      title: 'Maddy completed the Anxiety Screening',
-      description: 'The anxiety screening was completed today with a score within the moderate range. Please review the detailed assessment below to see localized trends regarding generalized anxiety over the last term.',
-      type: 'warning',
-      timestamp: new Date().toISOString(),
-      read: false,
-      childId: 'all'
-    },
-    {
-      id: 'mock-2',
-      title: 'Action Plan updated for Mike',
-      description: 'The clinical team has updated the action plan for Mike, putting more focus on reducing sleep deprivation before big test days. Tap to review the adjusted recommendations.',
-      type: 'info',
-      timestamp: new Date(Date.now() - 3600000).toISOString(),
-      read: true,
-      childId: 'all'
-    },
-    {
-      id: 'mock-3',
-      title: 'Assessment Overdue',
-      description: 'A required bi-weekly routine assessment has not been completed. This lapse delays the algorithm from building an accurate baseline of the current mood trend.',
-      type: 'critical',
-      timestamp: new Date(Date.now() - 86400000).toISOString(),
-      read: false,
-      childId: 'all'
-    }
-  ];
-
-  const combinedAlerts = [
-    ...assessmentMockAlerts
-       .filter(a => !mockDismissed.has(a.id))
-       .map(a => ({ ...a, read: mockRead.has(a.id) ? true : a.read })),
-    ...alerts
-  ];
 
   useEffect(() => {
     // Only trigger notifications if enabled and granted
@@ -145,13 +118,9 @@ export default function Alerts({ alerts, onDismiss, onMarkRead }: AlertsProps) {
     }
   };
 
-  const filteredAlerts = combinedAlerts.filter(a => filter === 'all' || a.type === filter);
+  const filteredAlerts = alerts.filter(a => filter === 'all' || a.type === filter);
 
   const handleDismiss = async (id: string) => {
-    if (id.startsWith('mock-')) {
-       setMockDismissed(prev => new Set(prev).add(id));
-       return;
-    }
     try {
       setResolvingIds(prev => new Set(prev).add(id));
       await onDismiss(id);
@@ -168,10 +137,6 @@ export default function Alerts({ alerts, onDismiss, onMarkRead }: AlertsProps) {
   };
 
   const handleMarkRead = async (id: string) => {
-    if (id.startsWith('mock-')) {
-       setMockRead(prev => new Set(prev).add(id));
-       return;
-    }
     try {
       setReadingIds(prev => new Set(prev).add(id));
       await onMarkRead(id);
@@ -222,23 +187,112 @@ export default function Alerts({ alerts, onDismiss, onMarkRead }: AlertsProps) {
         <div>
           <h1 className="text-4xl font-serif tracking-tight flex items-center gap-3 text-text-main">
             {auth.currentUser && auth.currentUser.uid === alerts[0]?.parentId ? "Inbox / Requests" : "Alert Center"}
-            {combinedAlerts.filter(a => !a.read).length > 0 && <span className="w-3 h-3 bg-alert-500 rounded-full animate-pulse shadow-md" />}
+            {alerts.filter(a => !a.read).length > 0 && <span className="w-3 h-3 bg-alert-500 rounded-full animate-pulse shadow-md" />}
           </h1>
           <p className="text-text-muted mt-1">Real-time notifications and expert recommendations.</p>
         </div>
-        <button
-          onClick={toggleNotifications}
-          className={cn(
-            "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm border",
-            notifsEnabled 
-              ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border-emerald-500/50"
-              : "bg-surface-2 text-text-muted hover:text-text-main border-border hover:border-accent"
-          )}
-        >
-          {notifsEnabled ? <BellRing size={16} /> : <BellOff size={16} />}
-          {notifsEnabled ? "Push Notifications Enabled" : "Enable Push Notifications"}
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm border bg-surface-2 text-text-muted hover:text-text-main border-border hover:border-accent"
+          >
+            <Settings size={16} />
+            Settings
+          </button>
+          <button
+            onClick={toggleNotifications}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm border",
+              notifsEnabled 
+                ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border-emerald-500/50"
+                : "bg-surface-2 text-text-muted hover:text-text-main border-border hover:border-accent"
+            )}
+          >
+            {notifsEnabled ? <BellRing size={16} /> : <BellOff size={16} />}
+            {notifsEnabled ? "Push Notifications Enabled" : "Enable Push Notifications"}
+          </button>
+        </div>
       </div>
+
+      <AnimatePresence>
+        {showSettings && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="p-6 bg-surface-2 border border-border rounded-2xl mb-6 relative mt-4">
+              <button 
+                onClick={() => setShowSettings(false)}
+                className="absolute top-4 right-4 text-text-muted hover:text-text-main p-1"
+              >
+                <X size={20} />
+              </button>
+              <h3 className="text-xl font-serif font-bold text-text-main mb-2 flex items-center gap-2">
+                <Settings size={20} className="text-accent" />
+                Notification Threshold Settings
+              </h3>
+              <p className="text-sm text-text-dim mb-6 max-w-2xl">
+                Define the minimum risk-score required for alerts of each severity level to appear in your inbox or trigger push notifications. (Alerts generated from assessments with scores below their respective thresholds will be suppressed).
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-bold text-alert-500 flex items-center gap-2">
+                      <AlertCircle size={16} />
+                      Critical Alerts
+                    </label>
+                    <span className="text-sm font-mono text-alert-500">{thresholds.critical}+</span>
+                  </div>
+                  <input 
+                    type="range" min="0" max="100" 
+                    value={thresholds.critical} 
+                    onChange={(e) => handleThresholdChange('critical', parseInt(e.target.value))}
+                    className="w-full accent-alert-500" 
+                  />
+                  <p className="text-xs text-text-muted">High priority clinical interventions and severe risk warnings.</p>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-bold text-alert-400 flex items-center gap-2">
+                      <Bell size={16} />
+                      Warning Alerts
+                    </label>
+                    <span className="text-sm font-mono text-alert-400">{thresholds.warning}+</span>
+                  </div>
+                  <input 
+                    type="range" min="0" max="100" 
+                    value={thresholds.warning} 
+                    onChange={(e) => handleThresholdChange('warning', parseInt(e.target.value))}
+                    className="w-full accent-alert-400" 
+                  />
+                  <p className="text-xs text-text-muted">Moderate behavioral observations and schedule deviations.</p>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-bold text-accent flex items-center gap-2">
+                      <Info size={16} />
+                      Info Alerts
+                    </label>
+                    <span className="text-sm font-mono text-accent">{thresholds.info}+</span>
+                  </div>
+                  <input 
+                    type="range" min="0" max="100" 
+                    value={thresholds.info} 
+                    onChange={(e) => handleThresholdChange('info', parseInt(e.target.value))}
+                    className="w-full accent-accent" 
+                  />
+                  <p className="text-xs text-text-muted">General wellness updates, connection requests, and helpful insights.</p>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="flex gap-2 p-1.5 bg-surface border border-border rounded-2xl w-fit shadow-sm">
         {(['all', 'critical', 'warning', 'info'] as const).map(f => (
@@ -250,7 +304,7 @@ export default function Alerts({ alerts, onDismiss, onMarkRead }: AlertsProps) {
               filter === f ? "border-accent bg-accent text-bg shadow-lg shadow-accent/20" : "border-border text-text-dim hover:text-text-main hover:border-accent/50 bg-surface-2"
             )}
           >
-            {f} ({f === 'all' ? combinedAlerts.length : combinedAlerts.filter(a => a.type === f).length})
+            {f} ({f === 'all' ? alerts.length : alerts.filter(a => a.type === f).length})
           </button>
         ))}
       </div>

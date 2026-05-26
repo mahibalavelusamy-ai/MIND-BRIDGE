@@ -126,7 +126,7 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
         title: 'Sleep Reminder',
         description: `Bedtime wind-down routine recommended for ${activeChild.name}.`,
         childId: activeChild.id,
-        parentId: auth.currentUser?.uid || '',
+        parentId: activeChild.parentId || activeChild.id,
         timestamp: new Date().toISOString(),
         status: 'active'
       });
@@ -151,6 +151,7 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
             title: 'Counselor Request',
             description: `A prioritized counselor check-in has been requested for ${activeChild?.name}.`,
             childId: activeChild.id,
+            parentId: activeChild.parentId || activeChild.id,
             timestamp: new Date().toISOString()
          });
          alert('Counselor request submitted securely.');
@@ -416,10 +417,10 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
           />
         )}
 
-        {/* Parent Nudge System & AI Summary */}
+        {/* Action System & AI Summary */}
         <div className="md:col-span-12 w-full mt-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full">
-            <div className="glass-card p-8 h-full flex flex-col">
+            <div className="glass-card p-8 h-full flex flex-col hover:border-accent/40 transition-colors">
               <h3 className="text-xl font-serif mb-4 flex items-center gap-2">
                 <Sparkles size={20} className="text-accent" />
                 AI Wellness Summary
@@ -433,45 +434,85 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
               </div>
             </div>
 
-            <div className="glass-card p-8 h-full flex flex-col">
-              <h3 className="text-xl font-serif mb-4 flex items-center gap-2">
-                <Heart size={20} className="text-alert-500" />
-                Supportive Nudges
-              </h3>
-              <p className="text-sm text-text-muted mb-6">
-                Send a quick supportive message or reminder to {activeChild?.name}'s device.
-              </p>
-              <div className="grid grid-cols-2 gap-3 mt-auto">
-                <button 
-                  onClick={() => alert(`Encouragement sent to ${activeChild?.name}`)}
-                  className="bg-surface-2 hover:border-accent text-text-main text-sm font-bold py-3 px-4 rounded-xl border border-border transition-colors text-left flex flex-col gap-1"
-                >
-                  <span className="text-accent">"You're doing great 💙"</span>
-                  <span className="text-[10px] text-text-dim uppercase">Encouragement</span>
-                </button>
-                <button 
-                  onClick={() => alert(`Reminder sent to ${activeChild?.name}`)}
-                  className="bg-surface-2 hover:border-indigo-400 text-text-main text-sm font-bold py-3 px-4 rounded-xl border border-border transition-colors text-left flex flex-col gap-1"
-                >
-                  <span className="text-indigo-400">"Don't forget to pack!"</span>
-                  <span className="text-[10px] text-text-dim uppercase">Planner Nudge</span>
-                </button>
-                <button 
-                  onClick={() => alert(`Wellness nudge sent to ${activeChild?.name}`)}
-                  className="bg-surface-2 hover:border-emerald-500 text-text-main text-sm font-bold py-3 px-4 rounded-xl border border-border transition-colors text-left flex flex-col gap-1"
-                >
-                  <span className="text-emerald-500">"Take a 5 min break"</span>
-                  <span className="text-[10px] text-text-dim uppercase">Wellness</span>
-                </button>
-                <button 
-                  onClick={handleSetSleepReminder}
-                  className="bg-surface-2 hover:border-amber-500 text-text-main text-sm font-bold py-3 px-4 rounded-xl border border-border transition-colors text-left flex flex-col gap-1"
-                >
-                  <span className="text-amber-500">Sleep Reminder</span>
-                  <span className="text-[10px] text-text-dim uppercase">Routine</span>
-                </button>
+            {user?.role === 'student' ? (
+              <div className="glass-card p-8 h-full flex flex-col hover:border-blue-500/40 transition-colors">
+                <h3 className="text-xl font-serif mb-4 flex items-center gap-2">
+                  <Trophy size={20} className="text-blue-500" />
+                  Daily Growth Quests
+                </h3>
+                <p className="text-sm text-text-muted mb-6">
+                  Complete these mini-quests today to earn bonus credits and boost your wellbeing.
+                </p>
+                <div className="grid grid-cols-2 gap-3 mt-auto">
+                  <button 
+                    onClick={() => { setShowTimerModal(true); }}
+                    className="bg-surface-2 hover:border-blue-400 text-text-main text-sm font-bold py-3 px-4 rounded-xl border border-border transition-all text-left flex flex-col gap-1 shadow-sm hover:shadow-md"
+                  >
+                    <span className="text-blue-400">Focus for 15m</span>
+                    <span className="text-[10px] text-text-dim uppercase flex justify-between w-full"><span>Academic</span><span>+15 💎</span></span>
+                  </button>
+                  <button 
+                    onClick={() => alert(`Starting 3-min Journal...`)}
+                    className="bg-surface-2 hover:border-accent text-text-main text-sm font-bold py-3 px-4 rounded-xl border border-border transition-all text-left flex flex-col gap-1 shadow-sm hover:shadow-md"
+                  >
+                    <span className="text-accent">Quick Journal</span>
+                    <span className="text-[10px] text-text-dim uppercase flex justify-between w-full"><span>Mindfulness</span><span>+20 💎</span></span>
+                  </button>
+                  <button 
+                    onClick={() => { setActiveTab('shop'); }}
+                    className="bg-surface-2 col-span-2 hover:border-purple-400 text-text-main text-sm font-bold py-3 px-4 rounded-xl border border-border transition-all text-left flex flex-col gap-1 shadow-sm flex items-center justify-between"
+                  >
+                    <div className="flex flex-col">
+                      <span className="text-purple-400">Visit Wellness Shop</span>
+                      <span className="text-[10px] text-text-dim uppercase mt-1">Reward Yourself</span>
+                    </div>
+                    <div className="w-8 h-8 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-400">
+                      <Zap size={16} />
+                    </div>
+                  </button>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="glass-card p-8 h-full flex flex-col hover:border-alert-300/40 transition-colors">
+                <h3 className="text-xl font-serif mb-4 flex items-center gap-2">
+                  <Heart size={20} className="text-alert-500" />
+                  Supportive Nudges
+                </h3>
+                <p className="text-sm text-text-muted mb-6">
+                  Send a quick supportive message or reminder to {activeChild?.name}'s device.
+                </p>
+                <div className="grid grid-cols-2 gap-3 mt-auto">
+                  <button 
+                    onClick={() => alert(`Encouragement sent to ${activeChild?.name}`)}
+                    className="bg-surface-2 hover:border-accent text-text-main text-sm font-bold py-3 px-4 rounded-xl border border-border transition-colors text-left flex flex-col gap-1"
+                  >
+                    <span className="text-accent">"You're doing great 💙"</span>
+                    <span className="text-[10px] text-text-dim uppercase">Encouragement</span>
+                  </button>
+                  <button 
+                    onClick={() => alert(`Reminder sent to ${activeChild?.name}`)}
+                    className="bg-surface-2 hover:border-indigo-400 text-text-main text-sm font-bold py-3 px-4 rounded-xl border border-border transition-colors text-left flex flex-col gap-1"
+                  >
+                    <span className="text-indigo-400">"Don't forget to pack!"</span>
+                    <span className="text-[10px] text-text-dim uppercase">Planner Nudge</span>
+                  </button>
+                  <button 
+                    onClick={() => alert(`Wellness nudge sent to ${activeChild?.name}`)}
+                    className="bg-surface-2 hover:border-emerald-500 text-text-main text-sm font-bold py-3 px-4 rounded-xl border border-border transition-colors text-left flex flex-col gap-1"
+                  >
+                    <span className="text-emerald-500">"Take a 5 min break"</span>
+                    <span className="text-[10px] text-text-dim uppercase">Wellness</span>
+                  </button>
+                  <button 
+                    onClick={handleSetSleepReminder}
+                    className="bg-surface-2 hover:border-amber-500 text-text-main text-sm font-bold py-3 px-4 rounded-xl border border-border transition-colors text-left flex flex-col gap-1"
+                  >
+                    <span className="text-amber-500">Sleep Reminder</span>
+                    <span className="text-[10px] text-text-dim uppercase">Routine</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

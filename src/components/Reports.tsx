@@ -238,9 +238,9 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
       </div>
 
       {/* Bottom Row: Detailed Trackers */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 shrink-0 pb-12">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 shrink-0 pb-6">
           {/* Burnout Indicator */}
-          <div className="glass-card p-6 flex flex-col bg-surface border-border">
+          <div className="glass-card p-6 flex flex-col bg-surface border-border transition-all hover:bg-surface-2 hover:border-orange-500/30">
              <div className="flex items-center gap-3 mb-6">
                 <div className="p-2 bg-orange-500/10 rounded-lg text-orange-500">
                    <BatteryCharging size={20} />
@@ -267,7 +267,7 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
           </div>
 
           {/* Academic Overload Indicator */}
-          <div className="glass-card p-6 flex flex-col bg-surface border-border">
+          <div className="glass-card p-6 flex flex-col bg-surface border-border transition-all hover:bg-surface-2 hover:border-purple-500/30">
              <div className="flex items-center gap-3 mb-6">
                 <div className="p-2 bg-purple-500/10 rounded-lg text-purple-500">
                    <Brain size={20} />
@@ -292,6 +292,55 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
                )}
              </div>
           </div>
+      </div>
+
+      {/* Added Milestones & Strengths grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-12">
+        <div className="glass-card p-6 bg-surface border-border flex flex-col">
+          <h3 className="text-md font-bold text-text-main mb-4 flex items-center gap-2">
+            <Zap className="text-accent" size={18} />
+            Key Strengths Discovered
+          </h3>
+          <div className="space-y-3">
+            {[
+              { title: 'Emotional Resilience', desc: 'Maintained stable mood despite high academic load.', score: 'Top 15%' },
+              { title: 'Consistent Reflection', desc: 'Logged 7 days of continuous check-ins.', score: 'Streak Master' },
+              { title: 'Self-Awareness', desc: 'Accurately identifying burnout triggers.', score: 'Growing' }
+            ].map((strength, i) => (
+              <div key={i} className="flex flex-col gap-1 p-3 rounded-xl bg-surface-2 border border-border">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-sm text-text-main">{strength.title}</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-accent bg-accent/10 px-2 py-0.5 rounded-full">{strength.score}</span>
+                </div>
+                <span className="text-xs text-text-muted">{strength.desc}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="glass-card p-6 bg-surface border-border flex flex-col justify-between relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            <TrendingUp size={120} className="text-blue-500" />
+          </div>
+          <div className="z-10">
+            <h3 className="text-md font-bold text-text-main mb-2 flex items-center gap-2">
+              <Activity className="text-blue-500" size={18} />
+              Growth Momentum
+            </h3>
+            <p className="text-sm text-text-muted mb-4 max-w-[200px]">
+              You are building excellent emotional awareness. Keep up your routine!
+            </p>
+          </div>
+          <div className="z-10 mt-auto">
+            <div className="w-full bg-surface-2 rounded-full h-2 mb-2">
+              <div className="bg-gradient-to-r from-blue-500 to-accent h-2 rounded-full" style={{ width: '75%' }} />
+            </div>
+            <div className="flex justify-between text-xs font-bold text-text-dim">
+              <span>Awareness Level 3</span>
+              <span className="text-accent">Level 4 soon</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

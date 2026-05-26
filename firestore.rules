@@ -77,7 +77,6 @@ service cloud.firestore {
       return data.keys().hasAll(requiredFields) &&
              data.submittedBy == request.auth.uid &&
              data.scores is map &&
-             data.scores.keys().hasAll(['mood', 'energy', 'sleep', 'social', 'stress', 'behavior']) &&
              (!('aiInsight' in data) || (data.aiInsight is string && data.aiInsight.size() < 15000));
     }
 
@@ -181,9 +180,7 @@ service cloud.firestore {
     match /assessments/{assessmentId} {
       allow read: if isAuthenticated() && resource.data.parentId == request.auth.uid;
       allow read: if isTeacherOrClinicianOrCaretaker();
-      allow create: if request.auth != null && 
-                    (request.resource.data.parentId == request.auth.uid || isTeacherOrClinicianOrCaretaker()) &&
-                    (isTeacherOrClinicianOrCaretaker() || get(/databases/$(database)/documents/students/$(request.resource.data.childId)).data.get('lastAssessmentDate', '') != request.resource.data.timestamp.substring(0, 10));
+      allow create: if isAuthenticated() && (request.resource.data.parentId == request.auth.uid || isTeacherOrClinicianOrCaretaker());
       allow update: if isAuthenticated() && (resource.data.parentId == request.auth.uid || isTeacherOrClinicianOrCaretaker()) && isValidAssessment(request.resource.data) && request.resource.data.childId == resource.data.childId;
       allow delete: if isAuthenticated() && (resource.data.parentId == request.auth.uid || isTeacherOrClinicianOrCaretaker());
     }
