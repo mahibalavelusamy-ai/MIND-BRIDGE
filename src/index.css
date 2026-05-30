@@ -6,10 +6,10 @@
   --font-serif: "Space Grotesk", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
   
-  --color-brand-emerald: #00ff88;
-  --color-brand-emerald-dark: #00cc6a;
-  --color-brand-black: #000000;
-  --color-brand-surface: #0a0a0a;
+  --color-brand-emerald: #22D3EE;
+  --color-brand-emerald-dark: #0891B2;
+  --color-brand-black: #020617;
+  --color-brand-surface: #0F172A;
   --color-brand-red: #ff3366;
 
   /* Default (Light) Variables */
@@ -21,11 +21,11 @@
   --color-text-muted: #475569;
   --color-text-dim: #94a3b8;
   
-  --color-accent: #059669;
-  --color-accent-hover: #047857;
-  --color-accent-light: rgba(5, 150, 105, 0.1);
-  --color-neon-blue: #0284c7;
-  --color-neon-blue-light: rgba(2, 132, 199, 0.1);
+  --color-accent: #2563EB;
+  --color-accent-hover: #1D4ED8;
+  --color-accent-light: rgba(37, 99, 235, 0.1);
+  --color-neon-blue: #22D3EE;
+  --color-neon-blue-light: rgba(34, 211, 238, 0.1);
   
   --color-alert-50: #fef2f2;
   --color-alert-100: #fee2e2;
@@ -39,7 +39,7 @@
   --color-alert-900: #7f1d1d;
   --color-alert-950: #450a0a;
   
-  --color-success: #059669;
+  --color-success: #22D3EE;
   
   --radius-xl: 1.5rem;
   --radius-lg: 1rem;
@@ -56,8 +56,8 @@
 }
 
 @keyframes glow {
-  from { box-shadow: 0 0 10px rgba(56, 189, 248, 0.1), 0 0 20px rgba(56, 189, 248, 0.1); }
-  to { box-shadow: 0 0 15px rgba(56, 189, 248, 0.2), 0 0 25px rgba(139, 92, 246, 0.15); }
+  from { box-shadow: 0 0 10px rgba(34, 211, 238, 0.1), 0 0 20px rgba(34, 211, 238, 0.1); }
+  to { box-shadow: 0 0 15px rgba(34, 211, 238, 0.2), 0 0 25px rgba(37, 99, 235, 0.15); }
 }
 
 [data-theme='light'] {
@@ -69,40 +69,40 @@
   --color-text-muted: #475569;
   --color-text-dim: #94a3b8;
   
-  --color-accent: #059669;
-  --color-accent-hover: #047857;
-  --color-accent-light: rgba(5, 150, 105, 0.1);
-  --color-neon-blue: #0284c7;
-  --color-neon-blue-light: rgba(2, 132, 199, 0.1);
+  --color-accent: #2563EB;
+  --color-accent-hover: #1D4ED8;
+  --color-accent-light: rgba(37, 99, 235, 0.1);
+  --color-neon-blue: #22D3EE;
+  --color-neon-blue-light: rgba(34, 211, 238, 0.1);
 }
 
 [data-theme='dark'] {
-  --color-bg: #050816;
-  --color-surface: #0B1020;
-  --color-surface-2: #0F172A;
-  --color-border: rgba(255, 255, 255, 0.06);
+  --color-bg: #020617;
+  --color-surface: #0F172A;
+  --color-surface-2: #1e293b;
+  --color-border: rgba(255, 255, 255, 0.08);
   --color-text-main: #f8fafc;
   --color-text-muted: #94a3b8;
   --color-text-dim: #475569;
-  --color-accent: #38BDF8;
-  --color-accent-hover: #00D4FF;
-  --color-accent-light: rgba(56, 189, 248, 0.12);
-  --color-neon-blue: #8B5CF6;
-  --color-neon-blue-light: rgba(139, 92, 246, 0.12);
+  --color-accent: #2563EB;
+  --color-accent-hover: #3B82F6;
+  --color-accent-light: rgba(37, 99, 235, 0.15);
+  --color-neon-blue: #22D3EE;
+  --color-neon-blue-light: rgba(34, 211, 238, 0.15);
   
   --color-alert-50: #450a0a;
   --color-alert-100: #7f1d1d;
   --color-alert-200: #991b1b;
   --color-alert-300: #b91c1c;
   --color-alert-400: #dc2626;
-  --color-alert-500: #ff3366;
+  --color-alert-500: #ef4444;
   --color-alert-600: #f87171;
   --color-alert-700: #fca5a5;
   --color-alert-800: #fecaca;
   --color-alert-900: #fee2e2;
   --color-alert-950: #fef2f2;
   
-  --color-success: #22C55E;
+  --color-success: #22D3EE;
 }
 
 [data-theme='light'] body, body {
@@ -193,13 +193,13 @@ button:hover:not(:disabled) {
 }
 
 .glass-card {
-  @apply bg-surface/80 backdrop-blur-xl border border-border/50 transition-all duration-500 rounded-[1.5rem] relative overflow-hidden;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  @apply bg-surface/80 backdrop-blur-xl border border-border/50 transition-all duration-500 rounded-3xl relative overflow-hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.05), inset 0 0 24px rgba(255, 255, 255, 0.2), inset 0 1px 1px rgba(255, 255, 255, 0.5);
 }
 
 [data-theme='dark'] .glass-card {
   @apply bg-surface/80;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), inset 0 0 24px rgba(255, 255, 255, 0.02), inset 0 1px 1px rgba(255, 255, 255, 0.08);
 }
 
 .glass-card::before {

@@ -21,7 +21,8 @@ import {
   increment,
   writeBatch,
   clearIndexedDbPersistence,
-  arrayUnion
+  arrayUnion,
+  terminate
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -96,6 +97,7 @@ export const loginWithGoogle = async () => {
 
 export const clearAppPersistence = async () => {
   try {
+    await terminate(db);
     await clearIndexedDbPersistence(db);
   } catch (error) {
     console.error("Failed to clear persistence", error);

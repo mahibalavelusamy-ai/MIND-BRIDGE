@@ -3,7 +3,7 @@ import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import { motion } from 'motion/react';
-import { db, collection, query, where, onSnapshot, auth, handleFirestoreError, OperationType, addDoc } from '../lib/firebase';
+import { db, collection, query, where, onSnapshot, auth, handleFirestoreError, OperationType, addDoc, getDocs } from '../lib/firebase';
 import { serverTimestamp } from 'firebase/firestore';
 import { CalendarDays, Sparkles, Upload, FileText, X } from 'lucide-react';
 import { AIService } from '../services/ai/aiOrchestrator';
@@ -25,6 +25,7 @@ export default function ScheduleAI() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState('');
+  const [burnoutInsights, setBurnoutInsights] = useState<string[]>([]);
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -43,6 +44,8 @@ export default function ScheduleAI() {
         else if (data.type === 'assignment' || data.type === 'deadline') color = '#0284c7'; // blue
         else if (data.type === 'project') color = '#f59e0b'; // amber
         else if (data.type === 'reading') color = '#8b5cf6'; // violet
+        else if (data.type === 'recovery' || data.type === 'break') color = '#10b981'; // green for health wrapper
+        else if (data.type === 'study') color = '#3b82f6'; // blue for balanced study
         else if (data.priority === 'high') color = '#ef4444';
 
         return {
@@ -109,20 +112,38 @@ export default function ScheduleAI() {
         parts.push({ text: syllabusText });
       }
 
-      setProgress('AI is extracting key dates and deadlines...');
-      const eventsArray = await AIService.parseSyllabus(parts);
-
-      setProgress('Syncing ' + eventsArray.length + ' events to your calendar...');
-      const schedulesRef = collection(db, 'schedules');
-      for (const event of eventsArray) {
-        await addDoc(schedulesRef, {
-          ...event,
-          userId: auth.currentUser.uid,
-          createdAt: serverTimestamp()
-        });
+      setProgress('Gathering wellness and workload data...');
+      let burnoutContext = null;
+      try {
+          const qA = query(collection(db, 'assessments'), where('childId', '==', auth.currentUser.uid));
+          const snapA = await getDocs(qA);
+          const qS = query(collection(db, 'sessions'), where('childId', '==', auth.currentUser.uid), where('userId', '==', auth.currentUser?.uid));
+          const snapS = await getDocs(qS);
+          burnoutContext = {
+              assessments: snapA.docs.map(d => d.data()).slice(-10),
+              focusSessions: snapS.docs.map(d => d.data()).slice(-10)
+          };
+      } catch(e) {
+          console.warn("Could not fetch burnout context", e);
       }
 
-      alert(`Successfully imported ${eventsArray.length} events!`);
+      setProgress('AI is balancing your schedule to prevent burnout...');
+      const { events: eventsArray, insights } = await AIService.parseSyllabus(parts, burnoutContext);
+
+      setProgress('Syncing ' + (eventsArray?.length || 0) + ' events to your calendar...');
+      const schedulesRef = collection(db, 'schedules');
+      if (eventsArray && Array.isArray(eventsArray)) {
+         for (const event of eventsArray) {
+           await addDoc(schedulesRef, {
+             ...event,
+             userId: auth.currentUser.uid,
+             createdAt: serverTimestamp()
+           });
+         }
+      }
+
+      setBurnoutInsights(insights || []);
+      alert(`Successfully imported ${eventsArray?.length || 0} smart events!`);
       setPdfFile(null);
       setSyllabusText('');
     } catch (error) {
@@ -255,6 +276,18 @@ export default function ScheduleAI() {
               {isGenerating ? 'Analyzing Syllabus...' : 'Generate Smart Schedule'}
             </motion.button>
           </div>
+
+          {burnoutInsights.length > 0 && (
+            <div className="mt-6 -mb-4 p-4 border border-indigo-500/30 bg-indigo-500/10 rounded-xl relative overflow-hidden">
+               <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500"></div>
+               <h3 className="font-bold text-sm text-text-main flex items-center gap-2 mb-2"><Sparkles size={16} className="text-indigo-400" /> AI Burnout Prevention</h3>
+               <div className="space-y-2">
+                  {burnoutInsights.map((ins, i) => (
+                     <p key={i} className="text-sm text-text-main leading-relaxed">{ins}</p>
+                  ))}
+               </div>
+            </div>
+          )}
           
           {events.length > 0 && (
             <div className="mt-8 pt-6 border-t border-border">
@@ -268,6 +301,8 @@ export default function ScheduleAI() {
                   if (evt.type === 'exam' || evt.priority === 'high') typeColor = 'bg-alert-500/20 text-alert-500';
                   else if (evt.type === 'project') typeColor = 'bg-amber-500/20 text-amber-500';
                   else if (evt.type === 'reading') typeColor = 'bg-violet-500/20 text-violet-500';
+                  else if (evt.type === 'recovery' || evt.type === 'break') typeColor = 'bg-emerald-500/20 text-emerald-500';
+                  else if (evt.type === 'study') typeColor = 'bg-blue-500/20 text-blue-500';
 
                   return (
                   <div key={evt.id} className="bg-surface-2 p-3 rounded-xl border border-border flex items-center justify-between group hover:border-accent/50 hover:bg-surface transition-all">

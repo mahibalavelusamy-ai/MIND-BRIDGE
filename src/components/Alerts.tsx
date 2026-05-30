@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { AlertCircle, Bell, Info, Trash2, CheckCircle2, Check, Loader2, BellRing, BellOff, Settings, X } from 'lucide-react';
 import { Alert } from '../types';
 import { cn } from '../lib/utils';
-import { db, collection, query, onSnapshot, getDocs, orderBy, where, auth, updateDoc, addDoc, doc, deleteDoc } from '../lib/firebase';
+import { db, collection, query, onSnapshot, getDocs, orderBy, where, auth, updateDoc, addDoc, doc, deleteDoc, setDoc } from '../lib/firebase';
 
 interface AlertsProps {
   alerts: Alert[];
@@ -33,20 +33,31 @@ export default function Alerts({ alerts, onDismiss, onMarkRead }: AlertsProps) {
     try {
       setAcceptingIds(prev => new Set(prev).add(alert.id));
       
-      // Update the relationship
-      const relQuery = query(
-        collection(db, 'relationships'), 
+      // Find the connectionRequest
+      const reqQuery = query(
+        collection(db, 'connectionRequests'), 
         where('caretakerId', '==', alert.caretakerId), 
         where('studentId', '==', auth.currentUser.uid),
         where('status', '==', 'pending')
       );
       
-      const snap = await getDocs(relQuery);
-      const updates = snap.docs.map(d => updateDoc(d.ref, { status: 'approved' }));
-      await Promise.all(updates);
+      const snap = await getDocs(reqQuery);
+      
+      // Update the relationships based on found connectionRequest
+      if (!snap.empty) {
+         const reqDoc = snap.docs[0];
+         await setDoc(doc(db, 'relationships', `${alert.caretakerId}_${auth.currentUser.uid}`), {
+             caretakerId: alert.caretakerId,
+             studentId: auth.currentUser.uid,
+             studentEmail: auth.currentUser.email,
+             status: 'approved',
+             timestamp: new Date().toISOString()
+         });
+         await deleteDoc(reqDoc.ref);
+      }
       
       // Notify the caretaker
-      await addDoc(collection(db, 'alerts'), {
+      await addDoc(collection(db, 'notifications'), {
         type: 'info',
         title: 'Connection Accepted',
         description: `Student ${auth.currentUser.email} has accepted your monitoring request.`,

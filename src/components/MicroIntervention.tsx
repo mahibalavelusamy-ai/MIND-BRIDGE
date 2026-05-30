@@ -55,20 +55,20 @@ export default function MicroIntervention({ onComplete, onSkip }: MicroIntervent
   return (
     <div className="flex flex-col items-center justify-center py-8 space-y-12">
       <div className="text-center space-y-2">
-        <h3 className="text-2xl font-serif font-bold text-blue-900">Let's take a breath</h3>
-        <p className="text-blue-600/80 font-medium">Follow the bubble. Cycle {cycle + 1} of 3</p>
+        <h3 className="text-2xl font-serif font-bold text-white">Let's take a breath</h3>
+        <p className="text-slate-400 font-medium tracking-wide">Follow the rhythm. Cycle {cycle + 1} of 3</p>
       </div>
 
       <div className="relative w-48 h-48 flex items-center justify-center my-8">
         <motion.div
           animate={{ scale: getScale() }}
           transition={{ duration: phase === 'in' || phase === 'out' ? 4 : 4, ease: "linear" }}
-          className="absolute w-32 h-32 bg-blue-200 rounded-full opacity-50"
+          className="absolute w-32 h-32 bg-[#2563EB]/20 rounded-full blur-xl pointer-events-none"
         />
         <motion.div
           animate={{ scale: getScale() }}
           transition={{ duration: phase === 'in' || phase === 'out' ? 4 : 4, ease: "linear" }}
-          className="absolute w-24 h-24 bg-blue-400 rounded-full flex items-center justify-center text-bg shadow-lg shadow-blue-400/50"
+          className="absolute w-24 h-24 bg-gradient-to-tr from-[#2563EB] to-[#22D3EE] rounded-full flex items-center justify-center text-white shadow-[0_0_30px_rgba(37,99,235,0.4)]"
         >
           <Wind size={32} />
         </motion.div>
@@ -79,7 +79,7 @@ export default function MicroIntervention({ onComplete, onSkip }: MicroIntervent
           key={phase}
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-3xl font-bold text-blue-800 tracking-wide"
+          className="text-3xl font-serif font-bold text-[#22D3EE] tracking-wide drop-shadow-sm"
         >
           {getInstruction()}
         </motion.p>
@@ -87,7 +87,7 @@ export default function MicroIntervention({ onComplete, onSkip }: MicroIntervent
 
       <button 
         onClick={onSkip} 
-        className="text-sm font-bold text-text-muted hover:text-text-main transition-colors mt-8"
+        className="text-sm font-bold text-slate-500 hover:text-white transition-colors mt-8 uppercase tracking-widest"
       >
         Skip for now
       </button>

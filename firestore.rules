@@ -154,6 +154,13 @@ service cloud.firestore {
       allow update: if request.auth != null && (resource.data.caretakerId == request.auth.uid || resource.data.studentId == request.auth.uid);
       allow delete: if request.auth != null && (resource.data.caretakerId == request.auth.uid || resource.data.studentId == request.auth.uid);
     }
+    
+    match /connectionRequests/{reqId} {
+      allow read: if request.auth != null && (resource.data.caretakerId == request.auth.uid || resource.data.studentId == request.auth.uid);
+      allow create: if request.auth != null && (request.resource.data.caretakerId == request.auth.uid || request.resource.data.studentId == request.auth.uid);
+      allow update: if request.auth != null && (resource.data.caretakerId == request.auth.uid || resource.data.studentId == request.auth.uid);
+      allow delete: if request.auth != null && (resource.data.caretakerId == request.auth.uid || resource.data.studentId == request.auth.uid);
+    }
 
     match /users/{userId} {
       allow read: if isAuthenticated();
@@ -178,15 +185,15 @@ service cloud.firestore {
     }
 
     match /assessments/{assessmentId} {
-      allow read: if isAuthenticated() && resource.data.parentId == request.auth.uid;
+      allow read: if isAuthenticated() && (resource.data.parentId == request.auth.uid || resource.data.childId == request.auth.uid);
       allow read: if isTeacherOrClinicianOrCaretaker();
-      allow create: if isAuthenticated() && (request.resource.data.parentId == request.auth.uid || isTeacherOrClinicianOrCaretaker());
-      allow update: if isAuthenticated() && (resource.data.parentId == request.auth.uid || isTeacherOrClinicianOrCaretaker()) && isValidAssessment(request.resource.data) && request.resource.data.childId == resource.data.childId;
-      allow delete: if isAuthenticated() && (resource.data.parentId == request.auth.uid || isTeacherOrClinicianOrCaretaker());
+      allow create: if isAuthenticated() && (request.resource.data.parentId == request.auth.uid || request.resource.data.childId == request.auth.uid || isTeacherOrClinicianOrCaretaker());
+      allow update: if isAuthenticated() && (resource.data.parentId == request.auth.uid || resource.data.childId == request.auth.uid || isTeacherOrClinicianOrCaretaker()) && isValidAssessment(request.resource.data) && request.resource.data.childId == resource.data.childId;
+      allow delete: if isAuthenticated() && (resource.data.parentId == request.auth.uid || resource.data.childId == request.auth.uid || isTeacherOrClinicianOrCaretaker());
     }
 
-    match /alerts/{alertId} {
-      allow read: if isAuthenticated() && resource.data.parentId == request.auth.uid;
+    match /notifications/{alertId} {
+      allow read: if isAuthenticated() && (resource.data.parentId == request.auth.uid || resource.data.childId == request.auth.uid || resource.data.childId == 'all');
       allow read: if isTeacherOrClinicianOrCaretaker();
       allow write: if isAuthenticated();
     }

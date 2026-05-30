@@ -26,7 +26,13 @@ import {
   Cell,
   ComposedChart,
   ReferenceArea,
-  Area
+  Area,
+  Legend,
+  Radar,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis
 } from 'recharts';
 
 const RefArea = ReferenceArea as any;
@@ -81,11 +87,19 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
            day: chartTimeframe === '30d' ? 'numeric' : undefined,
            weekday: chartTimeframe === '7d' ? 'short' : undefined 
         }),
-        score: a.totalScore || a.score || 0
+        score: a.totalScore || a.score || 0,
+        mood: a.scores?.mood ? a.scores.mood * 20 : 0, // multiply by 20 to convert 1-5 scale to 1-100 scale for charting alongside totalScore
+        focus: a.scores?.focus ? a.scores.focus * 20 : 0,
+        sleep: a.scores?.sleep ? a.scores.sleep * 20 : 0,
+        stress: a.scores?.academic_stress ? a.scores.academic_stress * 20 : 0
       }))
     : Array.from({ length: chartTimeframe === '30d' ? 30 : 7 }).map((_, i) => ({
         day: `Day ${i+1}`,
-        score: 0
+        score: 0,
+        mood: 0,
+        focus: 0,
+        sleep: 0,
+        stress: 0
       }));
 
   useEffect(() => {
@@ -93,13 +107,9 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
 
     const fetchAssessments = async () => {
       try {
-        const qA = query(
-          collection(db, 'assessments'),
-          where('childId', '==', activeChild.id),
-          where('parentId', '==', activeChild.parentId),
-          orderBy('timestamp', 'desc'),
-          limit(7)
-        );
+        const qA = user?.role === 'student'
+          ? query(collection(db, 'assessments'), where('childId', '==', activeChild.id), orderBy('timestamp', 'desc'), limit(30))
+          : query(collection(db, 'assessments'), where('childId', '==', activeChild.id), where('parentId', '==', user?.uid), orderBy('timestamp', 'desc'), limit(30));
         const snapA = await getDocs(qA);
         setDashboardAssessments(snapA.docs.map(d => d.data()));
       } catch (error) {
@@ -121,7 +131,7 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
         }
       }
 
-      await addDoc(collection(db, 'alerts'), {
+      await addDoc(collection(db, 'notifications'), {
         type: 'info',
         title: 'Sleep Reminder',
         description: `Bedtime wind-down routine recommended for ${activeChild.name}.`,
@@ -132,7 +142,7 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
       });
       alert('Sleep Reminder set successfully!');
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'alerts');
+      handleFirestoreError(error, OperationType.CREATE, 'notifications');
     }
   };
 
@@ -146,7 +156,7 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
       context: 'Clinical',
       actionLabel: 'Request Callback',
       onClick: async () => {
-         await addDoc(collection(db, 'alerts'), {
+         await addDoc(collection(db, 'notifications'), {
             type: 'warning',
             title: 'Counselor Request',
             description: `A prioritized counselor check-in has been requested for ${activeChild?.name}.`,
@@ -204,6 +214,76 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
   
   const avgScore = calculateDisplayScore(dashboardAssessments);
 
+  const calculateRadarData = (assessments: any[]) => {
+    if (!assessments || assessments.length === 0) return [
+      { subject: 'Mood', A: 0, fullMark: 100 },
+      { subject: 'Sleep', A: 0, fullMark: 100 },
+      { subject: 'Focus', A: 0, fullMark: 100 },
+      { subject: 'Stress', A: 0, fullMark: 100 },
+      { subject: 'Social', A: 0, fullMark: 100 },
+      { subject: 'Motivation', A: 0, fullMark: 100 },
+    ];
+    
+    let sums = { mood: 0, sleep: 0, focus: 0, academic_stress: 0, social: 0, motivation: 0 };
+    let counts = { mood: 0, sleep: 0, focus: 0, academic_stress: 0, social: 0, motivation: 0 };
+
+    assessments.forEach(a => {
+      if (a.scores) {
+         Object.keys(sums).forEach(k => {
+           if (a.scores[k] !== undefined) {
+             sums[k as keyof typeof sums] += a.scores[k];
+             counts[k as keyof typeof counts]++;
+           }
+         });
+      }
+    });
+
+    const getAvg = (k: keyof typeof sums) => counts[k] > 0 ? Math.round((sums[k] / counts[k]) * 20) : 0;
+
+    return [
+      { subject: 'Mood', A: getAvg('mood'), fullMark: 100 },
+      { subject: 'Sleep', A: getAvg('sleep'), fullMark: 100 },
+      { subject: 'Focus', A: getAvg('focus'), fullMark: 100 },
+      { subject: 'Stress', A: getAvg('academic_stress'), fullMark: 100 },
+      { subject: 'Social', A: getAvg('social'), fullMark: 100 },
+      { subject: 'Motivation', A: getAvg('motivation'), fullMark: 100 },
+    ];
+  };
+
+  const radarData = calculateRadarData(dashboardAssessments);
+
+  const calculateTrendInfo = (category: string) => {
+    if (!dashboardAssessments || dashboardAssessments.length < 2) return { label: 'Stable', icon: '→', prefix: 'text-text-muted' };
+    const recent = dashboardAssessments.slice(0, Math.ceil(dashboardAssessments.length / 2));
+    const older = dashboardAssessments.slice(Math.ceil(dashboardAssessments.length / 2));
+    
+    const getAvg = (arr: any[]) => {
+      let sum = 0, count = 0;
+      arr.forEach(a => {
+        if (a.scores && a.scores[category] !== undefined) {
+          sum += a.scores[category]; count++;
+        }
+      });
+      return count > 0 ? sum / count : 0;
+    };
+    const rAvg = getAvg(recent);
+    const oAvg = getAvg(older);
+    
+    if (rAvg > oAvg + 0.2) return { label: 'Improving', icon: '↑', prefix: 'text-accent' };
+    if (rAvg < oAvg - 0.2) return { label: 'Declining', icon: '↓', prefix: 'text-alert-500' };
+    return { label: 'Stable', icon: '→', prefix: 'text-text-muted' };
+  };
+
+  const trends = {
+    mood: calculateTrendInfo('mood'),
+    sleep: calculateTrendInfo('sleep'),
+    focus: calculateTrendInfo('focus'),
+    stress: calculateTrendInfo('academic_stress'),
+    social: calculateTrendInfo('social'),
+    motivation: calculateTrendInfo('motivation'),
+  };
+
+
   if (children.length === 0) {
     return (
       <div className="space-y-8 animate-fade-in pb-12">
@@ -221,19 +301,19 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
     <div className="space-y-8 animate-fade-in pb-12">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-serif tracking-tight text-text-main">Good morning, {user?.name?.split(' ')[0]} 👋</h1>
-          <p className="text-text-muted mt-1">Here's a bento-style overview of your family's well-being.</p>
+          <h1 className="text-4xl font-serif tracking-tight text-white">Good morning, {user?.name?.split(' ')[0]} 👋</h1>
+          <p className="text-slate-400 mt-1">Here is your {user?.role === 'student' ? 'personal growth overview' : "family's wellbeing command center"}.</p>
         </div>
         <div className="flex flex-col md:flex-row items-end md:items-center gap-4">
           {activeChild && (
-            <div className="bg-surface border border-border px-4 py-2 rounded-2xl shadow-sm flex items-center gap-4 animate-fade-in group hover:border-accent transition-colors">
+            <div className="bg-[#0F172A]/50 border border-white/5 px-4 py-3 rounded-2xl flex items-center gap-4 animate-fade-in group hover:border-[#2563EB]/40 transition-colors backdrop-blur-md">
               <div className="flex flex-col items-end">
-                <span className="text-[10px] font-bold text-text-dim uppercase tracking-widest">Progress to Mega Prize</span>
-                <p className="text-sm font-bold text-accent">
-                  Day {(activeChild?.streak || 0) % 7}/7 — {7 - ((activeChild?.streak || 0) % 7)} more days to unlock 70 bonus credits!
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Progress</span>
+                <p className="text-sm font-bold text-[#FBBF24]">
+                  Day {(activeChild?.streak || 0) % 7}/7 Streak
                 </p>
               </div>
-              <div className="w-12 h-12 rounded-xl bg-accent/10 flex items-center justify-center text-accent group-hover:scale-110 transition-transform">
+              <div className="w-12 h-12 rounded-xl bg-[#FBBF24]/10 flex items-center justify-center text-[#FBBF24] group-hover:scale-110 transition-transform shadow-inner">
                 <Trophy size={24} />
               </div>
             </div>
@@ -246,68 +326,46 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
         
         {/* Left Column - Profile & Quick Stats */}
         <div className="md:col-span-4 flex flex-col gap-6">
-          <div className="glass-card p-6 border-border flex-1">
-            <h3 className="text-sm font-bold text-text-muted mb-4 uppercase tracking-widest">Active Profile</h3>
+          <div className="glass-card p-8 border-border flex-1 flex flex-col items-center justify-center text-center relative overflow-hidden">
+            {/* Background glow */}
+            <div className="absolute inset-0 bg-gradient-to-b from-[#2563EB]/10 to-transparent pointer-events-none" />
+            
+            <h3 className="text-xs font-bold text-text-muted mb-6 uppercase tracking-widest relative z-10">Personal Growth Center</h3>
             {activeChild ? (
-              <div 
-                className={cn(
-                  "flex flex-col items-center gap-4 p-6 rounded-2xl border bg-surface text-center",
-                  activeChild.riskLevel === 'high' ? "border-alert-200 shadow-sm shadow-alert-100" : "border-border"
-                )}
-              >
-                <div className="relative">
-                  <div className={cn(
-                    "w-20 h-20 rounded-full bg-accent-light flex items-center justify-center text-4xl z-10 relative shadow-inner",
-                    activeChild.riskLevel === 'high' && "ring-4 ring-alert-100"
-                  )}>
-                    {activeChild.age >= 18 ? <span className="font-serif text-accent">{activeChild.name ? activeChild.name.charAt(0).toUpperCase() : '👤'}</span> : activeChild.avatar}
-                  </div>
-                  {activeChild.riskLevel === 'high' && (
-                    <div className="absolute inset-0 rounded-full bg-alert-500/20 animate-ping -z-0" />
-                  )}
-                </div>
-                <div>
-                  <h4 className="font-bold text-xl text-text-main">{activeChild.name}</h4>
-                  <p className="text-xs text-text-dim mt-1">{activeChild.age} years • {activeChild.age >= 18 ? 'Student' : activeChild.grade}</p>
-                </div>
-                
-                <div className="grid grid-cols-2 w-full gap-3 mt-4">
-                   <div className="bg-surface-2 p-3 rounded-xl border border-border flex flex-col items-center">
-                      <Sparkles size={16} className="text-accent mb-1" />
-                      <span className="text-xs font-bold text-text-muted uppercase">Credits</span>
-                      <span className="text-lg font-bold text-text-main">{activeChild.gems || 0}</span>
-                   </div>
-                   <div className="bg-surface-2 p-3 rounded-xl border border-border flex flex-col items-center">
-                      <Zap size={16} className="text-orange-500 mb-1" />
-                      <span className="text-xs font-bold text-text-muted uppercase">Streak</span>
-                      <span className="text-lg font-bold text-text-main">{activeChild.streak || 0}</span>
-                   </div>
-                </div>
-                <div className="w-full mt-2">
-                   <div className={cn(
-                    "w-full py-2 rounded-xl text-xs font-bold uppercase tracking-widest text-center",
-                    activeChild.riskLevel === 'low' ? "bg-alert-50 text-alert-500 border border-alert-200" : 
-                    activeChild.riskLevel === 'medium' ? "bg-alert-100 text-alert-600 border border-alert-300" : 
-                    "bg-alert-200 text-alert-700 border border-alert-400"
-                  )}>
-                    Risk Level: {activeChild.riskLevel}
-                  </div>
-                </div>
-                {user?.role === 'student' && (
-                  <div className="w-full mt-4">
-                    <button 
-                      onClick={() => setActiveTab('connections')}
-                      className="w-full flex items-center justify-between p-3 bg-surface-2 border border-border rounded-xl hover:border-accent hover:text-accent transition-colors"
-                    >
-                      <div className="flex items-center gap-2">
-                         <span className="text-xl">🤝</span>
-                         <span className="text-sm font-bold text-text-main">Monitor Access</span>
-                      </div>
-                      <ChevronRight size={16} className="text-text-dim" />
-                    </button>
-                  </div>
-                )}
-              </div>
+               <div className="relative z-10 w-full flex flex-col items-center">
+                 <div className="relative mb-6">
+                    <div className="w-24 h-24 rounded-full bg-[#0F172A] border-4 border-[#2563EB]/30 flex items-center justify-center text-4xl shadow-[0_0_30px_rgba(37,99,235,0.2)]">
+                      {activeChild.age >= 18 ? <span className="font-serif text-[#22D3EE]">{activeChild.name ? activeChild.name.charAt(0).toUpperCase() : '👤'}</span> : activeChild.avatar}
+                    </div>
+                 </div>
+                 
+                 <h4 className="font-bold text-2xl text-white mb-1 font-serif">{activeChild.name}</h4>
+                 <p className="text-sm text-slate-400">Level {Math.floor((activeChild.gems || 0) / 100) + 1} Explorer</p>
+                 
+                 <div className="grid grid-cols-2 w-full gap-4 mt-8">
+                    <div className="bg-[#0F172A]/50 p-4 rounded-2xl border border-white/5 flex flex-col items-center backdrop-blur-md">
+                       <Sparkles size={20} className="text-[#FBBF24] mb-2" />
+                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Reward Points</span>
+                       <span className="text-2xl font-bold text-white font-serif">{activeChild.gems || 0}</span>
+                    </div>
+                    <div className="bg-[#0F172A]/50 p-4 rounded-2xl border border-white/5 flex flex-col items-center backdrop-blur-md">
+                       <Zap size={20} className="text-[#22D3EE] mb-2" />
+                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Current Streak</span>
+                       <span className="text-2xl font-bold text-white font-serif">{activeChild.streak || 0}</span>
+                    </div>
+                 </div>
+
+                 {user?.role === 'student' && (
+                    <div className="w-full mt-6">
+                       <button 
+                         onClick={() => setActiveTab('assessments')}
+                         className="w-full py-4 rounded-2xl text-sm font-bold text-white bg-gradient-to-r from-[#2563EB] to-[#0891B2] hover:opacity-90 transition-all shadow-[0_0_20px_rgba(37,99,235,0.3)]"
+                       >
+                         Start Daily Check-in
+                       </button>
+                    </div>
+                 )}
+               </div>
             ) : (
                 <div className="p-6 rounded-2xl border border-dashed border-border text-center text-text-muted">
                     No active profile
@@ -324,14 +382,16 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
                  label="Avg Wellness Score"
                  value={avgScore > 0 ? avgScore.toString() : '--'}
                  change="Past 7 days"
-                 color="bg-emerald-100 text-emerald-600"
+                 color="text-[#22D3EE]"
+                 bgClass="bg-[#22D3EE]/10"
               />
               <StatCard 
                  icon={<AlertCircle size={20} />}
                  label="Active Alerts"
                  value={alerts.filter(a => a.childId === activeChild?.id && !a.read).length.toString()}
                  change="Require attention"
-                 color="bg-alert-100 text-alert-600"
+                 color="text-[#F87171]"
+                 bgClass="bg-[#F87171]/10"
                  isUrgent={alerts.filter(a => a.childId === activeChild?.id && !a.read).length > 0}
               />
               <StatCard 
@@ -339,25 +399,26 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
                  label="Assessments"
                  value={dashboardAssessments.length.toString()}
                  change="Completed recently"
-                 color="bg-blue-100 text-blue-600"
+                 color="text-[#2563EB]"
+                 bgClass="bg-[#2563EB]/10"
               />
            </div>
 
-           <div className="glass-card p-6 border-border flex-1 flex flex-col">
+           <div className="glass-card p-6 border-border flex-1 flex flex-col bg-[#0F172A]/50 backdrop-blur-md">
               <div className="flex items-center justify-between mb-6">
-                 <h3 className="text-sm font-bold text-text-muted uppercase tracking-widest flex items-center gap-2">
-                    <TrendingUp size={16} /> Wellness Trends
+                 <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                    <TrendingUp size={16} className="text-[#2563EB]" /> Wellness Trends
                  </h3>
-                 <div className="flex bg-surface-2 rounded-lg p-1 border border-border">
+                 <div className="flex bg-[#0F172A] rounded-lg p-1 border border-white/10">
                     <button 
                       onClick={() => setChartTimeframe('7d')}
-                      className={cn("px-3 py-1 text-xs font-bold rounded-md transition-colors", chartTimeframe === '7d' ? "bg-surface shadow-sm text-text-main" : "text-text-muted hover:text-text-main")}
+                      className={cn("px-3 py-1 text-xs font-bold rounded-md transition-colors", chartTimeframe === '7d' ? "bg-[#2563EB]/20 text-[#22D3EE]" : "text-slate-500 hover:text-slate-300")}
                     >
                       7 Days
                     </button>
                     <button 
                       onClick={() => setChartTimeframe('30d')}
-                      className={cn("px-3 py-1 text-xs font-bold rounded-md transition-colors", chartTimeframe === '30d' ? "bg-surface shadow-sm text-text-main" : "text-text-muted hover:text-text-main")}
+                      className={cn("px-3 py-1 text-xs font-bold rounded-md transition-colors", chartTimeframe === '30d' ? "bg-[#2563EB]/20 text-[#22D3EE]" : "text-slate-500 hover:text-slate-300")}
                     >
                       30 Days
                     </button>
@@ -369,35 +430,45 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
                     <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                        <defs>
                           <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
-                             <stop offset="5%" stopColor="var(--color-accent)" stopOpacity={0.3}/>
-                             <stop offset="95%" stopColor="var(--color-accent)" stopOpacity={0}/>
+                             <stop offset="5%" stopColor="#22D3EE" stopOpacity={0.3}/>
+                             <stop offset="95%" stopColor="#22D3EE" stopOpacity={0}/>
                           </linearGradient>
                        </defs>
                        <XAxis 
                          dataKey="day" 
                          axisLine={false} 
                          tickLine={false} 
-                         tick={{ fontSize: 10, fill: '#888888' }} 
+                         tick={{ fontSize: 10, fill: '#64748b' }} 
                          dy={10}
                        />
                        <YAxis 
                          axisLine={false} 
                          tickLine={false} 
-                         tick={{ fontSize: 10, fill: '#888888' }}
+                         tick={{ fontSize: 10, fill: '#64748b' }}
                        />
                        <Tooltip 
-                         contentStyle={{ borderRadius: '12px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', fontSize: '12px', fontWeight: 'bold' }}
-                         itemStyle={{ color: 'var(--color-accent)' }}
+                         contentStyle={{ borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', backgroundColor: '#020617', fontSize: '12px', fontWeight: 'bold' }}
+                         itemStyle={{ color: '#22D3EE' }}
                        />
-                       <Area type="monotone" dataKey="score" stroke="none" fillOpacity={1} fill="url(#colorScore)" />
+                       {user?.role !== 'student' && <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '10px' }} />}
+                       <Area type="monotone" dataKey="score" stroke="none" fillOpacity={1} fill="url(#colorScore)" name="Overall Wellness" />
                        <Line 
                          type="monotone" 
                          dataKey="score" 
-                         stroke="var(--color-accent)" 
+                         name="Overall Wellness"
+                         stroke="#22D3EE" 
                          strokeWidth={3}
-                         dot={{ r: 4, fill: "var(--color-surface)", strokeWidth: 2 }}
-                         activeDot={{ r: 6, strokeWidth: 0, fill: "var(--color-accent)" }}
+                         dot={{ r: 4, fill: "#0F172A", strokeWidth: 2 }}
+                         activeDot={{ r: 6, strokeWidth: 0, fill: "#22D3EE" }}
                        />
+                       {user?.role !== 'student' && (
+                         <>
+                           <Line type="monotone" dataKey="mood" name="Mood" stroke="#8b5cf6" strokeWidth={2} dot={false} strokeDasharray="3 3"/>
+                           <Line type="monotone" dataKey="focus" name="Focus" stroke="#3b82f6" strokeWidth={2} dot={false} strokeDasharray="3 3"/>
+                           <Line type="monotone" dataKey="sleep" name="Sleep" stroke="#f59e0b" strokeWidth={2} dot={false} strokeDasharray="3 3"/>
+                           <Line type="monotone" dataKey="stress" name="Stress" stroke="#ef4444" strokeWidth={2} dot={false} strokeDasharray="3 3"/>
+                         </>
+                       )}
                     </ComposedChart>
                  </ResponsiveContainer>
               </div>
@@ -407,7 +478,7 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
       </div>
       
       {activeChild && (
-        <RecommendationAI weightedRiskScore={avgScore / 5} childId={activeChild.id} />
+        <RecommendationAI weightedRiskScore={(100 - avgScore) / 100} childId={activeChild.id} />
       )}
 
         {interventionChild && (
@@ -417,98 +488,164 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
           />
         )}
 
-        {/* Action System & AI Summary */}
-        <div className="md:col-span-12 w-full mt-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full">
-            <div className="glass-card p-8 h-full flex flex-col hover:border-accent/40 transition-colors">
-              <h3 className="text-xl font-serif mb-4 flex items-center gap-2">
-                <Sparkles size={20} className="text-accent" />
-                AI Wellness Summary
-              </h3>
-              <p className="text-sm text-text-muted leading-relaxed mb-6 flex-1">
-                {activeChild?.name} has shown improved emotional consistency this week and maintained strong planner engagement. Their stress levels appear stable, and they are building a solid routine.
-              </p>
-              <div className="flex gap-2 text-xs font-bold uppercase tracking-widest text-text-dim">
-                <span className="bg-surface-2 px-3 py-1 rounded-full border border-border">Mood: Stable</span>
-                <span className="bg-surface-2 px-3 py-1 rounded-full border border-border">Stress: Low</span>
-              </div>
-            </div>
+        {/* Wellness Overview Command Center */}
+        <div className="md:col-span-12 w-full mt-6 space-y-6">
+          <div className="flex items-center gap-2 mb-4">
+             <Heart size={24} className="text-accent" />
+             <h2 className="text-2xl font-serif font-bold text-text-main">Wellness Overview</h2>
+          </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+             {/* Radar Chart */}
+             <div className="col-span-1 glass-card p-6 flex flex-col items-center justify-center min-h-[300px] hover:border-accent/40 transition-colors">
+                <h3 className="text-sm font-bold text-text-muted uppercase tracking-widest w-full text-left mb-4">Wellness Radar</h3>
+                <ResponsiveContainer width="100%" height={240}>
+                   <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
+                     <PolarGrid stroke="rgba(255,255,255,0.1)" />
+                     <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 11, fontWeight: 'bold' }} />
+                     <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
+                     <Radar
+                       name="Current"
+                       dataKey="A"
+                       stroke="#22D3EE"
+                       strokeWidth={2}
+                       fill="#2563EB"
+                       fillOpacity={0.4}
+                     />
+                   </RadarChart>
+                </ResponsiveContainer>
+             </div>
+
+             {/* Dimension Trends */}
+             <div className="col-span-1 glass-card p-6 flex flex-col hover:border-[#2563EB]/40 transition-colors bg-[#0F172A]/50">
+                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6 flex items-center justify-between">
+                  Dimension Trends
+                  <span className="text-[10px] bg-[#2563EB]/20 text-[#22D3EE] px-2 py-1 rounded-md">Last 30 Days</span>
+                </h3>
+                <div className="flex-1 grid grid-cols-2 gap-3 content-start">
+                   {radarData.map((d) => {
+                     const keyMap: Record<string, keyof typeof trends> = { 'Mood': 'mood', 'Sleep': 'sleep', 'Focus': 'focus', 'Stress': 'stress', 'Social': 'social', 'Motivation': 'motivation' };
+                     const trend = trends[keyMap[d.subject]];
+                     if (!trend) return null;
+                     return (
+                       <div key={d.subject} className="bg-white/5 p-3 rounded-xl border border-white/5 flex flex-col gap-1 shadow-sm backdrop-blur-sm">
+                          <span className="text-[10px] uppercase text-slate-400 font-bold">{d.subject}</span>
+                          <div className="flex items-center justify-between mt-1">
+                            <span className="text-xl font-bold text-white leading-none font-serif">{d.A}</span>
+                            <span className={`text-xs font-bold flex items-center gap-1 leading-none ${
+                                trend.label === 'Improving' ? 'text-[#22D3EE]' :
+                                trend.label === 'Declining' ? 'text-[#F87171]' : 'text-slate-400'
+                            }`}>
+                              {trend.icon} {trend.label}
+                            </span>
+                          </div>
+                       </div>
+                     );
+                   })}
+                </div>
+             </div>
+
+             {/* AI Summary */}
+             <div className="col-span-1 glass-card p-6 flex flex-col hover:border-[#22D3EE]/40 transition-colors bg-[#0F172A]/50">
+                <h3 className="text-sm font-bold text-[#22D3EE] uppercase tracking-widest flex items-center gap-2 mb-4">
+                  <Sparkles size={16} /> AI Insights
+                </h3>
+                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+                  <p className="text-sm text-slate-300 flex-1 font-medium bg-[#2563EB]/10 p-4 rounded-xl border border-[#2563EB]/20 leading-relaxed">
+                    {dashboardAssessments[0]?.aiInsight?.message || `${activeChild?.name}'s wellness profile is forming.`}
+                  </p>
+                  {dashboardAssessments[0]?.aiInsight?.recommendations?.length > 0 && (
+                     <ul className="text-xs text-slate-400 list-disc list-inside mt-4 space-y-2 mb-4 pl-2">
+                        {dashboardAssessments[0].aiInsight.recommendations.map((rec: string, i: number) => (
+                           <li key={i}>{rec}</li>
+                        ))}
+                     </ul>
+                  )}
+                </div>
+                <div className="flex gap-2 text-[10px] font-bold uppercase tracking-widest text-[#2563EB] mt-4 pt-4 border-t border-white/10">
+                  <span>Profile: </span>
+                  <span className="text-[#22D3EE]">{activeChild?.wellnessProfile || 'Analyzing Baseline'}</span>
+                </div>
+             </div>
+          </div>
+          
+          {/* Action Center */}
+          <div className="mt-6">
             {user?.role === 'student' ? (
-              <div className="glass-card p-8 h-full flex flex-col hover:border-blue-500/40 transition-colors">
-                <h3 className="text-xl font-serif mb-4 flex items-center gap-2">
-                  <Trophy size={20} className="text-blue-500" />
+              <div className="glass-card p-8 h-full flex flex-col hover:border-[#2563EB]/40 transition-colors bg-[#0F172A]/50">
+                <h3 className="text-xl font-serif mb-4 flex items-center gap-2 text-white">
+                  <Trophy size={20} className="text-[#FBBF24]" />
                   Daily Growth Quests
                 </h3>
-                <p className="text-sm text-text-muted mb-6">
+                <p className="text-sm text-slate-400 mb-6">
                   Complete these mini-quests today to earn bonus credits and boost your wellbeing.
                 </p>
-                <div className="grid grid-cols-2 gap-3 mt-auto">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-auto">
                   <button 
                     onClick={() => { setShowTimerModal(true); }}
-                    className="bg-surface-2 hover:border-blue-400 text-text-main text-sm font-bold py-3 px-4 rounded-xl border border-border transition-all text-left flex flex-col gap-1 shadow-sm hover:shadow-md"
+                    className="bg-white/5 hover:border-[#2563EB] hover:bg-[#2563EB]/10 text-white text-sm font-bold py-4 px-5 rounded-xl border border-white/10 transition-all text-left flex flex-col gap-2 shadow-[0_4px_24px_rgba(0,0,0,0.2)] hover:shadow-[0_4px_24px_rgba(37,99,235,0.2)] backdrop-blur-md"
                   >
-                    <span className="text-blue-400">Focus for 15m</span>
-                    <span className="text-[10px] text-text-dim uppercase flex justify-between w-full"><span>Academic</span><span>+15 💎</span></span>
+                    <span className="text-[#2563EB]">Focus for 15m</span>
+                    <span className="text-[10px] text-slate-500 uppercase flex justify-between w-full"><span>Academic</span><span className="text-[#FBBF24]">+15 💎</span></span>
                   </button>
                   <button 
                     onClick={() => alert(`Starting 3-min Journal...`)}
-                    className="bg-surface-2 hover:border-accent text-text-main text-sm font-bold py-3 px-4 rounded-xl border border-border transition-all text-left flex flex-col gap-1 shadow-sm hover:shadow-md"
+                    className="bg-white/5 hover:border-[#22D3EE] hover:bg-[#22D3EE]/10 text-white text-sm font-bold py-4 px-5 rounded-xl border border-white/10 transition-all text-left flex flex-col gap-2 shadow-[0_4px_24px_rgba(0,0,0,0.2)] hover:shadow-[0_4px_24px_rgba(34,211,238,0.2)] backdrop-blur-md"
                   >
-                    <span className="text-accent">Quick Journal</span>
-                    <span className="text-[10px] text-text-dim uppercase flex justify-between w-full"><span>Mindfulness</span><span>+20 💎</span></span>
+                    <span className="text-[#22D3EE]">Quick Journal</span>
+                    <span className="text-[10px] text-slate-500 uppercase flex justify-between w-full"><span>Mindfulness</span><span className="text-[#FBBF24]">+20 💎</span></span>
                   </button>
                   <button 
                     onClick={() => { setActiveTab('shop'); }}
-                    className="bg-surface-2 col-span-2 hover:border-purple-400 text-text-main text-sm font-bold py-3 px-4 rounded-xl border border-border transition-all text-left flex flex-col gap-1 shadow-sm flex items-center justify-between"
+                    className="bg-gradient-to-br from-[#2563EB]/10 to-[#8B5CF6]/10 hover:from-[#2563EB]/20 hover:to-[#8B5CF6]/20 col-span-2 hover:border-[#8B5CF6] text-white text-sm font-bold py-4 px-5 rounded-xl border border-[#8B5CF6]/30 transition-all text-left flex items-center justify-between shadow-[0_4px_24px_rgba(0,0,0,0.2)] backdrop-blur-md group"
                   >
-                    <div className="flex flex-col">
-                      <span className="text-purple-400">Visit Wellness Shop</span>
-                      <span className="text-[10px] text-text-dim uppercase mt-1">Reward Yourself</span>
+                    <div className="flex flex-col h-full justify-between gap-1">
+                      <span className="text-[#8B5CF6] group-hover:text-white transition-colors">Visit Wellness Shop</span>
+                      <span className="text-[10px] text-slate-400 uppercase">Reward Yourself</span>
                     </div>
-                    <div className="w-8 h-8 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-400">
-                      <Zap size={16} />
+                    <div className="w-12 h-12 rounded-full bg-[#8B5CF6]/20 flex items-center justify-center text-[#8B5CF6] self-center group-hover:scale-110 group-hover:bg-[#8B5CF6] group-hover:text-white transition-all shadow-[0_0_15px_rgba(139,92,246,0.5)]">
+                      <Zap size={24} />
                     </div>
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="glass-card p-8 h-full flex flex-col hover:border-alert-300/40 transition-colors">
-                <h3 className="text-xl font-serif mb-4 flex items-center gap-2">
-                  <Heart size={20} className="text-alert-500" />
+              <div className="glass-card p-8 h-full flex flex-col hover:border-[#2563EB]/40 transition-colors bg-[#0F172A]/50">
+                <h3 className="text-xl font-serif mb-4 flex items-center gap-2 text-white">
+                  <Heart size={20} className="text-[#F87171]" />
                   Supportive Nudges
                 </h3>
-                <p className="text-sm text-text-muted mb-6">
+                <p className="text-sm text-slate-400 mb-6">
                   Send a quick supportive message or reminder to {activeChild?.name}'s device.
                 </p>
-                <div className="grid grid-cols-2 gap-3 mt-auto">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-auto">
                   <button 
                     onClick={() => alert(`Encouragement sent to ${activeChild?.name}`)}
-                    className="bg-surface-2 hover:border-accent text-text-main text-sm font-bold py-3 px-4 rounded-xl border border-border transition-colors text-left flex flex-col gap-1"
+                    className="bg-white/5 hover:border-[#22D3EE] text-white text-sm font-bold py-4 px-5 rounded-xl border border-white/10 transition-colors text-left flex flex-col gap-2"
                   >
-                    <span className="text-accent">"You're doing great 💙"</span>
-                    <span className="text-[10px] text-text-dim uppercase">Encouragement</span>
+                    <span className="text-[#22D3EE]">"You're doing great 💙"</span>
+                    <span className="text-[10px] text-slate-400 uppercase">Encouragement</span>
                   </button>
                   <button 
                     onClick={() => alert(`Reminder sent to ${activeChild?.name}`)}
-                    className="bg-surface-2 hover:border-indigo-400 text-text-main text-sm font-bold py-3 px-4 rounded-xl border border-border transition-colors text-left flex flex-col gap-1"
+                    className="bg-white/5 hover:border-[#2563EB] text-white text-sm font-bold py-4 px-5 rounded-xl border border-white/10 transition-colors text-left flex flex-col gap-2"
                   >
-                    <span className="text-indigo-400">"Don't forget to pack!"</span>
-                    <span className="text-[10px] text-text-dim uppercase">Planner Nudge</span>
+                    <span className="text-[#2563EB]">"Don't forget to pack!"</span>
+                    <span className="text-[10px] text-slate-400 uppercase">Planner Nudge</span>
                   </button>
                   <button 
                     onClick={() => alert(`Wellness nudge sent to ${activeChild?.name}`)}
-                    className="bg-surface-2 hover:border-emerald-500 text-text-main text-sm font-bold py-3 px-4 rounded-xl border border-border transition-colors text-left flex flex-col gap-1"
+                    className="bg-white/5 hover:border-emerald-500 text-white text-sm font-bold py-4 px-5 rounded-xl border border-white/10 transition-colors text-left flex flex-col gap-2"
                   >
                     <span className="text-emerald-500">"Take a 5 min break"</span>
-                    <span className="text-[10px] text-text-dim uppercase">Wellness</span>
+                    <span className="text-[10px] text-slate-400 uppercase">Wellness</span>
                   </button>
                   <button 
                     onClick={handleSetSleepReminder}
-                    className="bg-surface-2 hover:border-amber-500 text-text-main text-sm font-bold py-3 px-4 rounded-xl border border-border transition-colors text-left flex flex-col gap-1"
+                    className="bg-white/5 hover:border-[#FBBF24] text-white text-sm font-bold py-4 px-5 rounded-xl border border-white/10 transition-colors text-left flex flex-col gap-2"
                   >
-                    <span className="text-amber-500">Sleep Reminder</span>
-                    <span className="text-[10px] text-text-dim uppercase">Routine</span>
+                    <span className="text-[#FBBF24]">Sleep Reminder</span>
+                    <span className="text-[10px] text-slate-400 uppercase">Routine</span>
                   </button>
                 </div>
               </div>
@@ -584,22 +721,24 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
   );
 }
 
-function StatCard({ icon, label, value, change, color, isUrgent }: { 
+function StatCard({ icon, label, value, change, color, bgClass, isUrgent }: { 
   icon: React.ReactNode; 
   label: string; 
   value: string; 
   change: string; 
   color: string;
+  bgClass?: string;
   isUrgent?: boolean;
 }) {
   return (
-    <div className="bg-surface border border-border rounded-xl p-5 shadow-sm hover:shadow-md transition-all">
-      <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center mb-4", color)}>
-        {icon}
+    <div className="bg-[#0F172A]/50 border border-white/5 rounded-2xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.1)] hover:bg-[#0F172A]/80 transition-all backdrop-blur-md relative overflow-hidden group">
+      <div className="absolute -right-10 -top-10 w-24 h-24 bg-white/5 rounded-full blur-2xl group-hover:bg-white/10 transition-colors pointer-events-none" />
+      <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center mb-4 relative z-10", bgClass || color)}>
+        <div className={color}>{icon}</div>
       </div>
-      <p className="text-xs font-medium text-text-dim mb-1">{label}</p>
-      <p className={cn("text-2xl font-serif font-bold", isUrgent && "text-alert-600")}>{value}</p>
-      <p className="text-[10px] text-text-dim mt-2">{change}</p>
+      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1 relative z-10">{label}</p>
+      <p className={cn("text-3xl font-serif font-bold relative z-10", isUrgent ? "text-[#F87171]" : "text-white")}>{value}</p>
+      <p className="text-[10px] text-slate-500 mt-2 relative z-10">{change}</p>
     </div>
   );
 }

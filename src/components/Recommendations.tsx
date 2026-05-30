@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Child, Recommendation } from '../types';
-import { db, collection, query, where, getDocs, orderBy, limit } from '../lib/firebase';
+import { db, auth, collection, query, where, getDocs, orderBy, limit } from '../lib/firebase';
 import { generateRecommendations } from '../lib/recommendationService';
 import { Lightbulb, ArrowRight, Coffee, Sparkles, Activity } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -40,7 +40,20 @@ export default function Recommendations({ children, setActiveTab }: Recommendati
           const snapS = await getDocs(qS);
           const schedule = snapS.docs.map(d => d.data());
 
-          const recs = await generateRecommendations(child, assessments, schedule);
+          let sessions: any[] = [];
+          try {
+            const qSessions = query(
+              collection(db, 'sessions'),
+              where('childId', '==', child.id),
+              where('userId', '==', auth.currentUser?.uid)
+            );
+            const snapSessions = await getDocs(qSessions);
+            sessions = snapSessions.docs.map(d => d.data());
+          } catch (e) {
+            console.warn("Failed to fetch sessions for recommendations", e);
+          }
+
+          const recs = await generateRecommendations(child, assessments, schedule, sessions);
           newRecs[child.id] = recs;
         } catch (error) {
           console.error(`Error fetching recommendations for ${child.name}:`, error);
@@ -119,7 +132,21 @@ export default function Recommendations({ children, setActiveTab }: Recommendati
                             </span>
                           </div>
                           <h4 className="font-bold text-lg mb-2 group-hover:text-accent transition-colors">{rec.title}</h4>
-                          <p className="text-sm text-text-muted leading-relaxed mb-6">{rec.description}</p>
+                          <p className="text-sm text-text-muted leading-relaxed mb-4">{rec.description}</p>
+                          
+                          {rec.steps && rec.steps.length > 0 && (
+                            <div className="mb-6 space-y-2">
+                               <h5 className="text-xs font-bold text-text-main uppercase tracking-widest mb-2">Action Plan</h5>
+                               {rec.steps.map((step, idx) => (
+                                 <div key={idx} className="flex items-start gap-2 bg-surface p-2.5 rounded-lg border border-border/50">
+                                    <div className="flex-shrink-0 w-5 h-5 rounded-full bg-accent/10 flex items-center justify-center text-[10px] font-bold text-accent border border-accent/20">
+                                       {idx + 1}
+                                    </div>
+                                    <p className="text-xs text-text-main leading-relaxed pt-0.5">{step}</p>
+                                 </div>
+                               ))}
+                            </div>
+                          )}
                         </div>
                         
                         <div className="space-y-4">

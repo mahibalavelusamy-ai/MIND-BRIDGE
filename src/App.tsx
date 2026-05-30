@@ -70,7 +70,6 @@ import ChildProfile from './components/ChildProfile';
 import Assessment from './components/Assessment';
 import Reports from './components/Reports';
 import Alerts from './components/Alerts';
-import SchoolDashboard from './components/SchoolDashboard';
 import ProfileVaultModal from './components/ProfileVaultModal';
 import CaretakerDashboard from './components/CaretakerDashboard';
 
@@ -80,7 +79,7 @@ import WellnessShop from './components/WellnessShop';
 import ScheduleAI from './components/ScheduleAI';
 
 type Page = 'landing' | 'user-type' | 'login' | 'app';
-export type Tab = 'home' | 'profile' | 'assessment' | 'reports' | 'alerts' | 'shop' | 'schedule' | 'connections';
+export type Tab = 'home' | 'profile' | 'assessment' | 'reports' | 'notifications' | 'shop' | 'schedule' | 'connections';
 
 const APP_VERSION = "1.2.0";
 
@@ -112,7 +111,7 @@ const useDataMigration = (user: any, children: Child[], alerts: Alert[], setChil
 
         for (const alert of alerts) {
           if (alert.read === undefined) {
-             const alertRef = doc(db, 'alerts', alert.id);
+             const alertRef = doc(db, 'notifications', alert.id);
              batch.update(alertRef, { read: false });
              hasUpdates = true;
           }
@@ -137,7 +136,7 @@ const useDataMigration = (user: any, children: Child[], alerts: Alert[], setChil
 };
 
 export default function App() {
-  const [currentPage, setCurrentPage] = useState<Page>('login');
+  const [currentPage, setCurrentPage] = useState<Page>('landing');
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -175,6 +174,16 @@ export default function App() {
   const [authErrorContent, setAuthErrorContent] = useState('');
   const [showScrollTop, setShowScrollTop] = useState(false);
   const mainScrollRef = React.useRef<HTMLElement>(null);
+
+  const processAuthError = async (msg: string) => {
+    setAuthErrorContent(msg);
+    sessionStorage.clear();
+    localStorage.removeItem('auth_expiry_childId');
+    try {
+      await firebaseLogout();
+      await clearAppPersistence();
+    } catch (e) {}
+  };
 
   // Privacy: State Purge
   const clearState = () => {
@@ -215,7 +224,7 @@ export default function App() {
   useEffect(() => {
     handleGoogleRedirectResult().catch((error) => {
       console.error("Redirect result error on mount:", error);
-      setAuthErrorContent(error?.message || "Google sign-in failed. Please try again.");
+      processAuthError(error?.message || "Google sign-in failed. Please try again.");
     });
   }, []);
 
@@ -282,8 +291,7 @@ export default function App() {
           const pendingRole = sessionStorage.getItem('pendingRole');
           
           if (pendingRole && userData.role !== pendingRole) {
-              await firebaseLogout();
-              setAuthErrorContent(`Role mismatch: Your account is registered as a ${userData.role}, but you tried to log in as a ${pendingRole}.`);
+              await processAuthError(`Role mismatch: Your account is registered as a ${userData.role}, but you tried to log in as a ${pendingRole}.`);
               setCurrentPage('login');
               return;
           }
@@ -384,13 +392,13 @@ export default function App() {
     alertsConstraints.push(orderBy('timestamp', 'desc'));
 
     const alertsQuery = query(
-      collection(db, 'alerts'), 
+      collection(db, 'notifications'), 
       ...alertsConstraints
     );
     const unsubscribeAlerts = onSnapshot(alertsQuery, (snapshot) => {
       const alertsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Alert));
       setAlerts(alertsData);
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'alerts'));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'notifications'));
 
     return () => {
       unsubscribeAlerts();
@@ -454,10 +462,10 @@ export default function App() {
 
   const handleMarkRead = async (alertId: string) => {
     try {
-      await updateDoc(doc(db, 'alerts', alertId), { read: true });
+      await updateDoc(doc(db, 'notifications', alertId), { read: true });
     } catch (error) {
       console.error(error);
-      handleFirestoreError(error, OperationType.UPDATE, 'alerts');
+      handleFirestoreError(error, OperationType.UPDATE, 'notifications');
     }
   };
 
@@ -469,12 +477,12 @@ export default function App() {
     
     try {
       // 2. Hard Delete from Firestore
-      await deleteDoc(doc(db, 'alerts', alertId));
+      await deleteDoc(doc(db, 'notifications', alertId));
     } catch (error) {
       // 3. Revert on failure
       setAlerts(originalAlerts);
       setErrorToast({ show: true, message: 'Failed to resolve alert. Please check your connection.' });
-      handleFirestoreError(error, OperationType.DELETE, 'alerts');
+      handleFirestoreError(error, OperationType.DELETE, 'notifications');
     }
   };
 
@@ -489,13 +497,13 @@ export default function App() {
       }
     } catch (error: any) {
       if (error.code === 'auth/weak-password') {
-        setAuthErrorContent('Password must be at least 8 characters and include a number and special character');
+        processAuthError('Password must be at least 8 characters and include a number and special character');
       } else if (error.code === 'auth/email-already-in-use') {
-        setAuthErrorContent('This email is already registered.');
+        processAuthError('This email is already registered.');
       } else if (error.code === 'auth/invalid-login-credentials' || error.code === 'auth/wrong-password') {
-        setAuthErrorContent('Invalid email or password.');
+        processAuthError('Invalid email or password.');
       } else {
-        setAuthErrorContent(error.message);
+        processAuthError(error.message);
       }
     }
   };
@@ -506,7 +514,7 @@ export default function App() {
     } catch (error: any) {
       if (error?.code !== 'auth/popup-closed-by-user' && error?.code !== 'auth/cancelled-popup-request') {
         console.error("Login failed", error);
-        setAuthErrorContent(error?.message || "Google sign-in failed. Please try again.");
+        processAuthError(error?.message || "Google sign-in failed. Please try again.");
       }
     }
   };
@@ -590,16 +598,9 @@ export default function App() {
   }, [isAuthenticatedSession]);
 
   const handleProfileSelect = (child: Child) => {
-    if (child.pin) {
-      setPinModalProfile(child);
-      setEnteredPin('');
-      setPinError('');
-      setIsShaking(false);
-    } else {
-      setSelectedChild(child);
-      setIsAuthenticatedSession(true);
-      localStorage.setItem('auth_expiry_childId', (Date.now() + 30 * 60 * 1000).toString());
-    }
+    setSelectedChild(child);
+    setIsAuthenticatedSession(true);
+    localStorage.setItem('auth_expiry_childId', (Date.now() + 30 * 60 * 1000).toString());
   };
 
   const handlePinSubmit = (e?: React.FormEvent) => {
@@ -688,7 +689,15 @@ export default function App() {
         <div className="max-w-xl w-full text-center">
           <h2 className="text-3xl font-serif mb-2">Who are you?</h2>
           <p className="text-text-muted mb-8">Select your account type to continue</p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+            <button 
+              onClick={() => handleUserTypeSelect('student')}
+              className="p-8 bg-surface border-2 border-border rounded-xl hover:border-accent transition-all text-center group flex flex-col justify-between"
+            >
+              <div className="text-4xl mb-4 group-hover:scale-110 transition-transform hidden sm:block">🎓</div>
+              <h3 className="font-semibold mb-1">Student</h3>
+              <p className="text-xs text-text-muted">My wellness journey</p>
+            </button>
             <button 
               onClick={() => handleUserTypeSelect('caretaker')}
               className="p-8 bg-surface border-2 border-border rounded-xl hover:border-accent transition-all text-center group flex flex-col justify-between"
@@ -696,22 +705,6 @@ export default function App() {
               <div className="text-4xl mb-4 group-hover:scale-110 transition-transform hidden sm:block">🛡️</div>
               <h3 className="font-semibold mb-1">Caretaker</h3>
               <p className="text-xs text-text-muted">Monitor student wellbeing</p>
-            </button>
-            <button 
-              onClick={() => handleUserTypeSelect('teacher')}
-              className="p-8 bg-surface border-2 border-border rounded-xl hover:border-accent transition-all text-center group flex flex-col justify-between"
-            >
-              <div className="text-4xl mb-4 group-hover:scale-110 transition-transform hidden sm:block">🏫</div>
-              <h3 className="font-semibold mb-1">Teacher</h3>
-              <p className="text-xs text-text-muted">Classroom wellness</p>
-            </button>
-            <button 
-              onClick={() => handleUserTypeSelect('school_admin')}
-              className="p-8 bg-surface border-2 border-border rounded-xl hover:border-accent transition-all text-center group flex flex-col justify-between"
-            >
-              <div className="text-4xl mb-4 group-hover:scale-110 transition-transform hidden sm:block">🏢</div>
-              <h3 className="font-semibold mb-1">School Admin</h3>
-              <p className="text-xs text-text-muted">Institution intelligence</p>
             </button>
           </div>
 
@@ -732,8 +725,11 @@ export default function App() {
             
             <form onSubmit={handleEmailAuthSubmit} className="space-y-5 mb-8">
               {authErrorContent && (
-                <div className="p-4 bg-alert-500/10 border border-alert-500/20 rounded-xl text-alert-500 text-sm font-medium">
-                  {authErrorContent}
+                <div className="p-4 bg-alert-500/10 border border-alert-500/20 rounded-xl text-alert-500 text-sm font-medium flex flex-col gap-2">
+                  <span>{authErrorContent}</span>
+                  <button type="button" onClick={() => window.location.reload()} className="underline text-xs hover:text-alert-400 self-start">
+                     Refresh App
+                  </button>
                 </div>
               )}
               <input
@@ -838,8 +834,7 @@ export default function App() {
           <div>
              <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2 px-3">Monitor</p>
              <nav className="space-y-1">
-               <SidebarLink icon={<LayoutDashboard size={18} />} label={['teacher', 'school_admin'].includes(user?.role) ? "School Overview" : user?.role === 'caretaker' ? "Caretaker Portal" : "Dashboard"} active={activeTab === 'home'} onClick={() => { setActiveTab('home'); setIsSidebarOpen(false); }} />
-               {['teacher', 'school_admin'].includes(user?.role) && <SidebarLink icon={<Users size={18} />} label="Classes" active={activeTab === 'profile'} onClick={() => { setActiveTab('profile'); setIsSidebarOpen(false); }} />}
+               <SidebarLink icon={<LayoutDashboard size={18} />} label={user?.role === 'caretaker' ? "Caretaker Portal" : "Dashboard"} active={activeTab === 'home'} onClick={() => { setActiveTab('home'); setIsSidebarOpen(false); }} />
                <SidebarLink
                  icon={<CalendarDays size={18} />}
                  label="Master Schedule"
@@ -860,7 +855,7 @@ export default function App() {
           <div>
              <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2 px-3">Assessment & Analysis</p>
              <nav className="space-y-1">
-               {user?.role === 'student' && selectedChild && (
+               {user?.role === 'student' && (
                  <>
                    <SidebarLink
                      icon={<ClipboardCheck size={18} />}
@@ -881,14 +876,6 @@ export default function App() {
                      onClick={() => { setActiveTab('reports'); setIsSidebarOpen(false); }} 
                    />
                  </>
-               )}
-               {['teacher', 'school_admin'].includes(user?.role) && (
-                 <SidebarLink 
-                   icon={<BarChart3 size={18} />} 
-                   label="Classroom Analytics" 
-                   active={activeTab === 'reports'} 
-                   onClick={() => { setActiveTab('reports'); setIsSidebarOpen(false); }} 
-                 />
                )}
              </nav>
           </div>
@@ -964,7 +951,7 @@ export default function App() {
             
             <div className="flex items-center gap-3">
                  <button 
-                  onClick={() => setActiveTab('alerts')}
+                  onClick={() => setActiveTab('notifications')}
                   className="relative p-2.5 bg-surface-2 border border-border rounded-full text-text-muted hover:text-text-main hover:bg-surface transition-colors"
                   title={user?.role === 'student' ? 'Inbox' : 'Alerts'}
                  >
@@ -987,31 +974,10 @@ export default function App() {
               transition={{ duration: 0.2 }}
               className="h-full"
             >
-              {selectedChild && selectedChild.pin && !isAuthenticatedSession && activeTab !== 'home' && user?.role !== 'teacher' ? (
-                <div className="flex flex-col items-center justify-center p-20 animate-fade-in text-center h-full">
-                  <div className="w-24 h-24 bg-surface border border-border rounded-3xl flex items-center justify-center mb-8 shadow-2xl relative overflow-hidden mx-auto">
-                     <div className="absolute inset-0 bg-accent/10"></div>
-                     <Lock size={40} className="text-accent relative z-10" />
-                  </div>
-                  <h2 className="text-4xl font-serif mb-4 text-text-main">Vault Locked</h2>
-                  <p className="text-text-muted mb-8 max-w-md mx-auto text-lg">
-                    Access to {selectedChild.name}'s protected data requires authentication.
-                  </p>
-                  <button 
-                    onClick={() => setPinModalProfile(selectedChild)} 
-                    className="mx-auto bg-accent text-bg px-8 py-4 rounded-xl font-bold text-lg hover:bg-accent-hover transition-colors shadow-lg shadow-accent/20 flex items-center gap-3"
-                  >
-                    <Shield size={20} />
-                    Unlock Session
-                  </button>
-                </div>
-              ) : (
                 <>
                   {activeTab === 'home' && (
                     user?.role === 'caretaker' ? (
-                      <CaretakerDashboard onViewProfile={(child) => handleProfileSelect(child)} />
-                    ) : ['teacher', 'school_admin'].includes(user?.role) ? (
-                      <SchoolDashboard user={user} initialTab="overview" privacyBlur={privacyBlur} />
+                      <CaretakerDashboard onViewProfile={(child) => { handleProfileSelect(child); setActiveTab('reports'); }} />
                     ) : (
                       <Dashboard 
                         user={user} 
@@ -1025,9 +991,7 @@ export default function App() {
                     )
                   )}
               {activeTab === 'profile' && (
-                ['teacher', 'school_admin'].includes(user?.role) ? (
-                  <SchoolDashboard user={user} initialTab="classes" privacyBlur={privacyBlur} />
-                ) : selectedChild ? (
+                selectedChild ? (
                   <ChildProfile 
                     child={selectedChild} 
                     onUpdate={(updated) => setSelectedChild(updated)}
@@ -1037,7 +1001,7 @@ export default function App() {
                 ) : (
                   <div className="text-center py-20">
                     <p className="text-text-muted text-lg">No profile selected.</p>
-                    <p className="text-text-dim text-sm mt-2">Go back to the dashboard and select a child profile to continue.</p>
+                    <p className="text-text-dim text-sm mt-2">Go back to the dashboard and select a profile to continue.</p>
                     <button onClick={() => setActiveTab('home')} className="mt-6 px-6 py-2 bg-accent text-bg rounded-xl font-medium hover:bg-accent-hover transition-colors">
                       Go to Dashboard
                     </button>
@@ -1071,13 +1035,9 @@ export default function App() {
                 )
               )}
               {activeTab === 'reports' && (
-                user?.role === 'teacher' ? (
-                  <SchoolDashboard user={user} initialTab="analytics" />
-                ) : (
-                  <Reports children={selectedChild ? [selectedChild] : []} selectedChild={selectedChild} />
-                )
+                <Reports children={selectedChild ? [selectedChild] : []} selectedChild={selectedChild} />
               )}
-              {activeTab === 'alerts' && (
+              {activeTab === 'notifications' && (
                 <Alerts 
                   alerts={selectedChild ? alerts.filter(a => a.childId === selectedChild.id || a.childId === 'all') : alerts} 
                   onDismiss={handleResolveAlert} 
@@ -1094,14 +1054,13 @@ export default function App() {
                   child={selectedChild}
                 />
               )}
-              {!selectedChild && activeTab !== 'home' && activeTab !== 'reports' && activeTab !== 'alerts' && activeTab !== 'assessment' && activeTab !== 'shop' && activeTab !== 'schedule' && (
+              {!selectedChild && activeTab !== 'home' && activeTab !== 'reports' && activeTab !== 'notifications' && activeTab !== 'assessment' && activeTab !== 'shop' && activeTab !== 'schedule' && (
                 <div className="text-center py-20">
                   <p className="text-text-muted">Please add a child first from the dashboard.</p>
                   <button onClick={() => setActiveTab('home')} className="text-accent font-medium mt-2">Go to Dashboard</button>
                 </div>
               )}
               </>
-              )}
             </motion.div>
           </AnimatePresence>
         </div>

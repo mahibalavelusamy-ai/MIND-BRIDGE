@@ -187,7 +187,7 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
       const batch = writeBatch(db);
 
       // 1. Atomic Cleanup: Query all associated sub-collections
-      const collectionsToCleanup = ['assessments', 'schoolSchedules', 'rootCauseAnalyses', 'alerts', 'sessions'];
+      const collectionsToCleanup = ['assessments', 'schoolSchedules', 'rootCauseAnalyses', 'notifications', 'sessions'];
       
       for (const collName of collectionsToCleanup) {
         try {
@@ -240,7 +240,7 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
   })();
 
   return (
-    <div className="space-y-8 animate-fade-in pb-12">
+    <div className="space-y-6 animate-fade-in pb-12">
       {/* Header */}
       <div className="glass-card p-8 relative overflow-hidden border-border/50">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center gap-8">
@@ -400,7 +400,7 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
         <div className="absolute -right-12 -top-12 w-48 h-48 bg-accent/5 rounded-full blur-3xl" />
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-8">
+      <div className="grid lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           {/* Profile Form */}
           <div id="edit-profile-form" className="glass-card p-8">
@@ -510,7 +510,7 @@ export default function ChildProfile({ child, onUpdate, onStartAssessment, onDel
 
           {/* Quick Summary Block */}
           <div className="max-w-5xl mx-auto w-full">
-            <div className="glass-card p-6 mb-8 border-accent/10">
+            <div className="glass-card p-6 mb-6 border-accent/10">
               <div className="flex items-center gap-3 mb-4">
                 <div className="p-2 bg-accent/10 text-accent rounded-lg">
                   <Sparkles size={20} />

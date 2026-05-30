@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { Search, Link as LinkIcon, UserCheck, Clock, Activity, BarChart3, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { db, auth, collection, query, where, getDocs, addDoc, onSnapshot, doc, updateDoc, setDoc } from '../lib/firebase';
 import { Child, Alert } from '../types';
+import { cn } from '../lib/utils';
 
 interface CaretakerDashboardProps {
   onViewProfile?: (child: Child) => void;
@@ -32,7 +33,7 @@ export default function CaretakerDashboard({ onViewProfile }: CaretakerDashboard
     });
 
     // Listen for pending requests we sent
-    const pendingQuery = query(collection(db, 'relationships'), where('caretakerId', '==', auth.currentUser.uid), where('status', '==', 'pending'));
+    const pendingQuery = query(collection(db, 'connectionRequests'), where('caretakerId', '==', auth.currentUser.uid), where('status', '==', 'pending'));
     const unsubPending = onSnapshot(pendingQuery, (snap) => {
       setPendingRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
@@ -59,14 +60,20 @@ export default function CaretakerDashboard({ onViewProfile }: CaretakerDashboard
       // Check if relationship already exists
       const relCheckQuery = query(collection(db, 'relationships'), where('caretakerId', '==', auth.currentUser?.uid), where('studentId', '==', studentUser.id));
       const relCheckSnap = await getDocs(relCheckQuery);
-      
       if (!relCheckSnap.empty) {
+        setLinkingStatus('Relationship already exists.');
+        return;
+      }
+      
+      const reqCheckQuery = query(collection(db, 'connectionRequests'), where('caretakerId', '==', auth.currentUser?.uid), where('studentId', '==', studentUser.id));
+      const reqCheckSnap = await getDocs(reqCheckQuery);
+      if (!reqCheckSnap.empty) {
         setLinkingStatus('Request already sent to this student.');
         return;
       }
 
       // Create relationship request
-      await setDoc(doc(db, 'relationships', `${auth.currentUser?.uid}_${studentUser.id}`), {
+      await setDoc(doc(db, 'connectionRequests', `${auth.currentUser?.uid}_${studentUser.id}`), {
         caretakerId: auth.currentUser?.uid,
         studentId: studentUser.id,
         studentEmail: linkEmail,
@@ -75,7 +82,7 @@ export default function CaretakerDashboard({ onViewProfile }: CaretakerDashboard
       });
 
       // Send alert to student
-      await addDoc(collection(db, 'alerts'), {
+      await addDoc(collection(db, 'notifications'), {
         type: 'info',
         title: 'New Connection Request',
         description: `A caretaker (${auth.currentUser?.email}) has requested to monitor your wellness metrics.`,
@@ -100,48 +107,48 @@ export default function CaretakerDashboard({ onViewProfile }: CaretakerDashboard
     <div className="space-y-8 animate-fade-in pb-12 max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-serif text-text-main">Caretaker Portal</h1>
-          <p className="text-text-muted mt-1">Professional wellness & engagement monitoring.</p>
+          <h1 className="text-3xl font-serif text-white">Caretaker Portal</h1>
+          <p className="text-slate-400 mt-1">Professional wellness & engagement monitoring.</p>
         </div>
       </div>
 
       <div className="grid md:grid-cols-3 gap-6">
         <div className="md:col-span-1 space-y-6">
-          <div className="bg-surface border border-border p-6 rounded-2xl shadow-sm">
-            <h3 className="font-bold text-text-main flex items-center gap-2 mb-4">
-              <LinkIcon size={18} className="text-accent" />
+          <div className="bg-[#0F172A]/80 backdrop-blur-md border border-white/10 p-6 rounded-[2rem] shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
+            <h3 className="font-bold text-white flex items-center gap-2 mb-4">
+              <LinkIcon size={18} className="text-[#2563EB]" />
               Link a Student
             </h3>
             <form onSubmit={handleLinkStudent} className="space-y-4">
               <div>
-                <label className="text-xs font-bold text-text-dim uppercase tracking-wider mb-2 block">Student Email</label>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Student Email</label>
                 <div className="relative">
-                  <Search className="absolute left-3 top-3 text-text-muted" size={16} />
+                  <Search className="absolute left-3 top-3 text-slate-500" size={16} />
                   <input
                     type="email"
                     required
                     value={linkEmail}
                     onChange={e => setLinkEmail(e.target.value)}
                     placeholder="student@example.com"
-                    className="w-full bg-surface-2 border border-border rounded-xl pl-10 pr-4 py-2.5 text-sm focus:border-accent focus:outline-none transition-colors"
+                    className="w-full bg-[#020617] border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:border-[#2563EB] focus:outline-none transition-colors"
                   />
                 </div>
               </div>
-              <button type="submit" className="w-full p-2.5 bg-accent text-bg font-bold rounded-xl text-sm hover:bg-accent-hover transition-colors">
+              <button type="submit" className="w-full p-2.5 bg-gradient-to-r from-[#2563EB] to-[#0891B2] text-white font-bold rounded-xl text-sm hover:opacity-90 transition-all shadow-[0_4px_15px_rgba(37,99,235,0.3)]">
                 Send Request
               </button>
-              {linkingStatus && <p className="text-xs text-text-dim text-center">{linkingStatus}</p>}
+              {linkingStatus && <p className="text-xs text-slate-400 text-center">{linkingStatus}</p>}
             </form>
           </div>
 
           {pendingRequests.length > 0 && (
-             <div className="bg-surface border border-border p-6 rounded-2xl shadow-sm">
-               <h3 className="font-bold text-text-main text-sm mb-4">Pending Requests</h3>
+             <div className="bg-[#0F172A]/80 backdrop-blur-md border border-white/10 p-6 rounded-[2rem] shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
+               <h3 className="font-bold text-white text-sm mb-4">Pending Requests</h3>
                <div className="space-y-3">
                  {pendingRequests.map(req => (
-                    <div key={req.id} className="flex items-center justify-between p-3 bg-surface-2 rounded-xl border border-border/50">
-                       <span className="text-xs font-medium text-text-muted truncate mr-2">{req.studentEmail}</span>
-                       <span className="text-[10px] uppercase font-bold tracking-wider text-amber-500 bg-amber-500/10 px-2 py-1 rounded-md">Pending</span>
+                    <div key={req.id} className="flex items-center justify-between p-3 bg-[#020617] rounded-xl border border-white/5">
+                       <span className="text-xs font-medium text-slate-400 truncate mr-2">{req.studentEmail}</span>
+                       <span className="text-[10px] uppercase font-bold tracking-wider text-[#FBBF24] bg-[#FBBF24]/10 px-2 py-1 rounded-md">Pending</span>
                     </div>
                  ))}
                </div>
@@ -150,16 +157,16 @@ export default function CaretakerDashboard({ onViewProfile }: CaretakerDashboard
         </div>
 
         <div className="md:col-span-2">
-          <h3 className="font-bold text-text-main flex items-center gap-2 mb-4">
-            <UserCheck size={18} className="text-accent" />
+          <h3 className="font-bold text-white flex items-center gap-2 mb-4">
+            <UserCheck size={18} className="text-[#22D3EE]" />
             Monitored Students
           </h3>
           
           {students.length === 0 ? (
-            <div className="bg-surface border border-border border-dashed p-12 rounded-2xl text-center">
-               <Activity size={32} className="text-text-dim mx-auto mb-4" />
-               <h4 className="font-bold text-text-main mb-2">No Students Linked</h4>
-               <p className="text-sm text-text-muted max-w-sm mx-auto">Link a student using their registered email to begin monitoring their engagement and wellness summaries safely.</p>
+            <div className="bg-[#0F172A]/50 border border-white/10 border-dashed p-12 rounded-[2rem] text-center backdrop-blur-md">
+               <Activity size={32} className="text-slate-600 mx-auto mb-4" />
+               <h4 className="font-bold text-white mb-2">No Students Linked</h4>
+               <p className="text-sm text-slate-400 max-w-sm mx-auto">Link a student using their registered email to begin monitoring their engagement and wellness summaries safely.</p>
             </div>
           ) : (
             <div className="grid sm:grid-cols-2 gap-4">
@@ -167,41 +174,41 @@ export default function CaretakerDashboard({ onViewProfile }: CaretakerDashboard
                  <div 
                    key={student.id} 
                    onClick={() => onViewProfile && onViewProfile(student)}
-                   className="bg-surface border border-border p-5 rounded-2xl hover:border-accent hover:shadow-[0_0_15px_rgba(56,189,248,0.1)] transition-all cursor-pointer"
+                   className="bg-[#0F172A]/80 backdrop-blur-md border border-white/5 p-5 rounded-[2rem] hover:border-[#22D3EE]/40 hover:shadow-[0_4px_20px_rgba(34,211,238,0.15)] transition-all cursor-pointer group"
                  >
                     <div className="flex items-center justify-between mb-4">
                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-surface-2 flex items-center justify-center text-lg">{student.avatar || '🎓'}</div>
+                          <div className="w-10 h-10 rounded-full bg-[#020617] border border-white/10 flex items-center justify-center text-lg shadow-inner">{student.avatar || '🎓'}</div>
                           <div>
-                            <h4 className="font-bold text-text-main text-sm">{student.name}</h4>
-                            <span className="text-xs text-text-muted">Grade: {student.grade || 'N/A'}</span>
+                            <h4 className="font-bold text-white text-sm group-hover:text-[#22D3EE] transition-colors">{student.name}</h4>
+                            <span className="text-xs text-slate-400">Grade: {student.grade || 'N/A'}</span>
                           </div>
                        </div>
-                       <div className="px-2 py-1 rounded-full bg-accent/10 border border-accent/20 flex items-center gap-1.5">
-                         <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse-soft" />
-                         <span className="text-[10px] font-bold text-accent uppercase tracking-wider">Active</span>
+                       <div className="px-2 py-1 rounded-full bg-[#2563EB]/10 border border-[#2563EB]/20 flex items-center gap-1.5 shadow-sm">
+                         <div className="w-1.5 h-1.5 rounded-full bg-[#22D3EE] animate-pulse" />
+                         <span className="text-[10px] font-bold text-[#22D3EE] uppercase tracking-wider">Active</span>
                        </div>
                     </div>
                     
                     <div className="grid grid-cols-2 gap-3 mb-4">
-                        <div className="bg-surface-2 p-3 rounded-xl border border-border/50">
-                           <p className="text-[10px] font-bold text-text-dim uppercase mb-1">Consistency</p>
-                           <p className="text-xl font-mono font-bold text-text-main">{student.streak || 0} <span className="text-xs text-text-muted font-sans ml-1 text-normal">Days</span></p>
+                        <div className="bg-[#020617]/50 p-3 rounded-xl border border-white/5">
+                           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Consistency</p>
+                           <p className="text-xl font-serif font-bold text-white">{student.streak || 0} <span className="text-xs text-slate-400 font-sans ml-1">Days</span></p>
                         </div>
-                        <div className="bg-surface-2 p-3 rounded-xl border border-border/50">
-                           <p className="text-[10px] font-bold text-text-dim uppercase mb-1">Risk Level</p>
-                           <p className="text-lg font-bold text-text-main">{student.riskLevel === 'high' ? 'Elevated' : 'Stable'}</p>
+                        <div className="bg-[#020617]/50 p-3 rounded-xl border border-white/5">
+                           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Risk Level</p>
+                           <p className={cn("text-lg font-serif font-bold", student.riskLevel === 'high' ? 'text-[#F87171]' : 'text-white')}>{student.riskLevel === 'high' ? 'Elevated' : 'Stable'}</p>
                         </div>
                     </div>
 
-                    <div className="bg-surface-2/30 p-4 rounded-xl border border-border/50 flex flex-col gap-2">
+                    <div className="bg-[#2563EB]/5 p-4 rounded-xl border border-[#2563EB]/10 flex flex-col gap-2">
                        <div className="flex justify-between items-center text-xs">
-                          <span className="text-text-muted font-medium">Last Assessment</span>
-                          <span className="text-text-main font-mono">{student.lastAssessmentDate || 'Never'}</span>
+                          <span className="text-slate-400 font-medium tracking-wide">Last Assessment</span>
+                          <span className="text-slate-300 font-mono">{student.lastAssessmentDate || 'Never'}</span>
                        </div>
                        <div className="flex justify-between items-center text-xs">
-                          <span className="text-text-muted font-medium">AI Insight</span>
-                          <span className={student.riskLevel === 'high' ? "text-alert-500 font-medium" : "text-emerald-500 font-medium"}>
+                          <span className="text-slate-400 font-medium tracking-wide">AI Insight</span>
+                          <span className={student.riskLevel === 'high' ? "text-[#F87171] font-medium" : "text-[#10B981] font-medium"}>
                              {student.riskLevel === 'high' ? "Review workload" : "Consistent baseline"}
                           </span>
                        </div>

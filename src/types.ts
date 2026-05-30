@@ -21,6 +21,9 @@ export interface Child {
   credits?: number;
   streak?: number;
   level?: number;
+  assessmentCount?: number;
+  wellnessProfile?: 'Thriving Learner' | 'Exam-Stressed Student' | 'Sleep-Deprived Student' | 'Socially Withdrawn Student' | 'Burnout Risk Student' | 'Analyzing Baseline';
+  baselineMetrics?: any;
   consentToSchoolSharing?: boolean;
   connectedPlatforms?: string[];
   pin?: string | null;
@@ -133,6 +136,7 @@ export interface Recommendation {
   priority: 'low' | 'medium' | 'high';
   context: string; // e.g., "Upcoming Exam", "Low Sleep Trend"
   actionLabel: string;
+  steps?: string[]; // new field for steps
 }
 
 export interface SelfCheck {

@@ -12,7 +12,8 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 export async function generateRecommendations(
   child: Child,
   assessments: any[],
-  schedule: any[]
+  schedule: any[],
+  sessions: any[] = []
 ): Promise<Recommendation[]> {
   
   if (assessments.length === 0) {
@@ -50,16 +51,18 @@ export async function generateRecommendations(
   try {
     const latest = assessments[0];
     const prompt = `
-      You are a child mental health coach. Generate 2 personalized, actionable recommendations for ${child.name} (Age: ${child.age}).
+      You are a child mental health coach. Generate 2 personalized, actionable, and structured action plans for ${child.name} (Age: ${child.age}).
       
       CURRENT STATE:
       - Latest Scores (scale 1-5, higher is higher risk): ${JSON.stringify(latest.scores)}
-      - School Schedule: ${JSON.stringify(schedule)}
+      - School Schedule: ${JSON.stringify(schedule?.slice(0,5))}
+      - Focus Sessions: ${JSON.stringify(sessions?.slice(0,5))}
       
       RECOMMENDATION RULES:
-      1. CONTEXT-AWARE: If an exam is coming up, suggest a study-break or relaxation technique.
-      2. DATA-DRIVEN: If sleep is poor, suggest a "Wind-down Routine".
-      3. ADAPTIVE: If mood is improving, suggest a "Celebration Activity" to reinforce positive behavior.
+      1. REPLACE GENERIC ADVICE: Generate step-by-step Structured Action Plans.
+      2. DATA-DRIVEN: Use the assessment history, sleep trends, focus sessions, and stress trends.
+      3. FORMAT: Each recommendation MUST include a "steps" array with 3 actionable, measurable steps.
+      (e.g., Step 1: Sleep before 10:30 PM, Step 2: Avoid screens 30 mins prior, Step 3: Track for 7 days)
       4. AGE-APPROPRIATE: Ensure suggestions are suitable for a ${child.age}-year-old.
 
       Format your response as a JSON object. Do not include markdown code blocks.
@@ -83,9 +86,10 @@ export async function generateRecommendations(
                   description: { type: Type.STRING },
                   priority: { type: Type.STRING, enum: ['low', 'medium', 'high'] },
                   context: { type: Type.STRING },
-                  actionLabel: { type: Type.STRING }
+                  actionLabel: { type: Type.STRING },
+                  steps: { type: Type.ARRAY, items: { type: Type.STRING } }
                 },
-                required: ['type', 'title', 'description', 'priority', 'context', 'actionLabel']
+                required: ['type', 'title', 'description', 'priority', 'context', 'actionLabel', 'steps']
               }
             }
           },

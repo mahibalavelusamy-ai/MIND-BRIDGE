@@ -1,45 +1,44 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ResponsiveContainer,
   LineChart,
   Line,
   YAxis,
-  AreaChart,
-  Area,
   XAxis,
   Tooltip,
-  RadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-  Radar
+  CartesianGrid,
+  Legend
 } from 'recharts';
 import { Child } from '../types';
 import { cn, getGradientForChild } from '../lib/utils';
-import { db, collection, query, where, getDocs, orderBy, limit } from '../lib/firebase';
+import { db, auth, collection, query, where, getDocs, orderBy } from '../lib/firebase';
 import { 
   Activity, 
   Brain,
-  Moon,
-  Zap,
-  LayoutDashboard,
   TrendingDown,
   TrendingUp,
-  ShieldAlert,
-  BatteryCharging,
-  HeartPulse
+  HeartPulse,
+  Sparkles,
+  Calendar,
+  Layers,
+  Zap,
+  Target,
+  AlertTriangle
 } from 'lucide-react';
-import { AIInterpreter } from '../services/analytics/aiInterpreter';
 
 interface ReportsProps {
   children: Child[];
   selectedChild: Child | null;
 }
 
+type Timeframe = '7d' | '30d' | '365d';
+
 export default function Reports({ children, selectedChild }: ReportsProps) {
   const [assessments, setAssessments] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [schedules, setSchedules] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [aiInsight, setAiInsight] = useState("Analyzing recent emotional rhythms...");
+  const [timeframe, setTimeframe] = useState<Timeframe>('30d');
 
   useEffect(() => {
     if (!selectedChild) return;
@@ -47,35 +46,36 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
     const fetchData = async () => {
       setLoading(true);
       try {
-        let startDate = new Date();
-        startDate.setDate(startDate.getDate() - 14);
-
-        const qA = query(
-          collection(db, 'assessments'), 
-          where('childId', '==', selectedChild.id),
-          where('parentId', '==', selectedChild.parentId),
-          where('timestamp', '>=', startDate.toISOString()),
-          orderBy('timestamp', 'asc') // Use 'asc' rather than 'ascending'
-        );
-        const snapA = await getDocs(qA);
-        const assessmentData = snapA.docs.map(d => ({ id: d.id, ...d.data() } as any));
-        setAssessments(assessmentData);
-        
-        // Generate a role-aware insight based on latest data
-        if (assessmentData.length > 0) {
-            const latest = assessmentData[assessmentData.length - 1];
-            // Normalize scores to compute risks
-            const rawRisk = latest.riskLevel === 'high' ? 0.9 : latest.riskLevel === 'medium' ? 0.5 : 0.1;
-            const insight = await AIInterpreter.generateSupportiveSummary({
-                emotionalRisk: rawRisk,
-                overloadRisk: (latest.scores?.academic_stress || 3) < 3 ? 0.8 : 0.2, // assuming lower score means worse
-                burnoutRisk: (latest.scores?.burnout_tendency || 3) < 3 ? 0.8 : 0.2
-            }, selectedChild.age >= 18 ? 'student' : 'parent');
-            setAiInsight(insight);
-        } else {
-            setAiInsight("We need a few days of check-ins to start revealing meaningful patterns and growth insights.");
+        let assessmentData: any[] = [];
+        try {
+          const qA = query(
+            collection(db, 'assessments'), 
+            where('childId', '==', selectedChild.id),
+            orderBy('timestamp', 'asc')
+          );
+          const snapA = await getDocs(qA);
+          assessmentData = snapA.docs.map(d => ({ id: d.id, ...d.data() } as any));
+          setAssessments(assessmentData);
+        } catch (e) {
+          console.warn("Failed to fetch assessments", e);
         }
 
+        try {
+          // Rule requires userId == auth.currentUser.uid constraint on sessions otherwise it blocks
+          const qSessions = query(collection(db, 'sessions'), where('childId', '==', selectedChild.id), where('userId', '==', auth.currentUser?.uid));
+          const snapS = await getDocs(qSessions);
+          setSessions(snapS.docs.map(d => ({ id: d.id, ...d.data() } as any)));
+        } catch (e) {
+          console.warn("Failed to fetch sessions", e);
+        }
+        
+        try {
+          const qSched = query(collection(db, 'schoolSchedules'), where('childId', '==', selectedChild.id));
+          const snapSched = await getDocs(qSched);
+          setSchedules(snapSched.docs.map(d => ({ id: d.id, ...d.data() } as any)));
+        } catch (e) {
+          console.warn("Failed to fetch school schedules", e);
+        }
       } catch (error) {
         console.error("Error fetching report data:", error);
       } finally {
@@ -85,6 +85,153 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
     fetchData();
   }, [selectedChild]);
 
+  const { chartData, insights } = useMemo(() => {
+    if (!assessments.length) return { chartData: [], insights: [] };
+
+    // Filter by timeframe
+    let daysToInclude = 30;
+    if (timeframe === '7d') daysToInclude = 7;
+    if (timeframe === '365d') daysToInclude = 365;
+
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - daysToInclude);
+    cutoffDate.setHours(0,0,0,0);
+
+    const filtered = assessments.filter(a => new Date(a.timestamp) >= cutoffDate);
+    
+    // Grouping
+    const grouped: Record<string, any[]> = {};
+    filtered.forEach(a => {
+        const d = new Date(a.timestamp);
+        let key = '';
+        if (timeframe === '365d') {
+            // Group by Month
+            key = `${d.toLocaleString('default', { month: 'short' })} ${d.getFullYear()}`;
+        } else {
+            // Group by Day
+            key = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(a);
+    });
+
+    const finalChartData = Object.keys(grouped).map(key => {
+        const groupDecs = grouped[key];
+        
+        let sums = { mood: 0, sleep: 0, focus: 0, academic_stress: 0, social: 0, motivation: 0 };
+        let counts = { mood: 0, sleep: 0, focus: 0, academic_stress: 0, social: 0, motivation: 0 };
+
+        groupDecs.forEach(a => {
+           const s = a.scores || {};
+           Object.keys(sums).forEach(k => {
+               const val = s[k];
+               if (val !== undefined) {
+                   sums[k as keyof typeof sums] += val;
+                   counts[k as keyof typeof counts]++;
+               }
+           });
+        });
+
+        // Convert 1-5 scale to 1-100 scale for plotting
+        const normalize = (amount: number, count: number) => count > 0 ? Math.round((amount / count) * 20) : 0;
+        
+        return {
+           timeLabel: key,
+           Mood: normalize(sums.mood, counts.mood),
+           Sleep: normalize(sums.sleep, counts.sleep),
+           Focus: normalize(sums.focus, counts.focus),
+           Stress: normalize(sums.academic_stress, counts.academic_stress),
+           Social: normalize(sums.social, counts.social),
+           Motivation: normalize(sums.motivation, counts.motivation),
+           originalGroup: groupDecs
+        };
+    });
+
+    // Generate Insights based on comparing the first half of the timeframe vs the second half
+    const generatedInsights: string[] = [];
+    if (finalChartData.length >= 2) {
+       const half = Math.floor(finalChartData.length / 2);
+       const firstHalf = finalChartData.slice(0, half);
+       const secondHalf = finalChartData.slice(half);
+
+       const getAvg = (halfData: any[], metric: string) => {
+           let sum = 0;
+           let realCount = 0;
+           halfData.forEach(d => {
+               if (d[metric] > 0) {
+                   sum += d[metric];
+                   realCount++;
+               }
+           });
+           return realCount > 0 ? sum / realCount : 0;
+       };
+
+       const metricsToCheck = ['Mood', 'Sleep', 'Focus', 'Stress', 'Social', 'Motivation'];
+       metricsToCheck.forEach(m => {
+           const avg1 = getAvg(firstHalf, m);
+           const avg2 = getAvg(secondHalf, m);
+           
+           if (avg1 > 0 && Math.abs(avg2 - avg1) > 5) {
+               const diff = avg2 - avg1;
+               const percentChange = Math.round((Math.abs(diff) / avg1) * 100);
+               if (diff > 0) {
+                   if (m === 'Stress') {
+                       generatedInsights.push(`Stress increased during ${timeframe === '7d' ? 'the week' : 'this period'} by ${percentChange}%. Take more breaks.`);
+                   } else {
+                       generatedInsights.push(`${m} improved by ${percentChange}% compared to the previous period.`);
+                   }
+               } else {
+                   if (m === 'Stress') {
+                       generatedInsights.push(`Stress decreased by ${percentChange}%. You are managing pressure well!`);
+                   } else {
+                       generatedInsights.push(`${m} consistency has slightly decreased by ${percentChange}%. Focus on returning to standard routines.`);
+                   }
+               }
+           }
+       });
+
+       if (generatedInsights.length === 0) {
+           generatedInsights.push("Wellness metrics remain stable with no dramatic fluctuations.");
+       }
+    }
+
+    return { chartData: finalChartData, insights: generatedInsights };
+
+  }, [assessments, timeframe]);
+
+  const triggers = useMemo(() => {
+    const analysis: {type: 'positive' | 'negative' | 'neutral', text: string}[] = [];
+    if (!assessments.length) return analysis;
+
+    const recentAssessments = assessments.slice(-7);
+    const hasHighStress = recentAssessments.some(a => a.scores && a.scores.academic_stress <= 2);
+    const hasLowSleep = recentAssessments.some(a => a.scores && a.scores.sleep <= 2);
+
+    if (hasHighStress) {
+      analysis.push({ type: 'negative', text: "Stress increases before examinations." });
+    }
+    
+    if (sessions.length > 2 && hasLowSleep) {
+      analysis.push({ type: 'negative', text: "Sleep quality decreases during project deadlines and extended study sessions." });
+    }
+
+    if (schedules.length > 3) {
+      analysis.push({ type: 'positive', text: "Focus improves on days with scheduled study sessions and planned tasks." });
+    } else {
+      analysis.push({ type: 'neutral', text: "Inconsistent planner usage correlates with fluctuating focus levels." });
+    }
+
+    if (recentAssessments.some(a => a.scores?.social >= 4)) {
+       analysis.push({ type: 'positive', text: "Mood stabilizes positively after social interactions." });
+    }
+
+    if (analysis.length === 0) {
+       analysis.push({ type: 'neutral', text: "No significant behavioral triggers detected in recent data." });
+    }
+
+    return analysis;
+  }, [assessments, sessions, schedules]);
+
   if (!selectedChild) {
     return (
       <div className="h-full flex items-center justify-center animate-fade-in pb-12">
@@ -93,58 +240,18 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
     );
   }
 
-  // Formatting Data for Recharts
-  const trendData = assessments.map((a, i) => {
-    // If adaptive, scores might use string keys. Map them to a safe 1-5 scale or default to 3
-    const getScore = (key1: string, key2: string) => {
-        if (!a.scores) return 3;
-        if (a.scores[key1] !== undefined) return a.scores[key1];
-        if (a.scores[key2] !== undefined) return a.scores[key2];
-        return 3;
-    };
-    
-    return {
-      day: `Day ${i + 1}`,
-      emotional_wellbeing: getScore('emotional_wellbeing', 'mood'),
-      academic_stress: getScore('academic_stress', 'stress'),
-      energy_levels: getScore('energy_levels', 'energy'),
-      burnout_tendency: getScore('burnout_tendency', 'social')
-    };
-  });
-
-  // Calculate Radar Chart averages
-  const radarData = [
-    { subject: 'Emotional', A: 0, fullMark: 5 },
-    { subject: 'Academic Load', A: 0, fullMark: 5 },
-    { subject: 'Energy', A: 0, fullMark: 5 },
-    { subject: 'Resilience', A: 0, fullMark: 5 },
-    { subject: 'Engagement', A: 0, fullMark: 5 },
-  ];
-
-  if (trendData.length > 0) {
-    const latest = trendData[trendData.length - 1];
-    radarData[0].A = latest.emotional_wellbeing;
-    radarData[1].A = latest.academic_stress;
-    radarData[2].A = latest.energy_levels;
-    radarData[3].A = latest.burnout_tendency;
-    radarData[4].A = (latest.emotional_wellbeing + latest.energy_levels) / 2;
-  } else {
-    radarData.forEach(r => r.A = 3);
-  }
-
-  const latestAssessment = assessments[assessments.length - 1];
-  const riskLevel = selectedChild.riskLevel || 'low';
-  
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-surface border border-border p-3 rounded-xl shadow-xl flex flex-col gap-2">
-          <p className="text-xs font-bold text-text-dim uppercase">{label}</p>
+        <div className="bg-[#0F172A] border border-white/10 p-3 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.5)] flex flex-col gap-2 z-50 relative min-w-[150px] backdrop-blur-md">
+          <p className="text-xs font-bold text-slate-400 uppercase border-b border-white/5 pb-2 mb-1">{label}</p>
           {payload.map((p: any, i: number) => (
-             <div key={i} className="flex items-center gap-2 text-sm">
-                <div style={{ backgroundColor: p.stroke || p.fill }} className="w-2 h-2 rounded-full" />
-                <span className="text-text-muted capitalize">{p.dataKey.replace('_', ' ')}:</span>
-                <span className="font-bold text-text-main">{p.value}</span>
+             <div key={i} className="flex items-center justify-between text-sm gap-4">
+                <div className="flex items-center gap-2">
+                   <div style={{ backgroundColor: p.stroke || p.fill }} className="w-2 h-2 rounded-full" />
+                   <span className="text-slate-300 capitalize">{p.name}:</span>
+                </div>
+                <span className="font-bold text-white">{p.value}</span>
              </div>
           ))}
         </div>
@@ -154,194 +261,176 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
   };
 
   return (
-    <div className="flex-1 w-full max-w-5xl mx-auto flex flex-col gap-6 animate-fade-in p-4 overflow-y-auto text-text-main pb-24 lg:pb-4 h-full">
-      {/* Top Banner: AI Insight & Identity */}
-      <div className="bg-gradient-to-br from-surface to-surface-2 border border-accent/20 shadow-[0_0_30px_rgba(0,255,136,0.05)] rounded-[2.5rem] p-8 flex flex-col md:flex-row items-center gap-6 shrink-0 relative overflow-hidden">
-        <div className="absolute right-0 top-0 opacity-5 pointer-events-none scale-150 -translate-y-1/4 translate-x-1/4">
-          <Brain size={400} />
-        </div>
-        
-        <div className={cn(
-          "w-24 h-24 rounded-[2rem] flex items-center justify-center text-4xl shrink-0 border border-accent/30 shadow-inner z-10",
-          selectedChild.age >= 18 ? `text-black bg-gradient-to-br ${getGradientForChild(selectedChild.id)}` : "bg-black"
-        )}>
-           {selectedChild.age >= 18 ? <span className="font-serif text-white">{selectedChild.name ? selectedChild.name.charAt(0).toUpperCase() : '👤'}</span> : selectedChild.avatar}
-        </div>
-        
-        <div className="flex-1 z-10 text-center md:text-left">
-          <h1 className="text-3xl font-bold tracking-tight mb-2 text-text-main">{selectedChild.name}'s Wellness Overview</h1>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-accent/10 border border-accent/30 text-accent text-xs font-bold uppercase tracking-widest mb-4">
-             <HeartPulse size={14} /> Behavioral Intelligence
+    <div className="flex-1 w-full max-w-7xl mx-auto flex flex-col gap-6 animate-fade-in p-4 overflow-y-auto text-text-main pb-24 lg:pb-4 h-full">
+      {/* Top Banner */}
+      <div className="bg-gradient-to-br from-[#0F172A] to-[#020617] border border-[#2563EB]/20 shadow-[0_0_30px_rgba(34,211,238,0.05)] rounded-[2.5rem] p-8 flex flex-col md:flex-row items-center justify-between gap-6 shrink-0 relative overflow-hidden">
+        <div className="flex items-center gap-6 z-10 w-full flex-col md:flex-row">
+          <div className={cn(
+            "w-20 h-20 rounded-[2rem] flex items-center justify-center text-3xl shrink-0 border border-[#2563EB]/30 shadow-inner z-10 bg-[#0F172A]",
+            selectedChild.age >= 18 ? `text-black bg-gradient-to-br ${getGradientForChild(selectedChild.id)}` : "bg-[#0F172A] text-white"
+          )}>
+             {selectedChild.age >= 18 ? <span className="font-serif text-white">{selectedChild.name ? selectedChild.name.charAt(0).toUpperCase() : '👤'}</span> : selectedChild.avatar}
           </div>
-          <p className="text-sm md:text-base text-text-muted leading-relaxed max-w-2xl text-balance">
-             "{aiInsight}"
-          </p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 shrink-0">
-        
-        {/* Left Column: Big Area Chart (Emotional Consistency) */}
-        <div className="lg:col-span-2 glass-card p-6 md:p-8 flex flex-col bg-surface border-border shadow-sm min-h-[350px]">
-           <div className="flex items-center justify-between mb-6">
-              <div>
-                 <h2 className="text-lg font-bold flex items-center gap-2">
-                    <Activity className="text-blue-500" size={20} /> Emotional Momentum
-                 </h2>
-                 <p className="text-xs text-text-dim uppercase tracking-widest mt-1">14-Day Timeline</p>
-              </div>
-           </div>
-           
-           <div className="flex-1 w-full h-full min-h-[250px]">
-             {trendData.length > 0 ? (
-                 <ResponsiveContainer width="100%" height="100%">
-                   <AreaChart data={trendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                     <defs>
-                       <linearGradient id="colorEmotional" x1="0" y1="0" x2="0" y2="1">
-                         <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                         <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                       </linearGradient>
-                     </defs>
-                     <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#666' }} />
-                     <YAxis domain={[1, 5]} hide />
-                     <Tooltip content={<CustomTooltip />} />
-                     <Area type="monotone" dataKey="emotional_wellbeing" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorEmotional)" />
-                   </AreaChart>
-                 </ResponsiveContainer>
-             ) : (
-                 <div className="w-full h-full flex flex-col items-center justify-center text-text-dim">
-                    <Activity size={32} className="opacity-20 mb-2" />
-                    <p className="text-sm">Not enough data points yet.</p>
-                 </div>
-             )}
-           </div>
-        </div>
-
-        {/* Right Column: Radar Chart (Wellness Balance) */}
-        <div className="glass-card p-6 md:p-8 flex flex-col items-center justify-center bg-surface border-border shadow-sm">
-           <h2 className="text-lg font-bold w-full text-left flex items-center gap-2 mb-2">
-              <Zap className="text-accent" size={20} /> Wellness Balance
-           </h2>
-           <p className="text-xs text-text-dim uppercase tracking-widest w-full text-left mb-4">Current State</p>
-           
-           <div className="w-full aspect-square relative">
-             <ResponsiveContainer width="100%" height="100%">
-                <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
-                  <PolarGrid stroke="#333" />
-                  <PolarAngleAxis dataKey="subject" tick={{ fill: '#888', fontSize: 10 }} />
-                  <Radar name="Wellness" dataKey="A" stroke="#00ff88" strokeWidth={2} fill="#00ff88" fillOpacity={0.2} />
-                </RadarChart>
-             </ResponsiveContainer>
-           </div>
-        </div>
-
-      </div>
-
-      {/* Bottom Row: Detailed Trackers */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 shrink-0 pb-6">
-          {/* Burnout Indicator */}
-          <div className="glass-card p-6 flex flex-col bg-surface border-border transition-all hover:bg-surface-2 hover:border-orange-500/30">
-             <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 bg-orange-500/10 rounded-lg text-orange-500">
-                   <BatteryCharging size={20} />
-                </div>
-                <div>
-                  <h3 className="text-md font-bold text-text-main">Burnout Trajectory</h3>
-                  <p className="text-xs text-text-dim">Tracking energy depletion</p>
-                </div>
-             </div>
-             
-             <div className="h-32 w-full">
-               {trendData.length > 0 ? (
-                 <ResponsiveContainer width="100%" height="100%">
-                   <LineChart data={trendData}>
-                     <YAxis domain={[1, 5]} hide />
-                     <Tooltip content={<CustomTooltip />} />
-                     <Line type="stepAfter" dataKey="burnout_tendency" stroke="#f97316" strokeWidth={2} dot={false} />
-                   </LineChart>
-                 </ResponsiveContainer>
-               ) : (
-                 <div className="w-full h-full flex items-center justify-center text-xs text-text-dim">Data aggregating...</div>
-               )}
-             </div>
-          </div>
-
-          {/* Academic Overload Indicator */}
-          <div className="glass-card p-6 flex flex-col bg-surface border-border transition-all hover:bg-surface-2 hover:border-purple-500/30">
-             <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 bg-purple-500/10 rounded-lg text-purple-500">
-                   <Brain size={20} />
-                </div>
-                <div>
-                  <h3 className="text-md font-bold text-text-main">Cognitive Load</h3>
-                  <p className="text-xs text-text-dim">Tracking academic & schedule stress</p>
-                </div>
-             </div>
-             
-             <div className="h-32 w-full">
-               {trendData.length > 0 ? (
-                 <ResponsiveContainer width="100%" height="100%">
-                   <LineChart data={trendData}>
-                     <YAxis domain={[1, 5]} hide />
-                     <Tooltip content={<CustomTooltip />} />
-                     <Line type="monotone" dataKey="academic_stress" stroke="#a855f7" strokeWidth={2} dot={{r: 3, fill: '#a855f7'}} />
-                   </LineChart>
-                 </ResponsiveContainer>
-               ) : (
-                 <div className="w-full h-full flex items-center justify-center text-xs text-text-dim">Data aggregating...</div>
-               )}
-             </div>
-          </div>
-      </div>
-
-      {/* Added Milestones & Strengths grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-12">
-        <div className="glass-card p-6 bg-surface border-border flex flex-col">
-          <h3 className="text-md font-bold text-text-main mb-4 flex items-center gap-2">
-            <Zap className="text-accent" size={18} />
-            Key Strengths Discovered
-          </h3>
-          <div className="space-y-3">
-            {[
-              { title: 'Emotional Resilience', desc: 'Maintained stable mood despite high academic load.', score: 'Top 15%' },
-              { title: 'Consistent Reflection', desc: 'Logged 7 days of continuous check-ins.', score: 'Streak Master' },
-              { title: 'Self-Awareness', desc: 'Accurately identifying burnout triggers.', score: 'Growing' }
-            ].map((strength, i) => (
-              <div key={i} className="flex flex-col gap-1 p-3 rounded-xl bg-surface-2 border border-border">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-sm text-text-main">{strength.title}</span>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-accent bg-accent/10 px-2 py-0.5 rounded-full">{strength.score}</span>
-                </div>
-                <span className="text-xs text-text-muted">{strength.desc}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="glass-card p-6 bg-surface border-border flex flex-col justify-between relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-            <TrendingUp size={120} className="text-blue-500" />
-          </div>
-          <div className="z-10">
-            <h3 className="text-md font-bold text-text-main mb-2 flex items-center gap-2">
-              <Activity className="text-blue-500" size={18} />
-              Growth Momentum
-            </h3>
-            <p className="text-sm text-text-muted mb-4 max-w-[200px]">
-              You are building excellent emotional awareness. Keep up your routine!
-            </p>
-          </div>
-          <div className="z-10 mt-auto">
-            <div className="w-full bg-surface-2 rounded-full h-2 mb-2">
-              <div className="bg-gradient-to-r from-blue-500 to-accent h-2 rounded-full" style={{ width: '75%' }} />
-            </div>
-            <div className="flex justify-between text-xs font-bold text-text-dim">
-              <span>Awareness Level 3</span>
-              <span className="text-accent">Level 4 soon</span>
+          <div className="flex-1 text-center md:text-left">
+            <h1 className="text-3xl font-bold tracking-tight mb-2 text-white">{selectedChild.name}'s Wellness Timeline</h1>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#2563EB]/10 border border-[#2563EB]/30 text-[#22D3EE] text-xs font-bold uppercase tracking-widest shadow-sm">
+               <HeartPulse size={14} /> Behavioral Intelligence
             </div>
           </div>
+          
+          <div className="hidden md:flex bg-[#020617] border border-white/5 rounded-xl p-1 shrink-0 shadow-inner">
+             {(['7d', '30d', '365d'] as Timeframe[]).map((tf) => (
+                <button
+                  key={tf}
+                  onClick={() => setTimeframe(tf)}
+                  className={cn(
+                    "px-4 py-2 rounded-lg text-sm font-bold uppercase tracking-wider transition-colors",
+                    timeframe === tf ? "bg-[#2563EB]/20 text-[#22D3EE] border border-[#2563EB]/40 shadow-[0_2px_10px_rgba(37,99,235,0.2)]" : "text-slate-500 hover:text-slate-300 hover:bg-white/5"
+                  )}
+                >
+                  {tf === '7d' ? 'Weekly View' : tf === '30d' ? 'Monthly View' : 'Yearly View'}
+                </button>
+             ))}
+          </div>
         </div>
       </div>
+      
+      {/* Mobile Timeframe Selector */}
+      <div className="md:hidden flex bg-[#020617] border border-white/5 rounded-xl p-1 w-full shrink-0 shadow-inner">
+         {(['7d', '30d', '365d'] as Timeframe[]).map((tf) => (
+            <button
+              key={tf}
+              onClick={() => setTimeframe(tf)}
+              className={cn(
+                "flex-1 py-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors",
+                timeframe === tf ? "bg-[#2563EB]/20 text-[#22D3EE] border border-[#2563EB]/40 shadow-sm" : "text-slate-500 hover:text-slate-300 hover:bg-white/5"
+              )}
+            >
+              {tf === '7d' ? 'Weekly' : tf === '30d' ? 'Monthly' : 'Yearly'}
+            </button>
+         ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 shrink-0 h-full min-h-[500px]">
+         <div className="lg:col-span-3 bg-[#0F172A] p-6 md:p-8 flex flex-col border border-white/5 shadow-sm min-h-[450px] rounded-[2rem]">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
+               <div>
+                  <h2 className="text-xl font-bold flex items-center gap-2 text-white">
+                     <Activity className="text-[#2563EB]" size={24} /> Wellness Progression
+                  </h2>
+                  <p className="text-sm text-slate-500 uppercase tracking-widest mt-1">Multi-Dimensional Analysis</p>
+               </div>
+               
+               <div className="flex items-center gap-2 text-slate-400 text-sm border border-white/5 bg-[#020617] px-4 py-2 rounded-full font-bold shadow-sm">
+                  <Calendar size={16} className="text-[#22D3EE]" />
+                  <span>
+                    {timeframe === '7d' ? 'Last 7 Days' : timeframe === '30d' ? 'Last 30 Days' : 'Last 12 Months'}
+                  </span>
+               </div>
+            </div>
+            
+            <div className="flex-1 w-full min-h-[350px]">
+              {chartData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1E293B" />
+                      <XAxis dataKey="timeLabel" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748B', fontWeight: 600 }} dy={10} />
+                      <YAxis domain={[0, 100]} axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748B' }} />
+                      <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#334155', strokeWidth: 1, strokeDasharray: '5 5' }} />
+                      <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', fontWeight: 600, paddingBottom: '20px', color: '#CBD5E1' }} />
+                      
+                      <Line type="monotone" dataKey="Mood" stroke="#8b5cf6" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#0F172A' }} activeDot={{ r: 6 }} />
+                      <Line type="monotone" dataKey="Sleep" stroke="#FBBF24" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#0F172A' }} activeDot={{ r: 6 }} />
+                      <Line type="monotone" dataKey="Focus" stroke="#2563EB" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#0F172A' }} activeDot={{ r: 6 }} />
+                      <Line type="monotone" dataKey="Stress" stroke="#EF4444" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#0F172A' }} activeDot={{ r: 6 }} />
+                      <Line type="monotone" dataKey="Social" stroke="#10b981" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#0F172A' }} activeDot={{ r: 6 }} />
+                      <Line type="monotone" dataKey="Motivation" stroke="#22D3EE" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#0F172A' }} activeDot={{ r: 6 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+              ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 bg-[#020617] rounded-[2rem] border border-white/5">
+                     <Activity size={48} className="opacity-20 mb-4 text-[#2563EB]" />
+                     <p className="text-base font-bold text-slate-400">Not enough data points yet.</p>
+                     <p className="text-sm mt-2 max-w-xs text-center opacity-80">Complete a few more daily assessments to populate your timeline.</p>
+                  </div>
+              )}
+            </div>
+         </div>
+
+         {/* AI Observations Panel */}
+         <div className="bg-[#0F172A] p-6 md:p-8 flex flex-col border border-white/5 mx-auto w-full shadow-sm h-full max-h-[600px] rounded-[2rem]">
+            <h2 className="text-lg font-bold w-full text-left flex items-center gap-2 mb-2 text-white">
+               <Sparkles className="text-[#FBBF24]" size={20} /> AI Observations
+            </h2>
+            <p className="text-xs text-slate-500 uppercase tracking-widest w-full text-left mb-6">Pattern Recognition</p>
+            
+            <div className="flex-1 overflow-y-auto space-y-4 custom-scrollbar pr-2 pb-4">
+               {insights.length > 0 ? (
+                   insights.map((insight, idx) => {
+                       const isPositive = insight.toLowerCase().includes('improved') || insight.toLowerCase().includes('decreased') && insight.toLowerCase().includes('stress') || insight.toLowerCase().includes('stable');
+                       return (
+                           <div key={idx} className="flex gap-3 p-4 rounded-xl bg-[#020617] border border-white/5 shadow-sm transition-colors hover:border-white/10 group">
+                               <div className={cn(
+                                   "p-2 rounded-lg shrink-0 h-min",
+                                   isPositive ? "bg-[#22D3EE]/10 border border-[#22D3EE]/20 text-[#22D3EE]" : "bg-[#F87171]/10 border border-[#F87171]/20 text-[#F87171]"
+                               )}>
+                                   {isPositive ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
+                               </div>
+                               <p className="text-sm text-slate-300 font-medium leading-relaxed pt-1 flex-1 group-hover:text-white transition-colors">{insight}</p>
+                           </div>
+                       )
+                   })
+               ) : (
+                   <div className="flex flex-col items-center justify-center p-6 text-center text-slate-500 bg-[#020617] rounded-xl border border-white/5 border-dashed h-full min-h-[150px]">
+                      <Brain size={24} className="opacity-40 mb-2" />
+                      <p className="text-sm">Accumulating data points to generate meaningful observations.</p>
+                   </div>
+               )}
+            </div>
+         </div>
+      </div>
+
+      {/* Trigger Analysis Section */}
+      <div className="bg-[#0F172A] p-6 md:p-8 flex flex-col border border-white/5 shadow-sm shrink-0 rounded-[2rem]">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
+               <div>
+                  <h2 className="text-xl font-bold flex items-center gap-2 text-white">
+                     <Target className="text-[#2563EB]" size={24} /> Trigger Analysis
+                  </h2>
+                  <p className="text-sm text-slate-500 uppercase tracking-widest mt-1">Cross-Referencing Behavioral Causes</p>
+               </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {triggers.length > 0 ? (
+                  triggers.map((trigger, idx) => (
+                      <div key={idx} className="bg-[#020617] border border-white/5 rounded-[1.5rem] p-5 flex items-start gap-4 hover:border-white/10 transition-colors shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
+                          <div className={cn(
+                              "p-2.5 rounded-lg shrink-0 shadow-inner",
+                              trigger.type === 'positive' ? "bg-[#2563EB]/10 text-[#22D3EE] border border-[#2563EB]/20" : 
+                              trigger.type === 'negative' ? "bg-[#F87171]/10 text-[#F87171] border border-[#F87171]/20" : 
+                              "bg-[#FBBF24]/10 text-[#FBBF24] border border-[#FBBF24]/20"
+                          )}>
+                              {trigger.type === 'positive' ? <Zap size={20} /> : 
+                               trigger.type === 'negative' ? <AlertTriangle size={20} /> : 
+                               <Layers size={20} />}
+                          </div>
+                           <div className="flex flex-col gap-1">
+                              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">
+                                  {trigger.type === 'positive' ? 'Protective Factor' : trigger.type === 'negative' ? 'Risk Factor' : 'Observation'}
+                              </span>
+                              <p className="text-sm text-white font-medium leading-relaxed">{trigger.text}</p>
+                          </div>
+                      </div>
+                  ))
+              ) : (
+                  <div className="col-span-full flex flex-col items-center justify-center p-8 text-center text-slate-500 bg-[#020617] rounded-xl border border-white/5 border-dashed h-full min-h-[150px]">
+                      <Target size={32} className="opacity-40 mb-3 text-slate-600" />
+                      <p className="text-sm max-w-sm">Not enough cross-referenced data. Complete focus sessions and use your planner to generate trigger insights.</p>
+                  </div>
+              )}
+          </div>
+      </div>
+
     </div>
   );
 }

@@ -21,7 +21,7 @@ import {
 import { Child } from '../types';
 import { cn, getGradientForChild } from '../lib/utils';
 import { db, auth, collection, doc, writeBatch, increment, arrayUnion, query, where, getDocs } from '../lib/firebase';
-import { AdaptiveAssessmentEngine, AdaptiveQuestion } from '../services/analytics/adaptiveEngine';
+import { ProgressiveAssessmentEngine, AdaptiveQuestion } from '../services/ai/progressiveAssessmentEngine';
 import { AIInterpreter } from '../services/analytics/aiInterpreter';
 
 interface AssessmentProps {
@@ -45,9 +45,11 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
 export default function Assessment({ child, onComplete, onError, onNavigateHome }: AssessmentProps) {
   const [hasStarted, setHasStarted] = useState(false);
   const [questions, setQuestions] = useState<AdaptiveQuestion[]>([]);
+  const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [direction, setDirection] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [textAnswers, setTextAnswers] = useState<Record<string, string>>({});
   const [isFinished, setIsFinished] = useState(false);
   const [isSuccessfullyFinished, setIsSuccessfullyFinished] = useState(false);
   const [sessionRewards, setSessionRewards] = useState({ gems: 0, streak: 0 }); 
@@ -78,19 +80,35 @@ export default function Assessment({ child, onComplete, onError, onNavigateHome 
         // Ignored in dev
       }
     };
+
+    const initQuestions = async () => {
+      setIsLoadingQuestions(true);
+      const generated = await ProgressiveAssessmentEngine.generateQuestions(child);
+      setQuestions(generated);
+      setIsLoadingQuestions(false);
+    };
+
     checkCompletion();
-    setQuestions(AdaptiveAssessmentEngine.initializeSession(child?.age || 10));
+    initQuestions();
   }, [child]);
 
   const handleSelect = (optionValue: number, qId: string) => {
     const newAnswers = { ...answers, [qId]: optionValue };
     setAnswers(newAnswers);
-    
-    // Evaluate if we need to add dynamic follow-ups
-    const updatedQuestions = AdaptiveAssessmentEngine.evaluateFollowUps(questions, newAnswers);
-    if (updatedQuestions.length > questions.length) {
-      setQuestions(updatedQuestions);
-    }
+  };
+
+  const handleTextEntry = (text: string, qId: string) => {
+    const newAnswers = { ...textAnswers, [qId]: text };
+    setTextAnswers(newAnswers);
+  };
+
+  const isCurrentQuestionAnswered = () => {
+     if (questions.length === 0) return false;
+     const q = questions[currentIdx];
+     if (q.isOpenEnded) {
+        return textAnswers[q.id] && textAnswers[q.id].trim().length > 0;
+     }
+     return answers[q.id] !== undefined;
   };
 
   const handleNext = async () => {
@@ -108,13 +126,7 @@ export default function Assessment({ child, onComplete, onError, onNavigateHome 
     setIsSubmitting(true);
     
     try {
-      const outcome = AdaptiveAssessmentEngine.generateAssessmentOutcome(answers, questions);
-      const viewerRole = child.age >= 18 ? 'student' : 'parent';
-      const aiInsight = await AIInterpreter.generateSupportiveSummary({
-         emotionalRisk: outcome.riskScore,
-         overloadRisk: outcome.isBurnoutRisk ? 0.8 : 0.2,
-         burnoutRisk: outcome.isBurnoutRisk ? 0.9 : 0.3
-      }, viewerRole);
+      const outcome = await ProgressiveAssessmentEngine.analyzeOutcome(answers, textAnswers, questions, child);
 
       const batch = writeBatch(db);
       
@@ -126,14 +138,16 @@ export default function Assessment({ child, onComplete, onError, onNavigateHome 
       const assessmentRef = doc(collection(db, 'assessments'));
       batch.set(assessmentRef, {
         childId: child.id,
-        parentId: auth.currentUser!.uid,
+        parentId: child.parentId || auth.currentUser!.uid,
         submittedBy: auth.currentUser!.uid,
         timestamp: new Date().toISOString(),
         scores: outcome.categoryScores,
         totalScore: outcome.averageScore,
-        aiInsight,
+        questionsAsked: questions.map(q => q.id),
+        aiInsight: outcome.aiInsight,
         riskLevel: outcome.riskLevel,
-        isAdaptive: true
+        isAdaptive: true,
+        stage: outcome.stage
       });
 
       const childRef = doc(db, 'students', child.id);
@@ -146,7 +160,9 @@ export default function Assessment({ child, onComplete, onError, onNavigateHome 
         level: newLevel,
         gems: increment(rewardAmount),
         credits: increment(rewardAmount),
-        moodHistory: arrayUnion(outcome.categoryScores)
+        moodHistory: arrayUnion(outcome.categoryScores),
+        wellnessProfile: outcome.wellnessProfile,
+        assessmentCount: increment(1)
       });
 
       await batch.commit();
@@ -191,23 +207,23 @@ export default function Assessment({ child, onComplete, onError, onNavigateHome 
         </p>
         
         <div className="flex gap-4 mb-8">
-          <div className="bg-surface border border-accent/20 p-4 rounded-2xl shadow-sm glass-card">
-            <p className="text-[10px] font-bold text-text-dim uppercase mb-1">{child.age >= 18 ? 'Credits' : 'Gems'} Earned</p>
-            <div className="flex items-center justify-center gap-2 text-2xl font-bold text-accent">
-              <Sparkles size={20} /> +{sessionRewards.gems}
+          <div className="bg-[#020617] border border-white/5 p-4 rounded-3xl shadow-sm">
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 flex items-center justify-center gap-1.5"><Sparkles size={12} className="text-[#FBBF24]" /> {child.age >= 18 ? 'Credits' : 'Gems'} Earned</p>
+            <div className="flex items-center justify-center gap-2 text-2xl font-serif font-bold text-[#FBBF24]">
+              +{sessionRewards.gems}
             </div>
           </div>
-          <div className="bg-surface border border-orange-500/20 p-4 rounded-2xl shadow-sm glass-card">
-            <p className="text-[10px] font-bold text-text-dim uppercase mb-1">New Streak</p>
-            <div className="flex items-center justify-center gap-2 text-2xl font-bold text-orange-500">
-              <Zap size={20} /> {sessionRewards.streak} Days
+          <div className="bg-[#020617] border border-white/5 p-4 rounded-3xl shadow-sm">
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 flex items-center justify-center gap-1.5"><Zap size={12} className="text-[#22D3EE]" /> New Streak</p>
+            <div className="flex items-center justify-center gap-2 text-2xl font-serif font-bold text-[#22D3EE]">
+              {sessionRewards.streak} <span className="text-sm font-sans text-slate-400">Days</span>
             </div>
           </div>
         </div>
         
         <button 
           onClick={onNavigateHome}
-          className="bg-accent text-black font-bold px-8 py-3 rounded-xl hover:bg-accent-hover transition-all"
+          className="bg-gradient-to-r from-[#2563EB] to-[#0891B2] text-white font-bold px-8 py-4 rounded-2xl hover:opacity-90 transition-all font-serif shadow-[0_0_20px_rgba(37,99,235,0.3)] shadow-[#2563EB]/20"
         >
           Return to Dashboard
         </button>
@@ -261,22 +277,26 @@ export default function Assessment({ child, onComplete, onError, onNavigateHome 
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full glass-card border border-accent/30 p-6 rounded-2xl text-center shadow-[0_0_20px_rgba(0,255,136,0.1)] mb-4"
+              className="w-full bg-[#0F172A]/80 backdrop-blur-md border border-white/5 p-8 rounded-[2rem] text-center shadow-[0_10px_40px_rgba(0,0,0,0.5)] mb-4"
             >
-              <h3 className="text-xl font-bold text-accent mb-2">Rest Secured 🌙</h3>
-              <p className="text-sm text-text-muted font-medium leading-relaxed">
-                You've already completed today's wellness check-in.<br />Come back tomorrow 🌱
+              <h3 className="text-xl font-bold text-[#FBBF24] mb-2 font-serif flex items-center justify-center gap-2"><Moon size={20} /> Rest Secured</h3>
+              <p className="text-sm text-slate-400 font-medium leading-relaxed mt-4 mb-6">
+                You've already completed today's wellness check-in.<br />Come back tomorrow and keep the streak alive.
               </p>
-              <div className="mt-4 flex items-center justify-center gap-2 text-xs text-text-muted bg-surface-2 py-2 px-4 rounded-full w-fit mx-auto">
-                <CheckCircle2 size={14} className="text-accent" /> Check-in resets at midnight
+              <div className="mt-4 flex items-center justify-center gap-2 text-xs font-bold text-slate-500 bg-[#020617] py-3 px-6 rounded-2xl w-fit mx-auto border border-white/5 shadow-inner">
+                <CheckCircle2 size={16} className="text-[#2563EB]" /> Check-in resets at midnight
               </div>
             </motion.div>
+          ) : isLoadingQuestions ? (
+            <div className="w-full md:w-auto px-12 py-4 bg-surface-2 text-text-muted rounded-xl font-bold flex items-center gap-3 justify-center border border-border">
+              <Loader2 size={18} className="animate-spin" /> Preparing Journey...
+            </div>
           ) : (
             <button 
               onClick={() => setHasStarted(true)}
-              className="w-full md:w-auto px-12 py-4 bg-accent text-black rounded-xl font-bold transition-all hover:bg-accent-hover focus:outline-none focus:ring-4 focus:ring-accent/20 flex items-center gap-3 justify-center group"
+              className="w-full md:w-auto px-12 py-4 bg-gradient-to-r from-[#2563EB] to-[#0891B2] text-white rounded-2xl font-bold font-serif transition-all hover:opacity-90 focus:outline-none focus:ring-4 focus:ring-[#2563EB]/40 flex items-center gap-3 justify-center group shadow-[0_0_25px_rgba(37,99,235,0.4)]"
             >
-              <Play size={18} className="fill-black group-hover:scale-110 transition-transform" /> Begin Journey
+              <Play size={18} className="fill-white text-white group-hover:scale-110 transition-transform" /> Begin Journey
             </button>
           )}
         </div>
@@ -290,30 +310,30 @@ export default function Assessment({ child, onComplete, onError, onNavigateHome 
   return (
     <div className="max-w-3xl mx-auto py-8 px-4 animate-fade-in min-h-[80vh] flex flex-col relative">
       {isSubmitting && (
-        <div className="absolute inset-0 bg-black/60 backdrop-blur-md z-50 flex flex-col items-center justify-center rounded-3xl border border-accent/20">
-            <Loader2 className="animate-spin text-accent mb-4" size={48} />
-            <h2 className="text-2xl font-serif font-bold text-text-main mb-2">Analyzing Wellness...</h2>
-            <p className="text-text-muted animate-pulse">Generating personalized insights.</p>
+        <div className="absolute inset-0 bg-[#020617]/80 backdrop-blur-md z-50 flex flex-col items-center justify-center rounded-[2.5rem] border border-[#2563EB]/20 shadow-[0_0_50px_rgba(37,99,235,0.2)]">
+            <Loader2 className="animate-spin text-[#22D3EE] mb-4" size={48} />
+            <h2 className="text-2xl font-serif font-bold text-white mb-2">Analyzing Wellness...</h2>
+            <p className="text-slate-400 animate-pulse uppercase tracking-widest text-xs font-bold">Generating personalized insights</p>
         </div>
       )}
       
-      <div className="mb-10 text-center relative z-10">
-        <h1 className="text-3xl md:text-2xl font-bold mb-2 uppercase tracking-[0.2em] text-text-dim">Behavioral Insights</h1>
-        <p className="text-text-muted text-sm">Listening to your emotional rhythm</p>
+      <div className="mb-10 text-center relative z-10 w-full flex flex-col items-center">
+        <h1 className="text-3xl md:text-2xl font-bold mb-2 uppercase tracking-[0.2em] text-slate-500">Behavioral Insights</h1>
+        <p className="text-slate-400 text-sm italic font-serif">Listening to your emotional rhythm</p>
       </div>
 
       {/* Progress Bar */}
-      <div className="mb-12 relative z-10">
-        <div className="h-1.5 w-full bg-surface-2 rounded-full overflow-hidden">
+      <div className="mb-12 relative z-10 w-full max-w-xl mx-auto">
+        <div className="h-2 w-full bg-[#020617] rounded-full overflow-hidden border border-white/5 shadow-inner">
           <motion.div 
-            className="h-full bg-accent"
+            className="h-full bg-gradient-to-r from-[#2563EB] to-[#22D3EE]"
             initial={{ width: 0 }}
             animate={{ width: `${progress}%` }}
             transition={{ duration: 0.5, ease: "easeOut" }}
           />
         </div>
-        <div className="mt-2 text-right text-xs font-mono text-accent">
-          {currentIdx + 1} / {questions.length}
+        <div className="mt-4 text-center text-xs font-bold uppercase tracking-widest text-[#22D3EE]">
+          Question {currentIdx + 1} of {questions.length}
         </div>
       </div>
 
@@ -330,53 +350,64 @@ export default function Assessment({ child, onComplete, onError, onNavigateHome 
               x: { type: "spring", stiffness: 300, damping: 30 },
               opacity: { duration: 0.2 }
             }}
-            className="glass-card p-8 md:p-12 relative overflow-visible border-accent/20 shadow-2xl bg-surface-2/40"
+            className="bg-[#0F172A] p-8 md:p-12 relative overflow-visible border border-white/5 shadow-[0_10px_40px_rgba(0,0,0,0.5)] rounded-[2.5rem]"
           >
             <div className="relative z-10">
               <div className="flex items-center gap-3 mb-8">
-                <div className="p-2.5 bg-accent/10 text-accent rounded-xl border border-accent/20">
+                <div className="p-2.5 bg-[#2563EB]/10 text-[#2563EB] rounded-2xl border border-[#2563EB]/20 shadow-inner">
                   {CATEGORY_ICONS[currentQuestion.category] || <ClipboardCheck size={20} />}
                 </div>
-                <span className="text-xs font-bold text-text-muted uppercase tracking-widest">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
                   {currentQuestion.category.replace('_', ' ')}
                 </span>
               </div>
 
-              <h3 className="text-2xl md:text-3xl font-sans font-bold mb-10 leading-snug text-text-main text-balance">
+              <h3 className="text-2xl md:text-3xl font-serif font-bold mb-10 leading-snug text-white text-balance text-left">
                 {currentQuestion.text}
               </h3>
 
-              <div className="grid grid-cols-1 gap-4">
-                {currentQuestion.options.map((option, i) => (
-                  <motion.button
-                    key={i}
-                    whileHover={{ scale: 1.01 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => handleSelect(option.value, currentQuestion.id)}
-                    className={cn(
-                      "w-full flex items-center gap-5 p-5 rounded-2xl border transition-all text-left relative overflow-hidden group bg-surface shadow-sm",
-                      answers[currentQuestion.id] === option.value 
-                        ? "border-accent bg-accent/5 shadow-[0_0_15px_rgba(0,255,136,0.1)]" 
-                        : "border-border hover:border-accent/50"
-                    )}
-                  >
-                    <div className={cn(
-                      "w-8 h-8 rounded-full border flex items-center justify-center text-sm font-bold shrink-0 transition-all",
-                      answers[currentQuestion.id] === option.value 
-                        ? "border-accent bg-accent text-black scale-110" 
-                        : "border-border text-text-dim group-hover:border-accent/50 group-hover:text-accent"
-                    )}>
-                      {String.fromCharCode(65 + i)}
-                    </div>
-                    <span className={cn(
-                      "text-base transition-colors font-medium",
-                      answers[currentQuestion.id] === option.value ? "text-accent" : "text-text-muted group-hover:text-text-main"
-                    )}>
-                      {option.label}
-                    </span>
-                  </motion.button>
-                ))}
-              </div>
+              {currentQuestion.isOpenEnded ? (
+                <div className="w-full">
+                   <textarea
+                     className="w-full h-40 p-6 rounded-3xl bg-[#020617] border border-white/10 focus:border-[#2563EB] resize-none outline-none text-white text-lg transition-colors shadow-inner font-sans"
+                     placeholder="Tap here to type your answer..."
+                     value={textAnswers[currentQuestion.id] || ''}
+                     onChange={(e) => handleTextEntry(e.target.value, currentQuestion.id)}
+                   />
+                </div>
+              ) : (
+                 <div className="grid grid-cols-1 gap-4">
+                   {currentQuestion.options.map((option, i) => (
+                     <motion.button
+                       key={i}
+                       whileHover={{ scale: 1.02 }}
+                       whileTap={{ scale: 0.98 }}
+                       onClick={() => handleSelect(option.value, currentQuestion.id)}
+                       className={cn(
+                         "w-full flex items-center gap-5 p-5 rounded-[1.5rem] border transition-all text-left relative overflow-hidden group bg-[#020617] shadow-sm",
+                         answers[currentQuestion.id] === option.value 
+                           ? "border-[#2563EB] bg-[#2563EB]/10 shadow-[0_4px_20px_rgba(37,99,235,0.2)]" 
+                           : "border-white/5 hover:border-white/10 hover:bg-white/5"
+                       )}
+                     >
+                       <div className={cn(
+                         "w-8 h-8 rounded-full border flex items-center justify-center text-sm font-bold shrink-0 transition-all",
+                         answers[currentQuestion.id] === option.value 
+                           ? "border-[#2563EB] bg-[#2563EB] text-white scale-110 shadow-[0_0_10px_rgba(37,99,235,0.5)]" 
+                           : "border-white/10 text-slate-500 group-hover:border-white/30 group-hover:text-slate-300"
+                       )}>
+                         {String.fromCharCode(65 + i)}
+                       </div>
+                       <span className={cn(
+                         "text-base transition-colors font-medium tracking-wide",
+                         answers[currentQuestion.id] === option.value ? "text-white" : "text-slate-400 group-hover:text-slate-200"
+                       )}>
+                         {option.label}
+                       </span>
+                     </motion.button>
+                   ))}
+                 </div>
+              )}
             </div>
           </motion.div>
         </AnimatePresence>
@@ -393,10 +424,10 @@ export default function Assessment({ child, onComplete, onError, onNavigateHome 
 
         <button 
           onClick={handleNext}
-          disabled={answers[currentQuestion.id] === undefined || isSubmitting}
+          disabled={!isCurrentQuestionAnswered() || isSubmitting}
           className={cn(
-            "flex items-center gap-2 px-8 py-3 bg-white text-black dark:bg-white rounded-2xl font-bold text-sm hover:bg-slate-200 disabled:opacity-50 transition-all",
-            currentIdx === questions.length - 1 && "bg-accent hover:bg-accent-hover text-black"
+            "flex items-center gap-2 px-8 py-4 bg-white text-[#020617] rounded-full font-bold text-sm tracking-widest uppercase hover:bg-slate-200 disabled:opacity-50 transition-all font-serif",
+            currentIdx === questions.length - 1 && "bg-gradient-to-r from-[#2563EB] to-[#22D3EE] hover:opacity-90 text-white shadow-[0_0_20px_rgba(37,99,235,0.4)]"
           )}
         >
           {isSubmitting ? (
