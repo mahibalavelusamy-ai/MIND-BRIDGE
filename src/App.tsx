@@ -77,9 +77,10 @@ import Connections from './components/Connections';
 
 import WellnessShop from './components/WellnessShop';
 import ScheduleAI from './components/ScheduleAI';
+import AdminDashboard from './components/AdminDashboard';
 
 type Page = 'landing' | 'user-type' | 'login' | 'app';
-export type Tab = 'home' | 'profile' | 'assessment' | 'reports' | 'notifications' | 'shop' | 'schedule' | 'connections';
+export type Tab = 'home' | 'profile' | 'assessment' | 'reports' | 'notifications' | 'shop' | 'schedule' | 'connections' | 'admin';
 
 const APP_VERSION = "1.2.0";
 
@@ -237,7 +238,24 @@ export default function App() {
         const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
         if (!userDoc.exists()) {
           const pendingRole = sessionStorage.getItem('pendingRole');
-          if (pendingRole === 'student') {
+          if (pendingRole === 'admin') {
+             if (firebaseUser.email !== 'mahibala2501@gmail.com') {
+                 await processAuthError(`Access Denied: You do not have administrator privileges.`);
+                 return;
+             }
+             const userData = {
+               uid: firebaseUser.uid,
+               name: firebaseUser.displayName || 'Admin',
+               email: firebaseUser.email || '',
+               role: 'admin',
+               organization: '',
+               creditsEarned: 0
+             };
+             await setDoc(doc(db, 'users', firebaseUser.uid), userData);
+             setUser(userData);
+             setCurrentPage('app');
+             setTimeout(() => setActiveTab('admin'), 0);
+          } else if (pendingRole === 'student') {
              const userData = {
                uid: firebaseUser.uid,
                name: firebaseUser.displayName || 'Student',
@@ -290,7 +308,14 @@ export default function App() {
           const userData = userDoc.data();
           const pendingRole = sessionStorage.getItem('pendingRole');
           
-          if (pendingRole && userData.role !== pendingRole) {
+          if (pendingRole === 'admin') {
+             if (firebaseUser.email !== 'mahibala2501@gmail.com') {
+                 await processAuthError(`Access Denied: You do not have administrator privileges.`);
+                 setCurrentPage('login');
+                 return;
+             }
+             setTimeout(() => setActiveTab('admin'), 0);
+          } else if (pendingRole && userData.role !== pendingRole) {
               await processAuthError(`Role mismatch: Your account is registered as a ${userData.role}, but you tried to log in as a ${pendingRole}.`);
               setCurrentPage('login');
               return;
@@ -831,54 +856,74 @@ export default function App() {
              )}
           </div>
 
-          <div>
-             <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2 px-3">Monitor</p>
-             <nav className="space-y-1">
-               <SidebarLink icon={<LayoutDashboard size={18} />} label={user?.role === 'caretaker' ? "Caretaker Portal" : "Dashboard"} active={activeTab === 'home'} onClick={() => { setActiveTab('home'); setIsSidebarOpen(false); }} />
-               <SidebarLink
-                 icon={<CalendarDays size={18} />}
-                 label="Master Schedule"
-                 active={activeTab === 'schedule'}
-                 onClick={() => { setActiveTab('schedule'); setIsSidebarOpen(false); }}
-               />
-               {user?.role === 'student' && (
-                 <SidebarLink
-                   icon={<Share2 size={18} />}
-                   label="Connections"
-                   active={activeTab === 'connections'}
-                   onClick={() => { setActiveTab('connections'); setIsSidebarOpen(false); }}
-                 />
-               )}
-             </nav>
-          </div>
+          {user?.role !== 'admin' && (
+            <div>
+               <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2 px-3">Monitor</p>
+               <nav className="space-y-1">
+                 <SidebarLink icon={<LayoutDashboard size={18} />} label={user?.role === 'caretaker' ? "Caretaker Portal" : "Dashboard"} active={activeTab === 'home'} onClick={() => { setActiveTab('home'); setIsSidebarOpen(false); }} />
+                 {user?.role === 'student' && (
+                   <SidebarLink
+                     icon={<CalendarDays size={18} />}
+                     label="Master Schedule"
+                     active={activeTab === 'schedule'}
+                     onClick={() => { setActiveTab('schedule'); setIsSidebarOpen(false); }}
+                   />
+                 )}
+                 {user?.role === 'student' && (
+                   <SidebarLink
+                     icon={<Share2 size={18} />}
+                     label="Connections"
+                     active={activeTab === 'connections'}
+                     onClick={() => { setActiveTab('connections'); setIsSidebarOpen(false); }}
+                   />
+                 )}
+               </nav>
+            </div>
+          )}
 
-          <div>
-             <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2 px-3">Assessment & Analysis</p>
-             <nav className="space-y-1">
-               {user?.role === 'student' && (
-                 <>
-                   <SidebarLink
-                     icon={<ClipboardCheck size={18} />}
-                     label={"My Journey"}
-                     active={activeTab === 'assessment'}
-                     onClick={() => { setActiveTab('assessment'); setIsSidebarOpen(false); }}
-                   />
-                   <SidebarLink
-                     icon={<ShoppingCart size={18} />}
-                     label="Wellness Shop"
-                     active={activeTab === 'shop'}
-                     onClick={() => { setActiveTab('shop'); setIsSidebarOpen(false); }}
-                   />
-                   <SidebarLink 
-                     icon={<BarChart3 size={18} />} 
-                     label={"My Growth"} 
-                     active={activeTab === 'reports'} 
-                     onClick={() => { setActiveTab('reports'); setIsSidebarOpen(false); }} 
-                   />
-                 </>
-               )}
-             </nav>
-          </div>
+          {auth.currentUser?.email === 'mahibala2501@gmail.com' && (
+            <div>
+               <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2 px-3">System</p>
+               <nav className="space-y-1">
+                 <SidebarLink
+                   icon={<Shield size={18} />}
+                   label="Admin Portal"
+                   active={activeTab === 'admin'}
+                   onClick={() => { setActiveTab('admin'); setIsSidebarOpen(false); }}
+                 />
+               </nav>
+            </div>
+          )}
+
+          {user?.role !== 'admin' && (
+            <div>
+               <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2 px-3">Assessment & Analysis</p>
+               <nav className="space-y-1">
+                 {user?.role === 'student' && (
+                   <>
+                     <SidebarLink
+                       icon={<ClipboardCheck size={18} />}
+                       label={"My Journey"}
+                       active={activeTab === 'assessment'}
+                       onClick={() => { setActiveTab('assessment'); setIsSidebarOpen(false); }}
+                     />
+                     <SidebarLink
+                       icon={<ShoppingCart size={18} />}
+                       label="Wellness Shop"
+                       active={activeTab === 'shop'}
+                       onClick={() => { setActiveTab('shop'); setIsSidebarOpen(false); }}
+                     />
+                     <SidebarLink 
+                       icon={<BarChart3 size={18} />} 
+                       label={"My Growth"} 
+                       active={activeTab === 'reports'} 
+                       onClick={() => { setActiveTab('reports'); setIsSidebarOpen(false); }} 
+                     />
+                   </>
+                 )}
+               </nav>
+            </div>
+          )}
         </div>
 
         {/* Sticky Footer */}
@@ -950,6 +995,7 @@ export default function App() {
             </div>
             
             <div className="flex items-center gap-3">
+                 {user?.role !== 'admin' && (
                  <button 
                   onClick={() => setActiveTab('notifications')}
                   className="relative p-2.5 bg-surface-2 border border-border rounded-full text-text-muted hover:text-text-main hover:bg-surface transition-colors"
@@ -960,6 +1006,7 @@ export default function App() {
                      <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-alert-500 rounded-full border-2 border-surface animate-pulse-soft" />
                    )}
                  </button>
+                 )}
             </div>
         </header>
 
@@ -1010,6 +1057,9 @@ export default function App() {
               )}
               {activeTab === 'connections' && (
                 <Connections user={user} />
+              )}
+              {activeTab === 'admin' && (
+                <AdminDashboard />
               )}
               {activeTab === 'assessment' && (
                 selectedChild ? (

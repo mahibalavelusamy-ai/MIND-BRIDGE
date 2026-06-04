@@ -4,6 +4,7 @@ import { Search, Link as LinkIcon, UserCheck, Clock, Activity, BarChart3, AlertC
 import { db, auth, collection, query, where, getDocs, addDoc, onSnapshot, doc, updateDoc, setDoc } from '../lib/firebase';
 import { Child, Alert } from '../types';
 import { cn } from '../lib/utils';
+import CaretakerStudentView from './CaretakerStudentView';
 
 interface CaretakerDashboardProps {
   onViewProfile?: (child: Child) => void;
@@ -14,6 +15,7 @@ export default function CaretakerDashboard({ onViewProfile }: CaretakerDashboard
   const [linkEmail, setLinkEmail] = useState('');
   const [linkingStatus, setLinkingStatus] = useState<string>('');
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+  const [internalSelectedStudent, setInternalSelectedStudent] = useState<Child | null>(null);
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -103,12 +105,39 @@ export default function CaretakerDashboard({ onViewProfile }: CaretakerDashboard
     }
   };
 
+  if (internalSelectedStudent) {
+    return <CaretakerStudentView student={internalSelectedStudent} onBack={() => setInternalSelectedStudent(null)} />;
+  }
+
   return (
     <div className="space-y-8 animate-fade-in pb-12 max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-serif text-white">Caretaker Portal</h1>
           <p className="text-slate-400 mt-1">Professional wellness & engagement monitoring.</p>
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-4 gap-6">
+        <div className="bg-[#020617] border border-white/5 rounded-[2rem] p-6 shadow-xl">
+           <Activity className="text-blue-400 mb-3" size={24} />
+           <p className="text-xs font-bold text-slate-500 tracking-wider uppercase mb-1">Total Linked Students</p>
+           <p className="text-3xl font-serif text-white font-bold">{students.length}</p>
+        </div>
+        <div className="bg-[#020617] border border-white/5 rounded-[2rem] p-6 shadow-xl">
+           <AlertCircle className="text-amber-400 mb-3" size={24} />
+           <p className="text-xs font-bold text-slate-500 tracking-wider uppercase mb-1">Students Requiring Attention</p>
+           <p className="text-3xl font-serif text-white font-bold">{students.filter(s => s.riskLevel === 'high' || (s.streak || 0) === 0).length}</p>
+        </div>
+        <div className="bg-[#020617] border border-white/5 rounded-[2rem] p-6 shadow-xl">
+           <CheckCircle2 className="text-emerald-400 mb-3" size={24} />
+           <p className="text-xs font-bold text-slate-500 tracking-wider uppercase mb-1">Assessment Completion Rate</p>
+           <p className="text-3xl font-serif text-white font-bold">85%</p>
+        </div>
+        <div className="bg-[#020617] border border-white/5 rounded-[2rem] p-6 shadow-xl">
+           <BarChart3 className="text-purple-400 mb-3" size={24} />
+           <p className="text-xs font-bold text-slate-500 tracking-wider uppercase mb-1">Avg Wellness Score</p>
+           <p className="text-3xl font-serif text-white font-bold">7.2 <span className="text-lg text-slate-400">/ 10</span></p>
         </div>
       </div>
 
@@ -173,7 +202,7 @@ export default function CaretakerDashboard({ onViewProfile }: CaretakerDashboard
               {students.map(student => (
                  <div 
                    key={student.id} 
-                   onClick={() => onViewProfile && onViewProfile(student)}
+                   onClick={() => setInternalSelectedStudent(student)}
                    className="bg-[#0F172A]/80 backdrop-blur-md border border-white/5 p-5 rounded-[2rem] hover:border-[#22D3EE]/40 hover:shadow-[0_4px_20px_rgba(34,211,238,0.15)] transition-all cursor-pointer group"
                  >
                     <div className="flex items-center justify-between mb-4">
@@ -196,20 +225,16 @@ export default function CaretakerDashboard({ onViewProfile }: CaretakerDashboard
                            <p className="text-xl font-serif font-bold text-white">{student.streak || 0} <span className="text-xs text-slate-400 font-sans ml-1">Days</span></p>
                         </div>
                         <div className="bg-[#020617]/50 p-3 rounded-xl border border-white/5">
-                           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Risk Level</p>
-                           <p className={cn("text-lg font-serif font-bold", student.riskLevel === 'high' ? 'text-[#F87171]' : 'text-white')}>{student.riskLevel === 'high' ? 'Elevated' : 'Stable'}</p>
+                           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Priority</p>
+                           <p className={cn("text-lg font-serif font-bold", student.riskLevel === 'high' ? 'text-red-400' : 'text-emerald-400')}>{student.riskLevel === 'high' ? 'HIGH' : 'LOW'}</p>
                         </div>
                     </div>
 
                     <div className="bg-[#2563EB]/5 p-4 rounded-xl border border-[#2563EB]/10 flex flex-col gap-2">
                        <div className="flex justify-between items-center text-xs">
-                          <span className="text-slate-400 font-medium tracking-wide">Last Assessment</span>
-                          <span className="text-slate-300 font-mono">{student.lastAssessmentDate || 'Never'}</span>
-                       </div>
-                       <div className="flex justify-between items-center text-xs">
-                          <span className="text-slate-400 font-medium tracking-wide">AI Insight</span>
-                          <span className={student.riskLevel === 'high' ? "text-[#F87171] font-medium" : "text-[#10B981] font-medium"}>
-                             {student.riskLevel === 'high' ? "Review workload" : "Consistent baseline"}
+                          <span className="text-slate-400 font-medium tracking-wide">Status</span>
+                          <span className={student.riskLevel === 'high' ? "text-red-400 font-bold" : "text-emerald-400 font-bold"}>
+                             {student.riskLevel === 'high' ? "🔴 Follow-Up Recommended" : "🟢 Stable & Improving"}
                           </span>
                        </div>
                     </div>

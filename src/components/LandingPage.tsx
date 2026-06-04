@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  User, Users, Activity, Brain, Timer, ShieldAlert, 
+  User, Users, Activity, Brain, Timer, ShieldAlert, Shield, 
   Sparkles, LineChart, Target, ArrowDown, Network, 
   MessageSquareHeart, CheckCircle2, ChevronRight, BarChart
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
-export default function LandingPage({ onSelectRole }: { onSelectRole: (role: 'student' | 'caretaker') => void }) {
+export default function LandingPage({ onSelectRole }: { onSelectRole: (role: 'student' | 'caretaker' | 'admin') => void }) {
   const [activeInsight, setActiveInsight] = useState(0);
   
   const insights = [
@@ -211,6 +211,13 @@ export default function LandingPage({ onSelectRole }: { onSelectRole: (role: 'st
             ))}
          </div>
       </section>
+
+      <div 
+        onClick={() => onSelectRole('admin')}
+        className="fixed bottom-4 right-4 w-12 h-12 flex items-center justify-center text-transparent hover:text-white/20 transition-all cursor-pointer z-50 rounded-full"
+      >
+        <Shield size={24} />
+      </div>
 
     </div>
   );
