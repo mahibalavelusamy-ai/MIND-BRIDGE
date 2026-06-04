@@ -322,7 +322,7 @@ export default function App() {
           }
 
           setUser(userData);
-          setCurrentPage(prev => (prev === 'landing' ? 'landing' : 'app'));
+          setCurrentPage('app');
         }
       } else {
         setUser(null);
