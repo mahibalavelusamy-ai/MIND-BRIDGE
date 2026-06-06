@@ -25,11 +25,6 @@ import {
   Target,
   AlertTriangle
 } from 'lucide-react';
-import EmotionalStabilityView from './EmotionalStabilityView';
-import MentalResilienceView from './MentalResilienceView';
-import SilentRiskView from './SilentRiskView';
-import TriggerMappingView from './TriggerMappingView';
-import InterventionEffectivenessView from './InterventionEffectivenessView';
 
 interface ReportsProps {
   children: Child[];
@@ -395,56 +390,7 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
          </div>
       </div>
 
-      {assessments.length > 0 && (
-         <div className="shrink-0 mb-6 flex flex-col gap-6">
-            <EmotionalStabilityView assessments={assessments} />
-            <MentalResilienceView assessments={assessments} />
-            <SilentRiskView assessments={assessments} sessions={sessions} streak={selectedChild.streak || 0} />
-            <TriggerMappingView assessments={assessments} sessions={sessions} schedules={schedules} />
-            <InterventionEffectivenessView assessments={assessments} />
-         </div>
-      )}
-
-      {/* Trigger Analysis Section */}
-      <div className="bg-[#0F172A] p-6 md:p-8 flex flex-col border border-white/5 shadow-sm shrink-0 rounded-[2rem]">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
-               <div>
-                  <h2 className="text-xl font-bold flex items-center gap-2 text-white">
-                     <Target className="text-[#2563EB]" size={24} /> Trigger Analysis
-                  </h2>
-                  <p className="text-sm text-slate-500 uppercase tracking-widest mt-1">Cross-Referencing Behavioral Causes</p>
-               </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {triggers.length > 0 ? (
-                  triggers.map((trigger, idx) => (
-                      <div key={idx} className="bg-[#020617] border border-white/5 rounded-[1.5rem] p-5 flex items-start gap-4 hover:border-white/10 transition-colors shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
-                          <div className={cn(
-                              "p-2.5 rounded-lg shrink-0 shadow-inner",
-                              trigger.type === 'positive' ? "bg-[#2563EB]/10 text-[#22D3EE] border border-[#2563EB]/20" : 
-                              trigger.type === 'negative' ? "bg-[#F87171]/10 text-[#F87171] border border-[#F87171]/20" : 
-                              "bg-[#FBBF24]/10 text-[#FBBF24] border border-[#FBBF24]/20"
-                          )}>
-                              {trigger.type === 'positive' ? <Zap size={20} /> : 
-                               trigger.type === 'negative' ? <AlertTriangle size={20} /> : 
-                               <Layers size={20} />}
-                          </div>
-                           <div className="flex flex-col gap-1">
-                              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">
-                                  {trigger.type === 'positive' ? 'Protective Factor' : trigger.type === 'negative' ? 'Risk Factor' : 'Observation'}
-                              </span>
-                              <p className="text-sm text-white font-medium leading-relaxed">{trigger.text}</p>
-                          </div>
-                      </div>
-                  ))
-              ) : (
-                  <div className="col-span-full flex flex-col items-center justify-center p-8 text-center text-slate-500 bg-[#020617] rounded-xl border border-white/5 border-dashed h-full min-h-[150px]">
-                      <Target size={32} className="opacity-40 mb-3 text-slate-600" />
-                      <p className="text-sm max-w-sm">Not enough cross-referenced data. Complete focus sessions and use your planner to generate trigger insights.</p>
-                  </div>
-              )}
-          </div>
-      </div>
+      {/* Engine views removed from My Growth part as requested */}
 
     </div>
   );

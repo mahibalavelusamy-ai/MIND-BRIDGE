@@ -46,10 +46,6 @@ import InterventionModal from './InterventionModal';
 import FocusTimer from './FocusTimer';
 import RecommendationAI from './RecommendationAI';
 import { analyzeTextRisk } from '../lib/scoring';
-import EmotionalStabilityView from './EmotionalStabilityView';
-import MentalResilienceView from './MentalResilienceView';
-import TriggerMappingView from './TriggerMappingView';
-import InterventionEffectivenessView from './InterventionEffectivenessView';
 
 interface DashboardProps {
   user: any;
@@ -615,14 +611,6 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
                    </div>
                  </div>
 
-                 {dashboardAssessments.length > 0 && (
-                   <div className="grid grid-cols-1 gap-6 mt-8">
-                     <EmotionalStabilityView assessments={dashboardAssessments} />
-                     <MentalResilienceView assessments={dashboardAssessments} />
-                     <TriggerMappingView assessments={dashboardAssessments} sessions={[]} schedules={[]} />
-                     <InterventionEffectivenessView assessments={dashboardAssessments} />
-                   </div>
-                 )}
               </>
             ) : (
               <div className="glass-card p-8 h-full flex flex-col hover:border-[#2563EB]/40 transition-colors bg-[#0F172A]/50">
