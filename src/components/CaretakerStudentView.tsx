@@ -177,7 +177,7 @@ export default function CaretakerStudentView({ student, onBack }: CaretakerStude
               <BarChart3 className="text-blue-400" size={20} />
               Wellness Trends (30 Days)
             </h3>
-            <div className="h-64">
+            <div className="h-48">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData}>
                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />

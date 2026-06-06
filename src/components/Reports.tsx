@@ -316,8 +316,8 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
          ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 shrink-0 h-full min-h-[500px]">
-         <div className="lg:col-span-3 bg-[#0F172A] p-6 md:p-8 flex flex-col border border-white/5 shadow-sm min-h-[450px] rounded-[2rem]">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 shrink-0">
+         <div className="lg:col-span-3 bg-[#0F172A] p-6 md:p-8 flex flex-col border border-white/5 shadow-sm rounded-[2rem]">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
                <div>
                   <h2 className="text-xl font-bold flex items-center gap-2 text-white">
@@ -334,7 +334,7 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
                </div>
             </div>
             
-            <div className="flex-1 w-full min-h-[350px]">
+            <div className="w-full h-64">
               {chartData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
