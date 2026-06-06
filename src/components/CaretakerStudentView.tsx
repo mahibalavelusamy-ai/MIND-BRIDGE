@@ -4,6 +4,11 @@ import { ChevronLeft, BarChart3, Clock, AlertTriangle, Send, Activity, Brain, Do
 import { Child } from '../types';
 import { db, auth, collection, query, where, getDocs, addDoc, orderBy, limit } from '../lib/firebase';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import EmotionalStabilityView from './EmotionalStabilityView';
+import MentalResilienceView from './MentalResilienceView';
+import SilentRiskView from './SilentRiskView';
+import TriggerMappingView from './TriggerMappingView';
+import InterventionEffectivenessView from './InterventionEffectivenessView';
 
 interface CaretakerStudentViewProps {
   student: Child;
@@ -188,6 +193,16 @@ export default function CaretakerStudentView({ student, onBack }: CaretakerStude
               </ResponsiveContainer>
             </div>
           </div>
+
+          <EmotionalStabilityView assessments={assessments} />
+          
+          <MentalResilienceView assessments={assessments} />
+
+          <SilentRiskView assessments={assessments} sessions={sessions} streak={student.streak || 0} />
+
+          <TriggerMappingView assessments={assessments} sessions={sessions} schedules={[]} />
+
+          <InterventionEffectivenessView assessments={assessments} />
 
           <div className="bg-[#0F172A]/80 border border-white/5 rounded-[2rem] p-6 shadow-xl">
             <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">

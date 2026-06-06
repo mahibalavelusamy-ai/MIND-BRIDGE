@@ -39,14 +39,17 @@ export default function ScheduleAI() {
     const unsubscribe = onSnapshot(qSchedules, (snapshot) => {
       const fetchedEvents = snapshot.docs.map(doc => {
         const data = doc.data();
-        let color = '#059669'; // default accent
-        if (data.type === 'exam' || data.type === 'test') color = '#ef4444'; // alert red
-        else if (data.type === 'assignment' || data.type === 'deadline') color = '#0284c7'; // blue
-        else if (data.type === 'project') color = '#f59e0b'; // amber
-        else if (data.type === 'reading') color = '#8b5cf6'; // violet
-        else if (data.type === 'recovery' || data.type === 'break') color = '#10b981'; // green for health wrapper
-        else if (data.type === 'study') color = '#3b82f6'; // blue for balanced study
-        else if (data.priority === 'high') color = '#ef4444';
+        let color = '#3B82F6'; // default study blue
+        let glowClass = 'shadow-[0_0_10px_rgba(59,130,246,0.5)]';
+        
+        if (data.type === 'exam' || data.type === 'test') { color = '#F97316'; glowClass = 'shadow-[0_0_10px_rgba(249,115,22,0.5)]'; } // soft orange alerts
+        else if (data.type === 'assignment' || data.type === 'deadline') { color = '#3B82F6'; glowClass = 'shadow-[0_0_10px_rgba(59,130,246,0.5)]'; }
+        else if (data.type === 'project' || data.type === 'goal') { color = '#FBBF24'; glowClass = 'shadow-[0_0_10px_rgba(251,191,36,0.5)]'; } // gold
+        else if (data.type === 'wellness' || data.type === 'break') { color = '#10B981'; glowClass = 'shadow-[0_0_10px_rgba(16,185,129,0.5)]'; } // emerald green
+        else if (data.type === 'recovery') { color = '#A855F7'; glowClass = 'shadow-[0_0_10px_rgba(168,85,247,0.5)]'; } // soft purple
+        else if (data.type === 'focus' || data.type === 'session') { color = '#06B6D4'; glowClass = 'shadow-[0_0_10px_rgba(6,182,212,0.5)]'; } // cyan
+        else if (data.priority === 'high') { color = '#F97316'; glowClass = 'shadow-[0_0_10px_rgba(249,115,22,0.5)]'; }
+        else if (data.type === 'study') { color = '#3B82F6'; glowClass = 'shadow-[0_0_10px_rgba(59,130,246,0.5)]'; }
 
         return {
           id: doc.id,
@@ -54,7 +57,7 @@ export default function ScheduleAI() {
           start: data.start || data.startTime,
           end: data.end || data.endTime,
           color: color,
-          className: `px-1.5 rounded shadow-sm py-0.5 text-xs font-medium text-white transition-transform hover:scale-105 cursor-pointer`,
+          className: `px-1.5 rounded py-0.5 text-xs font-medium text-white transition-all duration-300 hover:-translate-y-1 hover:brightness-110 cursor-pointer border border-white/20 ${glowClass}`,
           ...data
         };
       });
@@ -168,14 +171,37 @@ export default function ScheduleAI() {
   };
 
   return (
-    <div className="flex flex-col lg:flex-row h-full gap-8 p-4 md:p-6 animate-fade-in relative z-10 w-full overflow-hidden">
+    <div className="flex flex-col lg:flex-row h-full gap-8 p-4 md:p-6 animate-fade-in relative z-10 w-full overflow-hidden bg-[#020617] rounded-[2rem]">
       {/* Calendar Column */}
-      <div className="flex-[2] glass-card p-6 md:p-8 flex flex-col bg-surface-2/40 border-border/50 min-h-[500px]">
-        <h2 className="text-2xl font-sans font-bold tracking-tight mb-8 flex items-center gap-3 text-text-main">
-          <CalendarDays className="text-accent" size={28} />
-          Master Schedule
-        </h2>
-        <div className="flex-1 bg-surface ring-1 ring-border shadow-inner p-4 rounded-[1.5rem] overflow-hidden">
+      <div className="flex-[2] glass-card p-6 md:p-8 flex flex-col bg-white/[0.06] backdrop-blur-xl border border-white/10 min-h-[500px] hover:-translate-y-1 hover:shadow-[0_0_20px_rgba(34,211,238,0.25)] transition-all duration-300 rounded-[2rem]">
+        <div className="mb-6">
+          <h2 className="text-3xl font-sans font-bold tracking-tight flex items-center gap-3 text-transparent bg-clip-text bg-gradient-to-r from-white to-[#22D3EE]">
+            <CalendarDays className="text-[#22D3EE]" size={28} />
+            LifeFlow Planner
+          </h2>
+          <p className="text-sm font-medium mt-2 text-[#22D3EE] tracking-widest uppercase">Plan Smart. Stay Balanced. Grow Consistently.</p>
+        </div>
+
+        {/* Daily Wellness Banner */}
+        <div className="mb-6 bg-gradient-to-br from-[#0F172A] via-[#1E3A8A] to-[#06B6D4] p-4 rounded-[1.5rem] flex items-center justify-between border border-white/10 shadow-[0_4px_20px_rgba(34,211,238,0.15)] backdrop-blur-md">
+          <div>
+             <h3 className="text-white font-bold tracking-widest uppercase text-xs mb-2 opacity-80">Today's Wellness State</h3>
+             <div className="flex gap-4 items-center">
+                <div className="flex flex-col">
+                   <span className="text-[10px] text-emerald-300 font-bold uppercase tracking-widest">Status</span>
+                   <span className="text-white font-bold text-sm">🟢 Balanced Day</span>
+                </div>
+                <div className="h-6 w-px bg-white/20 mx-2"></div>
+                <div className="flex gap-4">
+                  <div className="flex flex-col"><span className="text-[10px] text-blue-200 uppercase tracking-widest">Mood</span><span className="text-white font-bold">82</span></div>
+                  <div className="flex flex-col"><span className="text-[10px] text-cyan-200 uppercase tracking-widest">Focus</span><span className="text-white font-bold">78</span></div>
+                  <div className="flex flex-col"><span className="text-[10px] text-purple-200 uppercase tracking-widest">Stress</span><span className="text-white font-bold">43</span></div>
+                </div>
+             </div>
+          </div>
+        </div>
+
+        <div className="flex-1 bg-black/20 ring-1 ring-white/10 shadow-inner p-4 rounded-[1.5rem] overflow-hidden">
           <FullCalendar
             plugins={[dayGridPlugin, timeGridPlugin]}
             initialView="dayGridMonth"
@@ -192,13 +218,13 @@ export default function ScheduleAI() {
       </div>
 
       {/* AI Uploader Column */}
-      <div className="flex-1 glass-card p-6 md:p-8 flex flex-col bg-surface border-border/50 h-full min-h-[400px]">
-        <h2 className="text-xl font-sans font-bold tracking-tight mb-4 flex items-center gap-3 text-text-main">
-          <Sparkles className="text-accent" size={24} />
+      <div className="flex-1 glass-card p-6 md:p-8 flex flex-col bg-white/[0.06] backdrop-blur-xl border border-white/10 h-full min-h-[400px] hover:-translate-y-1 hover:shadow-[0_0_20px_rgba(34,211,238,0.25)] transition-all duration-300 rounded-[2rem]">
+        <h2 className="text-xl font-sans font-bold tracking-tight mb-4 flex items-center gap-3 text-white">
+          <Sparkles className="text-[#22D3EE]" size={24} />
           AI Plan Uploader
         </h2>
         
-        <p className="text-sm text-text-muted mb-8 text-balance">
+        <p className="text-sm text-slate-300 mb-8 text-balance">
           Paste your syllabus, study plan, or class schedule below. Our AI planner will automatically extract the dates and populate your calendar.
         </p>
 

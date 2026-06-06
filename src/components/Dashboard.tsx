@@ -46,6 +46,10 @@ import InterventionModal from './InterventionModal';
 import FocusTimer from './FocusTimer';
 import RecommendationAI from './RecommendationAI';
 import { analyzeTextRisk } from '../lib/scoring';
+import EmotionalStabilityView from './EmotionalStabilityView';
+import MentalResilienceView from './MentalResilienceView';
+import TriggerMappingView from './TriggerMappingView';
+import InterventionEffectivenessView from './InterventionEffectivenessView';
 
 interface DashboardProps {
   user: any;
@@ -572,43 +576,54 @@ export default function Dashboard({ user, children, alerts, onViewProfile, selec
           {/* Action Center */}
           <div className="mt-6">
             {user?.role === 'student' ? (
-              <div className="glass-card p-8 h-full flex flex-col hover:border-[#2563EB]/40 transition-colors bg-[#0F172A]/50">
-                <h3 className="text-xl font-serif mb-4 flex items-center gap-2 text-white">
-                  <Trophy size={20} className="text-[#FBBF24]" />
-                  Daily Growth Quests
-                </h3>
-                <p className="text-sm text-slate-400 mb-6">
-                  Complete these mini-quests today to earn bonus credits and boost your wellbeing.
-                </p>
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-auto">
-                  <button 
-                    onClick={() => { setShowTimerModal(true); }}
-                    className="bg-white/5 hover:border-[#2563EB] hover:bg-[#2563EB]/10 text-white text-sm font-bold py-4 px-5 rounded-xl border border-white/10 transition-all text-left flex flex-col gap-2 shadow-[0_4px_24px_rgba(0,0,0,0.2)] hover:shadow-[0_4px_24px_rgba(37,99,235,0.2)] backdrop-blur-md"
-                  >
-                    <span className="text-[#2563EB]">Focus for 15m</span>
-                    <span className="text-[10px] text-slate-500 uppercase flex justify-between w-full"><span>Academic</span><span className="text-[#FBBF24]">+15 💎</span></span>
-                  </button>
-                  <button 
-                    onClick={() => alert(`Starting 3-min Journal...`)}
-                    className="bg-white/5 hover:border-[#22D3EE] hover:bg-[#22D3EE]/10 text-white text-sm font-bold py-4 px-5 rounded-xl border border-white/10 transition-all text-left flex flex-col gap-2 shadow-[0_4px_24px_rgba(0,0,0,0.2)] hover:shadow-[0_4px_24px_rgba(34,211,238,0.2)] backdrop-blur-md"
-                  >
-                    <span className="text-[#22D3EE]">Quick Journal</span>
-                    <span className="text-[10px] text-slate-500 uppercase flex justify-between w-full"><span>Mindfulness</span><span className="text-[#FBBF24]">+20 💎</span></span>
-                  </button>
-                  <button 
-                    onClick={() => { setActiveTab('shop'); }}
-                    className="bg-gradient-to-br from-[#2563EB]/10 to-[#8B5CF6]/10 hover:from-[#2563EB]/20 hover:to-[#8B5CF6]/20 col-span-2 hover:border-[#8B5CF6] text-white text-sm font-bold py-4 px-5 rounded-xl border border-[#8B5CF6]/30 transition-all text-left flex items-center justify-between shadow-[0_4px_24px_rgba(0,0,0,0.2)] backdrop-blur-md group"
-                  >
-                    <div className="flex flex-col h-full justify-between gap-1">
-                      <span className="text-[#8B5CF6] group-hover:text-white transition-colors">Visit Wellness Shop</span>
-                      <span className="text-[10px] text-slate-400 uppercase">Reward Yourself</span>
-                    </div>
-                    <div className="w-12 h-12 rounded-full bg-[#8B5CF6]/20 flex items-center justify-center text-[#8B5CF6] self-center group-hover:scale-110 group-hover:bg-[#8B5CF6] group-hover:text-white transition-all shadow-[0_0_15px_rgba(139,92,246,0.5)]">
-                      <Zap size={24} />
-                    </div>
-                  </button>
-                </div>
-              </div>
+              <>
+                 <div className="glass-card p-8 flex flex-col hover:border-[#2563EB]/40 transition-colors bg-[#0F172A]/50 mb-6">
+                   <h3 className="text-xl font-serif mb-4 flex items-center gap-2 text-white">
+                     <Trophy size={20} className="text-[#FBBF24]" />
+                     Daily Growth Quests
+                   </h3>
+                   <p className="text-sm text-slate-400 mb-6">
+                     Complete these mini-quests today to earn bonus credits and boost your wellbeing.
+                   </p>
+                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-auto">
+                     <button 
+                       onClick={() => { setShowTimerModal(true); }}
+                       className="bg-white/5 hover:border-[#2563EB] hover:bg-[#2563EB]/10 text-white text-sm font-bold py-4 px-5 rounded-xl border border-white/10 transition-all text-left flex flex-col gap-2 shadow-[0_4px_24px_rgba(0,0,0,0.2)] hover:shadow-[0_4px_24px_rgba(37,99,235,0.2)] backdrop-blur-md"
+                     >
+                       <span className="text-[#2563EB]">Focus for 15m</span>
+                       <span className="text-[10px] text-slate-500 uppercase flex justify-between w-full"><span>Academic</span><span className="text-[#FBBF24]">+15 💎</span></span>
+                     </button>
+                     <button 
+                       onClick={() => alert(`Starting 3-min Journal...`)}
+                       className="bg-white/5 hover:border-[#22D3EE] hover:bg-[#22D3EE]/10 text-white text-sm font-bold py-4 px-5 rounded-xl border border-white/10 transition-all text-left flex flex-col gap-2 shadow-[0_4px_24px_rgba(0,0,0,0.2)] hover:shadow-[0_4px_24px_rgba(34,211,238,0.2)] backdrop-blur-md"
+                     >
+                       <span className="text-[#22D3EE]">Quick Journal</span>
+                       <span className="text-[10px] text-slate-500 uppercase flex justify-between w-full"><span>Mindfulness</span><span className="text-[#FBBF24]">+20 💎</span></span>
+                     </button>
+                     <button 
+                       onClick={() => { setActiveTab('shop'); }}
+                       className="bg-gradient-to-br from-[#2563EB]/10 to-[#8B5CF6]/10 hover:from-[#2563EB]/20 hover:to-[#8B5CF6]/20 col-span-2 hover:border-[#8B5CF6] text-white text-sm font-bold py-4 px-5 rounded-xl border border-[#8B5CF6]/30 transition-all text-left flex items-center justify-between shadow-[0_4px_24px_rgba(0,0,0,0.2)] backdrop-blur-md group"
+                     >
+                       <div className="flex flex-col h-full justify-between gap-1">
+                         <span className="text-[#8B5CF6] group-hover:text-white transition-colors">Visit Wellness Shop</span>
+                         <span className="text-[10px] text-slate-400 uppercase">Reward Yourself</span>
+                       </div>
+                       <div className="w-12 h-12 rounded-full bg-[#8B5CF6]/20 flex items-center justify-center text-[#8B5CF6] self-center group-hover:scale-110 group-hover:bg-[#8B5CF6] group-hover:text-white transition-all shadow-[0_0_15px_rgba(139,92,246,0.5)]">
+                         <Zap size={24} />
+                       </div>
+                     </button>
+                   </div>
+                 </div>
+
+                 {dashboardAssessments.length > 0 && (
+                   <div className="grid grid-cols-1 gap-6 mt-8">
+                     <EmotionalStabilityView assessments={dashboardAssessments} />
+                     <MentalResilienceView assessments={dashboardAssessments} />
+                     <TriggerMappingView assessments={dashboardAssessments} sessions={[]} schedules={[]} />
+                     <InterventionEffectivenessView assessments={dashboardAssessments} />
+                   </div>
+                 )}
+              </>
             ) : (
               <div className="glass-card p-8 h-full flex flex-col hover:border-[#2563EB]/40 transition-colors bg-[#0F172A]/50">
                 <h3 className="text-xl font-serif mb-4 flex items-center gap-2 text-white">

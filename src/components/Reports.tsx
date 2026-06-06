@@ -25,6 +25,11 @@ import {
   Target,
   AlertTriangle
 } from 'lucide-react';
+import EmotionalStabilityView from './EmotionalStabilityView';
+import MentalResilienceView from './MentalResilienceView';
+import SilentRiskView from './SilentRiskView';
+import TriggerMappingView from './TriggerMappingView';
+import InterventionEffectivenessView from './InterventionEffectivenessView';
 
 interface ReportsProps {
   children: Child[];
@@ -389,6 +394,16 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
             </div>
          </div>
       </div>
+
+      {assessments.length > 0 && (
+         <div className="shrink-0 mb-6 flex flex-col gap-6">
+            <EmotionalStabilityView assessments={assessments} />
+            <MentalResilienceView assessments={assessments} />
+            <SilentRiskView assessments={assessments} sessions={sessions} streak={selectedChild.streak || 0} />
+            <TriggerMappingView assessments={assessments} sessions={sessions} schedules={schedules} />
+            <InterventionEffectivenessView assessments={assessments} />
+         </div>
+      )}
 
       {/* Trigger Analysis Section */}
       <div className="bg-[#0F172A] p-6 md:p-8 flex flex-col border border-white/5 shadow-sm shrink-0 rounded-[2rem]">
