@@ -1,9 +1,6 @@
-import { GoogleGenAI, Type } from "@google/genai";
 import { CategoryScores } from './scoring';
 import { RootCauseAnalysis, Child } from '../types';
 import { safeJsonParse } from './aiUtils';
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 /**
  * Mind Bridge Root-Cause Analysis Engine
@@ -46,9 +43,7 @@ export async function performRootCauseAnalysis(
 
   // 2. AI Synthesis for Human-Readable Explanation
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `
+    const prompt = `
         You are a child psychology data analyst. Perform a Root-Cause Analysis for this child:
         Child: ${child.name}, Age: ${child.age}
         
@@ -64,24 +59,19 @@ export async function performRootCauseAnalysis(
         3. Assign a 'Confidence' score (0.0 to 1.0).
         
         Format your response as a JSON object. Do not include markdown code blocks.
-      `,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            primaryFactor: { type: Type.STRING },
-            explanation: { type: Type.STRING },
-            confidence: { type: Type.NUMBER }
-          },
-          required: ['primaryFactor', 'explanation', 'confidence']
-        }
-      }
+      `;
+
+    const response = await fetch('/api/gemini/root-cause', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt })
     });
 
-    const rawText = (response as any).text;
-    const textStr = typeof rawText === 'function' ? rawText.call(response) : (rawText || "{}");
-    const aiResult = safeJsonParse(textStr, { primaryFactor: "General Adjustment", explanation: "", confidence: 0.7 });
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const aiResult = await response.json();
 
     return {
       childId: child.id,
@@ -92,7 +82,6 @@ export async function performRootCauseAnalysis(
       explanation: aiResult.explanation || "We are seeing a shift in patterns that suggests multiple overlapping factors.",
       confidence: aiResult.confidence || 0.7
     };
-
   } catch (error: any) {
     const errMsg = error instanceof Error ? error.message : JSON.stringify(error);
     if (errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('RESOURCE_EXHAUSTED') || error?.status === 429 || error?.status === 'RESOURCE_EXHAUSTED') {

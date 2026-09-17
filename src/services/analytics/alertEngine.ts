@@ -62,7 +62,6 @@ export const AlertEngine = {
   publishAlerts(alerts: AnalyticsAlert[]) {
     // In production, this would write to Firestore to trigger
     // realtime subscriptions for CareTakers and Users.
-    // console.log("Publishing alerts:", alerts);
     return alerts;
   }
 };

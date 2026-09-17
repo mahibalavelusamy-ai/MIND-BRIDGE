@@ -1,8 +1,5 @@
-import { GoogleGenAI, Type } from "@google/genai";
 import { BehavioralPattern, Anomaly, Child } from '../types';
 import { safeJsonParse } from './aiUtils';
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 /**
  * Behavioral Pattern Detection System
@@ -18,9 +15,7 @@ export async function detectBehavioralPatterns(
   }
 
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `
+    const prompt = `
         You are a behavioral data scientist specializing in pediatric mental health.
         Analyze the following assessment history for ${child.name} (Age: ${child.age}):
         
@@ -37,50 +32,19 @@ export async function detectBehavioralPatterns(
         3. Analyze long-term trends (e.g., "Gradual improvement in sleep over 4 weeks").
         
         Format your response as a JSON object. Do not include markdown code blocks.
-      `,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            patterns: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  type: { type: Type.STRING, enum: ['cyclical', 'trend', 'behavioral'] },
-                  title: { type: Type.STRING },
-                  description: { type: Type.STRING },
-                  frequency: { type: Type.STRING },
-                  impact: { type: Type.STRING, enum: ['positive', 'negative', 'neutral'] },
-                  confidence: { type: Type.NUMBER }
-                },
-                required: ['type', 'title', 'description', 'frequency', 'impact', 'confidence']
-              }
-            },
-            anomalies: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  timestamp: { type: Type.STRING },
-                  metric: { type: Type.STRING },
-                  deviation: { type: Type.NUMBER },
-                  description: { type: Type.STRING },
-                  severity: { type: Type.STRING, enum: ['low', 'medium', 'high'] }
-                },
-                required: ['timestamp', 'metric', 'deviation', 'description', 'severity']
-              }
-            }
-          },
-          required: ['patterns', 'anomalies']
-        }
-      }
+      `;
+
+    const response = await fetch('/api/gemini/pattern', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt })
     });
 
-    const rawText = (response as any).text;
-    const textStr = typeof rawText === 'function' ? rawText.call(response) : (rawText || "{}");
-    const result = safeJsonParse(textStr, { patterns: [], anomalies: [] });
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const result = await response.json();
 
     return {
       patterns: (result.patterns || []).map((p: any, i: number) => ({
@@ -94,7 +58,6 @@ export async function detectBehavioralPatterns(
         ...a
       }))
     };
-
   } catch (error) {
     console.error("Pattern detection failed:", error);
     return { patterns: [], anomalies: [] };

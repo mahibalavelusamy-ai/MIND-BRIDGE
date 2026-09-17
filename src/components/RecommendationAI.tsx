@@ -16,7 +16,6 @@ export default function RecommendationAI({ weightedRiskScore, childId }: Recomme
     // If stress/risk is high, trigger dynamic Weeks Schedule injection
     if (weightedRiskScore > 0.7 && !injected && childId) {
        // Example logic for dynamically updating the schedule
-       console.log("High stress detected, injecting Decompression Slots.");
        
         const injectSlots = async () => {
              try {

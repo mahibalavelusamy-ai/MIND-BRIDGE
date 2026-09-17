@@ -11,7 +11,6 @@ export const DataIntakeLayer = {
    * and normalizes it for processing.
    */
   async collect(input: RawDataInput) {
-    console.log(`Intaking data for user ${input.userId} of type ${input.type}`);
     // In a real application, this might persist to an event streaming platform or staging database.
     return {
       normalizedId: `${input.type}_${Date.now()}`,

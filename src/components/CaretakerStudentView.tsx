@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { ChevronLeft, BarChart3, Clock, AlertTriangle, Send, Activity, Brain, Download, Inbox, MessageSquareHeart, CheckCircle2, Target } from 'lucide-react';
+import { ChevronLeft, BarChart3, Clock, AlertTriangle, Send, Activity, Brain, Download, Inbox, MessageSquareHeart, CheckCircle2, Target, Sparkles, History, CheckSquare } from 'lucide-react';
 import { Child } from '../types';
 import { db, auth, collection, query, where, getDocs, addDoc, orderBy, limit } from '../lib/firebase';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
@@ -59,6 +59,21 @@ export default function CaretakerStudentView({ student, onBack }: CaretakerStude
     fetchData();
   }, [student.id]);
 
+  const generateMessage = () => {
+    const isDoingWell = student.streak && student.streak > 3;
+    const isStruggling = getPriority() === 'HIGH';
+    
+    let aiMsg = "Just checking in! I notice you've been doing a great job tracking your focus.";
+    
+    if (isStruggling) {
+       aiMsg = "I notice your stress levels have been a bit high lately. Remember, you can always reach out if you need to talk or take a break.";
+    } else if (isDoingWell) {
+       aiMsg = `Incredible work maintaining a ${student.streak}-day streak! Small daily improvements create lasting growth. Keep it up!`;
+    }
+    
+    setMessage(aiMsg);
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!message.trim()) return;
@@ -69,7 +84,7 @@ export default function CaretakerStudentView({ student, onBack }: CaretakerStude
         title: 'Caretaker Message',
         description: message,
         childId: student.id,
-        parentId: student.id, // Notification targets the student user
+        parentId: student.id,
         timestamp: new Date().toISOString(),
         status: 'active',
         isMessage: true,
@@ -85,6 +100,27 @@ export default function CaretakerStudentView({ student, onBack }: CaretakerStude
       setSendingMsg(false);
     }
   };
+
+  const requestWellnessCheck = async (studentId: string) => {
+     try {
+       await addDoc(collection(db, 'notifications'), {
+         type: 'urgent',
+         title: 'Wellness Check Requested',
+         description: `Your caretaker has requested a priority wellness check. Please complete today's assessment.`,
+         childId: studentId,
+         parentId: studentId,
+         timestamp: new Date().toISOString(),
+         status: 'active',
+       });
+       alert('Wellness check requested successfully.');
+     } catch (err) {
+       console.error(err);
+     }
+  };
+
+  const combinedActivities = [...assessments.map(a => ({...a, activityType: 'assessment'})), ...sessions.map(s => ({...s, activityType: 'session'}))]
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, 10);
 
   const calculateAverage = (field: string) => {
     if (assessments.length === 0) return 0;
@@ -205,9 +241,14 @@ export default function CaretakerStudentView({ student, onBack }: CaretakerStude
           <InterventionEffectivenessView assessments={assessments} />
 
           <div className="bg-[#0F172A]/80 border border-white/5 rounded-[2rem] p-6 shadow-xl">
-            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-               <MessageSquareHeart className="text-purple-400" size={20} />
-               Communication Center
+            <h3 className="text-lg font-bold text-white mb-4 flex items-center justify-between">
+               <div className="flex items-center gap-2">
+                 <MessageSquareHeart className="text-purple-400" size={20} />
+                 AI Encouragement Generator
+               </div>
+               <button onClick={generateMessage} className="text-xs flex items-center gap-1 bg-purple-500/10 text-purple-400 px-2 py-1 rounded border border-purple-500/20 hover:bg-purple-500/20 transition-colors">
+                 <Sparkles size={14} /> Generate
+               </button>
             </h3>
             <form onSubmit={handleSendMessage} className="space-y-4">
               <textarea 
@@ -217,14 +258,61 @@ export default function CaretakerStudentView({ student, onBack }: CaretakerStude
                 className="w-full bg-[#020617] border border-white/10 rounded-xl p-4 text-sm text-white focus:border-[#2563EB] focus:outline-none transition-colors resize-none h-24"
                 required
               />
-              <button 
-                disabled={sendingMsg}
-                type="submit" 
-                className="w-full md:w-auto px-6 py-2.5 bg-gradient-to-r from-purple-500 to-blue-500 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 hover:opacity-90 disabled:opacity-50"
-              >
-                <Send size={16} /> {sendingMsg ? 'Sending...' : 'Send Message'}
-              </button>
+              <div className="flex gap-2">
+                <button 
+                  disabled={sendingMsg}
+                  type="submit" 
+                  className="flex-1 md:w-auto px-6 py-2.5 bg-gradient-to-r from-purple-500 to-blue-500 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 hover:opacity-90 disabled:opacity-50 transition-all"
+                >
+                  <Send size={16} /> {sendingMsg ? 'Sending...' : 'Send Message'}
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => requestWellnessCheck(student.id)}
+                  className="px-6 py-2.5 bg-white/5 border border-white/10 text-white font-bold rounded-xl text-sm hover:bg-white/10 transition-colors flex items-center justify-center gap-2"
+                >
+                  Wellness Check Request
+                </button>
+              </div>
             </form>
+          </div>
+
+          <div className="bg-[#0F172A]/80 border border-white/5 rounded-[2rem] p-6 shadow-xl">
+             <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                <History className="text-[#22D3EE]" size={20} />
+                Student Activity Feed
+             </h3>
+             <div className="space-y-4">
+                {combinedActivities.map((act, i) => (
+                  <div key={i} className="flex items-start gap-4">
+                      <div className="mt-1">
+                        {act.activityType === 'assessment' ? (
+                           <div className="w-8 h-8 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+                              <CheckSquare size={14} />
+                           </div>
+                        ) : (
+                           <div className="w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                              <Clock size={14} />
+                           </div>
+                        )}
+                      </div>
+                      <div className="flex-1">
+                         <p className="text-sm font-medium text-white">
+                           {act.activityType === 'assessment' ? 'Wellness Assessment Completed' : `Focus Session Completed (${act.duration || 25} min)`}
+                         </p>
+                         <p className="text-xs text-slate-500 flex items-center justify-between">
+                            <span>{new Date(act.timestamp).toLocaleDateString()} {new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            {act.activityType === 'assessment' && act.answers && (
+                               <span className="text-blue-400/80 font-medium">Recorded Data</span>
+                            )}
+                         </p>
+                      </div>
+                  </div>
+                ))}
+                {combinedActivities.length === 0 && (
+                  <p className="text-sm text-slate-500 text-center py-4">No recent activities found.</p>
+                )}
+             </div>
           </div>
         </div>
 
@@ -269,6 +357,61 @@ export default function CaretakerStudentView({ student, onBack }: CaretakerStude
                 </li>
               ))}
             </ul>
+          </div>
+
+          <div className="bg-[#0F172A]/80 border border-white/5 rounded-[2rem] p-6 shadow-xl">
+             <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+               <CheckCircle2 className="text-emerald-400" size={20} />
+               Wellness Goal Monitoring
+             </h3>
+             <div className="space-y-4">
+                <div>
+                   <div className="flex items-center justify-between text-xs mb-1">
+                      <span className="text-slate-300 font-bold">7-Day Streak Goal</span>
+                      <span className="text-emerald-400 font-bold">{Math.min(student.streak || 0, 7)} / 7</span>
+                   </div>
+                   <div className="w-full bg-slate-800 rounded-full h-1.5">
+                      <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: `${Math.min(((student.streak || 0) / 7) * 100, 100)}%` }} />
+                   </div>
+                </div>
+                <div>
+                   <div className="flex items-center justify-between text-xs mb-1">
+                      <span className="text-slate-300 font-bold">Weekly Focus Goal</span>
+                      <span className="text-blue-400 font-bold">{Math.min(sessions.length, 5)} / 5</span>
+                   </div>
+                   <div className="w-full bg-slate-800 rounded-full h-1.5">
+                      <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${Math.min((sessions.length / 5) * 100, 100)}%` }} />
+                   </div>
+                </div>
+             </div>
+          </div>
+
+          <div className="bg-[#0F172A]/80 border border-white/5 rounded-[2rem] p-6 shadow-xl">
+             <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+               <History className="text-[#FBBF24]" size={20} />
+               Intervention History
+             </h3>
+             <div className="space-y-4">
+                <div className="border-l-2 border-white/10 pl-4 space-y-4">
+                  <div className="relative">
+                     <span className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-[#FBBF24] border-2 border-[#0F172A]"></span>
+                     <p className="text-xs text-slate-500 font-bold mb-0.5">Today</p>
+                     <p className="text-sm text-slate-300">Viewed Activity Profile</p>
+                  </div>
+                  {(student.streak === 0 || getPriority() === 'HIGH') && (
+                  <div className="relative">
+                     <span className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-blue-500 border-2 border-[#0F172A]"></span>
+                     <p className="text-xs text-slate-500 font-bold mb-0.5">Automated Alert</p>
+                     <p className="text-sm text-slate-300">High Attention Alert Generated</p>
+                  </div>
+                  )}
+                  <div className="relative">
+                     <span className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-[#0F172A]"></span>
+                     <p className="text-xs text-slate-500 font-bold mb-0.5">Last Week</p>
+                     <p className="text-sm text-slate-300">Encouragement Message Sent</p>
+                  </div>
+                </div>
+             </div>
           </div>
         </div>
 

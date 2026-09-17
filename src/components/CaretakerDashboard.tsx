@@ -105,11 +105,14 @@ export default function CaretakerDashboard({ onViewProfile }: CaretakerDashboard
     }
   };
 
-  const sortedStudents = [...students].sort((a, b) => {
-    const priorityA = a.riskLevel === 'high' ? 3 : (a.streak === 0 ? 2 : 1);
-    const priorityB = b.riskLevel === 'high' ? 3 : (b.streak === 0 ? 2 : 1);
-    return priorityB - priorityA;
-  });
+  const getStudentPriority = (student: Child) => {
+    if (student.riskLevel === 'high' && (student.streak === 0 || !student.streak)) return { level: 4, label: 'CRITICAL', color: 'text-rose-400 bg-rose-500/10 border-rose-500/20' };
+    if (student.riskLevel === 'high') return { level: 3, label: 'HIGH', color: 'text-orange-400 bg-orange-500/10 border-orange-500/20' };
+    if (student.streak === 0 || !student.streak) return { level: 2, label: 'MEDIUM', color: 'text-amber-400 bg-amber-500/10 border-amber-500/20' };
+    return { level: 1, label: 'LOW', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' };
+  };
+
+  const sortedStudents = [...students].sort((a, b) => getStudentPriority(b).level - getStudentPriority(a).level);
 
   const getEngagementHealth = (student: Child) => {
      let score = 100;
@@ -134,6 +137,23 @@ export default function CaretakerDashboard({ onViewProfile }: CaretakerDashboard
          status: 'active',
        });
        alert('Wellness check requested successfully.');
+     } catch (err) {
+       console.error(err);
+     }
+  };
+
+  const sendReminder = async (studentId: string) => {
+     try {
+       await addDoc(collection(db, 'notifications'), {
+         type: 'info',
+         title: 'Quick Reminder',
+         description: `Don't forget to complete your wellness check-in today! Small steps build big habits.`,
+         childId: studentId,
+         parentId: studentId,
+         timestamp: new Date().toISOString(),
+         status: 'active',
+       });
+       alert('Reminder sent.');
      } catch (err) {
        console.error(err);
      }
@@ -201,11 +221,11 @@ export default function CaretakerDashboard({ onViewProfile }: CaretakerDashboard
                             </span>
                           )}
                         </span>
-                        <span className="text-[10px] uppercase font-bold tracking-wider text-red-400 bg-red-500/10 px-2 py-0.5 rounded border border-red-500/20">Priority 1</span>
+                        <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded border ${getStudentPriority(student).color}`}>Priority: {getStudentPriority(student).label}</span>
                      </div>
                      <p className="text-xs text-slate-300 mb-3 flex items-center gap-1.5 font-medium">
-                       <span className="w-1 h-1 rounded-full bg-red-400" />
-                       {student.riskLevel === 'high' ? 'High Stress Detected' : 'Missed 3 Assessments'}
+                       <span className={`w-1 h-1 rounded-full ${student.riskLevel === 'high' ? 'bg-red-400' : 'bg-amber-400'}`} />
+                       {isEscalated ? 'High Stress + Missed Assessments' : student.riskLevel === 'high' ? 'High Stress Detected' : 'Missed Assessments'}
                      </p>
                      <div className="flex gap-2">
                         <button 
@@ -215,10 +235,10 @@ export default function CaretakerDashboard({ onViewProfile }: CaretakerDashboard
                           View Analysis
                         </button>
                         <button 
-                          onClick={() => requestWellnessCheck(student.id)}
-                          className="flex-1 px-3 py-1.5 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 text-xs font-bold rounded-lg border border-blue-500/30 transition-colors"
+                          onClick={() => isEscalated ? requestWellnessCheck(student.id) : sendReminder(student.id)}
+                          className="flex-1 px-3 py-1.5 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 text-xs font-bold rounded-lg border border-blue-500/30 transition-colors cursor-pointer z-20"
                         >
-                          Send Reminder
+                          {isEscalated ? 'Request Check-In' : 'Send Reminder'}
                         </button>
                      </div>
                    </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   LayoutDashboard, 
@@ -60,24 +60,22 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   writeBatch,
-  clearAppPersistence,
   orderBy
 } from './lib/firebase';
 import LandingPage from './components/LandingPage';
-import Dashboard from './components/Dashboard';
 import ProfileSettingsModal from './components/ProfileSettingsModal';
 import ChildProfile from './components/ChildProfile';
 import Assessment from './components/Assessment';
-import Reports from './components/Reports';
 import Alerts from './components/Alerts';
 import ProfileVaultModal from './components/ProfileVaultModal';
-import CaretakerDashboard from './components/CaretakerDashboard';
-
 import Connections from './components/Connections';
-
 import WellnessShop from './components/WellnessShop';
-import ScheduleAI from './components/ScheduleAI';
-import AdminDashboard from './components/AdminDashboard';
+
+const Dashboard = lazy(() => import('./components/Dashboard'));
+const Reports = lazy(() => import('./components/Reports'));
+const ScheduleAI = lazy(() => import('./components/ScheduleAI'));
+const CaretakerDashboard = lazy(() => import('./components/CaretakerDashboard'));
+const AdminDashboard = lazy(() => import('./components/AdminDashboard'));
 
 type Page = 'landing' | 'user-type' | 'login' | 'app';
 export type Tab = 'home' | 'profile' | 'assessment' | 'reports' | 'notifications' | 'shop' | 'schedule' | 'connections' | 'admin';
@@ -182,7 +180,6 @@ export default function App() {
     localStorage.removeItem('auth_expiry_childId');
     try {
       await firebaseLogout();
-      await clearAppPersistence();
     } catch (e) {}
   };
 
@@ -225,7 +222,6 @@ export default function App() {
   useEffect(() => {
     handleGoogleRedirectResult().catch((error) => {
       console.error("Redirect result error on mount:", error);
-      processAuthError(error?.message || "Google sign-in failed. Please try again.");
     });
   }, []);
 
@@ -238,9 +234,17 @@ export default function App() {
         const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
         if (!userDoc.exists()) {
           const pendingRole = sessionStorage.getItem('pendingRole');
+          if (firebaseUser.email === 'mahibalavelusamy@gmail.com' && pendingRole !== 'admin') {
+             await processAuthError(`Access Denied: The mahibala admin account must log in through the Admin Portal.`);
+             auth.signOut();
+             setCurrentPage('landing');
+             return;
+          }
           if (pendingRole === 'admin') {
-             if (firebaseUser.email !== 'mahibala2501@gmail.com') {
+             if (firebaseUser.email !== 'mahibalavelusamy@gmail.com') {
                  await processAuthError(`Access Denied: You do not have administrator privileges.`);
+                 auth.signOut();
+                 setCurrentPage('landing');
                  return;
              }
              const userData = {
@@ -308,16 +312,25 @@ export default function App() {
           const userData = userDoc.data();
           const pendingRole = sessionStorage.getItem('pendingRole');
           
+          if (firebaseUser.email === 'mahibalavelusamy@gmail.com' && pendingRole !== 'admin' && userData.role !== 'admin') {
+              await processAuthError(`Access Denied: The mahibala admin account must log in through the Admin Portal.`);
+              auth.signOut();
+              setCurrentPage('landing');
+              return;
+          }
+
           if (pendingRole === 'admin') {
-             if (firebaseUser.email !== 'mahibala2501@gmail.com') {
+             if (firebaseUser.email !== 'mahibalavelusamy@gmail.com') {
                  await processAuthError(`Access Denied: You do not have administrator privileges.`);
-                 setCurrentPage('login');
+                 auth.signOut();
+                 setCurrentPage('landing');
                  return;
              }
              setTimeout(() => setActiveTab('admin'), 0);
           } else if (pendingRole && userData.role !== pendingRole) {
               await processAuthError(`Role mismatch: Your account is registered as a ${userData.role}, but you tried to log in as a ${pendingRole}.`);
-              setCurrentPage('login');
+              auth.signOut();
+              setCurrentPage('landing');
               return;
           }
 
@@ -537,9 +550,17 @@ export default function App() {
     try {
       await loginWithGoogle();
     } catch (error: any) {
-      if (error?.code !== 'auth/popup-closed-by-user' && error?.code !== 'auth/cancelled-popup-request') {
+      if (
+        error?.code !== 'auth/popup-closed-by-user' && 
+        error?.code !== 'auth/cancelled-popup-request' &&
+        error?.code !== 'auth/popup-blocked'
+      ) {
         console.error("Login failed", error);
-        processAuthError(error?.message || "Google sign-in failed. Please try again.");
+        if (error?.code === 'auth/web-storage-unsupported') {
+          processAuthError("Sign-in requires third-party cookies. Please enable them in your browser settings.");
+        } else {
+          processAuthError(error?.message || "Google sign-in failed. Please try again.");
+        }
       }
     }
   };
@@ -881,7 +902,7 @@ export default function App() {
             </div>
           )}
 
-          {auth.currentUser?.email === 'mahibala2501@gmail.com' && (
+          {auth.currentUser?.email === 'mahibalavelusamy@gmail.com' && (
             <div>
                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2 px-3">System</p>
                <nav className="space-y-1">
@@ -1021,6 +1042,11 @@ export default function App() {
               transition={{ duration: 0.2 }}
               className="h-full"
             >
+              <Suspense fallback={
+                <div className="h-full flex items-center justify-center">
+                  <div className="w-8 h-8 border-4 border-accent border-t-transparent rounded-full animate-spin"></div>
+                </div>
+              }>
                 <>
                   {activeTab === 'home' && (
                     user?.role === 'caretaker' ? (
@@ -1111,6 +1137,7 @@ export default function App() {
                 </div>
               )}
               </>
+              </Suspense>
             </motion.div>
           </AnimatePresence>
         </div>

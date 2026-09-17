@@ -1,19 +1,11 @@
-import { GoogleGenAI, Type } from "@google/genai";
 import { PredictiveRisk } from "../types";
 import { safeJsonParse } from "./aiUtils";
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
 export async function predictFutureRisk(
   childId: string,
   historicalAssessments: any[],
   upcomingSchedule: any[]
 ): Promise<PredictiveRisk | null> {
-  if (!process.env.GEMINI_API_KEY) {
-    console.warn("GEMINI_API_KEY not found. Predictive modeling disabled.");
-    return null;
-  }
-
   const prompt = `
     As a child mental health predictive model, analyze the following data to predict risk for the next 7 days.
     
@@ -38,28 +30,18 @@ export async function predictFutureRisk(
   `;
 
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            predictedRisk: { type: Type.STRING, enum: ['low', 'medium', 'high'] },
-            confidence: { type: Type.NUMBER, description: "Confidence score from 0-100" },
-            predictedTriggers: { type: Type.ARRAY, items: { type: Type.STRING } },
-            preemptiveActions: { type: Type.ARRAY, items: { type: Type.STRING } },
-            evidence: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Logic points explaining the prediction" }
-          },
-          required: ['predictedRisk', 'confidence', 'predictedTriggers', 'preemptiveActions', 'evidence']
-        }
-      }
+    const response = await fetch('/api/gemini/predict', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt })
     });
 
-    const rawText = (response as any).text;
-    const textStr = typeof rawText === 'function' ? rawText.call(response) : (rawText || "{}");
-    const result = safeJsonParse(textStr, null);
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const result = await response.json();
+
     if (!result) return null;
     
     return {

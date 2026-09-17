@@ -34,10 +34,14 @@ export const ProgressiveAssessmentEngine = {
     fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
     
     try {
-        const qHistory = auth.currentUser?.uid === child.id 
-          ? query(collection(db, 'assessments'), where('childId', '==', child.id), where('timestamp', '>=', fourteenDaysAgo.toISOString().split('T')[0]), orderBy('timestamp', 'desc'))
-          : query(collection(db, 'assessments'), where('childId', '==', child.id), where('parentId', '==', auth.currentUser?.uid), where('timestamp', '>=', fourteenDaysAgo.toISOString().split('T')[0]), orderBy('timestamp', 'desc'));
-        const historySnap = await getDocs(qHistory);
+        const qHistoryParent = query(collection(db, 'assessments'), where('childId', '==', child.id), where('parentId', '==', auth.currentUser?.uid || ''), where('timestamp', '>=', fourteenDaysAgo.toISOString().split('T')[0]), orderBy('timestamp', 'desc'));
+        let historySnap;
+        try {
+           historySnap = await getDocs(qHistoryParent);
+        } catch (e) {
+           const qHistoryDefault = query(collection(db, 'assessments'), where('childId', '==', child.id), where('timestamp', '>=', fourteenDaysAgo.toISOString().split('T')[0]), orderBy('timestamp', 'desc'));
+           historySnap = await getDocs(qHistoryDefault);
+        }
         historySnap.docs.forEach(doc => {
             const data = doc.data();
             fetchedRecentAssessments.push(data);

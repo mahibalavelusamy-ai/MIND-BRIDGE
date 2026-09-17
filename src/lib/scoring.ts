@@ -167,5 +167,4 @@ export function generateAlerts(childId: string, scores: CategoryScores, childNam
  *   behavior: 2,
  *   social: 3
  * });
- * console.log(result.riskLevel); // 'medium'
  */

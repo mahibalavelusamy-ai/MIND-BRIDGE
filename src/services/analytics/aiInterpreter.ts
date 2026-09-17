@@ -1,18 +1,6 @@
-import { GoogleGenAI } from '@google/genai';
-
-let aiInstance: GoogleGenAI | null = null;
-const getAI = () => {
-    if (!aiInstance) {
-        aiInstance = new GoogleGenAI({ apiKey: (import.meta as any).env.VITE_GEMINI_API_KEY || "placeholder" });
-    }
-    return aiInstance;
-};
-
 export const AIInterpreter = {
   async generateSupportiveSummary(metrics: { emotionalRisk: number; overloadRisk: number; burnoutRisk: number }, role: 'student' | 'parent' | 'teacher'): Promise<string> {
-    
     // As per rules, we must NEVER feel clinical. Always emotionally safe.
-    
     const isStressed = metrics.overloadRisk >= 0.7;
     const isLowEnergy = metrics.burnoutRisk >= 0.7;
     const isThriving = metrics.emotionalRisk <= 0.3 && !isStressed && !isLowEnergy;
@@ -25,7 +13,6 @@ export const AIInterpreter = {
     };
 
     try {
-      const ai = getAI();
       const prompt = `
         You are a supportive, non-clinical emotional wellness AI for students.
         We have a new wellness check-in from a student.
@@ -47,12 +34,18 @@ export const AIInterpreter = {
         Return ONLY the text paragraph.
       `;
       
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.5-flash',
-        contents: prompt
+      const response = await fetch('/api/gemini/supportive-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt })
       });
       
-      if (response.text) return response.text.trim();
+      if (!response.ok) {
+        throw new Error("Failed to generate supportive summary");
+      }
+      const data = await response.json();
+      
+      if (data.text) return data.text.trim();
       return fallback();
       
     } catch (e) {

@@ -1,7 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
 import { safeJsonParse } from "../lib/aiUtils";
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 export async function getAIInsights(childData: any) {
   const pronouns = (() => {
@@ -29,35 +26,17 @@ export async function getAIInsights(childData: any) {
       Ensure the recommendations are concise and practical. Data processing is strictly for decision-support.
     `;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            status: { type: Type.STRING },
-            concerns: { type: Type.ARRAY, items: { type: Type.STRING } },
-            recommendations: { type: Type.ARRAY, items: { type: Type.STRING } }
-          },
-          required: ["status", "concerns", "recommendations"]
-        }
-      }
+    const response = await fetch('/api/gemini/insight', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt })
     });
 
-    const rawText = (response as any).text;
-    const textStr = typeof rawText === 'function' ? rawText.call(response) : (rawText || "");
-    const result = safeJsonParse(textStr, {
-      status: `${childData.name} is showing consistent patterns.`,
-      concerns: [],
-      recommendations: [
-        `Continue monitoring ${pronouns.possessive} mood closely.`,
-        `Encourage open communication about ${pronouns.possessive} daily experiences.`,
-        `Maintain a consistent routine to help manage stress levels.`
-      ]
-    });
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
 
+    const result = await response.json();
     return result;
   } catch (error: any) {
     const errMsg = error instanceof Error ? error.message : JSON.stringify(error);

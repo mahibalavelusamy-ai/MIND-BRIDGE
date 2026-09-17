@@ -1,9 +1,6 @@
-import { GoogleGenAI, Type } from "@google/genai";
 import { Recommendation, Child } from '../types';
 import { safeJsonParse } from './aiUtils';
 import { analyzeTextRisk } from './scoring';
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 /**
  * Personalized Recommendation Engine
@@ -34,7 +31,8 @@ export async function generateRecommendations(
 
   let textNotes = assessments[0]?.notes || '';
   const textRiskScore = analyzeTextRisk(textNotes);
-  const injectedRec: Recommendation = {
+
+  const injectedRec: Recommendation = { 
      id: textRiskScore > 0.7 ? 'rec-counselor' : 'rec-breathe',
      childId: child.id,
      timestamp: new Date().toISOString(),
@@ -68,39 +66,17 @@ export async function generateRecommendations(
       Format your response as a JSON object. Do not include markdown code blocks.
     `;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            recommendations: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  type: { type: Type.STRING, enum: ['activity', 'resource', 'strategy'] },
-                  title: { type: Type.STRING },
-                  description: { type: Type.STRING },
-                  priority: { type: Type.STRING, enum: ['low', 'medium', 'high'] },
-                  context: { type: Type.STRING },
-                  actionLabel: { type: Type.STRING },
-                  steps: { type: Type.ARRAY, items: { type: Type.STRING } }
-                },
-                required: ['type', 'title', 'description', 'priority', 'context', 'actionLabel', 'steps']
-              }
-            }
-          },
-          required: ['recommendations']
-        }
-      }
+    const response = await fetch('/api/gemini/recommend', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt })
     });
 
-    const rawText = (response as any).text;
-    const textStr = typeof rawText === 'function' ? rawText.call(response) : (rawText || "{}");
-    const result = safeJsonParse(textStr, { recommendations: [] });
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const result = await response.json();
 
     return [
       injectedRec,
@@ -111,7 +87,6 @@ export async function generateRecommendations(
         ...r
       }))
     ];
-
   } catch (error: any) {
     const errMsg = error instanceof Error ? error.message : JSON.stringify(error);
     if (errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('RESOURCE_EXHAUSTED') || error?.status === 429 || error?.status === 'RESOURCE_EXHAUSTED') {
@@ -119,6 +94,6 @@ export async function generateRecommendations(
     } else {
       console.error("Recommendation generation failed:", error);
     }
-    return [];
+    return [injectedRec];
   }
 }

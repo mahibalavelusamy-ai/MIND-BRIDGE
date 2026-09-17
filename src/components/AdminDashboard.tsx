@@ -1,30 +1,61 @@
 import React, { useState, useEffect } from 'react';
-import { db, collection, getDocs } from '../lib/firebase';
-import { Users, Shield, Clock, Search, BookOpen, Activity, AlertCircle } from 'lucide-react';
+import { db, collection, getDocs, doc, updateDoc, setDoc, getDoc } from '../lib/firebase';
+import { Users, Shield, Clock, Search, BookOpen, Activity, AlertCircle, Edit2, Check } from 'lucide-react';
 
 export default function AdminDashboard() {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [newRole, setNewRole] = useState<string>('');
+
+  const fetchUsers = async () => {
+    try {
+      const usersSnap = await getDocs(collection(db, 'users'));
+      const usersData = usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setUsers(usersData);
+    } catch (error) {
+      console.error("Error fetching users for admin:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const usersSnap = await getDocs(collection(db, 'users'));
-        const usersData = usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        
-        // Let's also fetch students if needed, but the prompt says 
-        // "see all those fellas who logs in this web" which implies 'users' collection.
-        setUsers(usersData);
-      } catch (error) {
-        console.error("Error fetching users for admin:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
     fetchUsers();
   }, []);
+
+  const handleUpdateRole = async (userId: string, email: string, name: string) => {
+    if (!newRole) {
+      setEditingUserId(null);
+      return;
+    }
+    try {
+      await updateDoc(doc(db, 'users', userId), { role: newRole });
+      
+      // If changing to student, ensure student profile exists
+      if (newRole === 'student') {
+        const studentDoc = await getDoc(doc(db, 'students', userId));
+        if (!studentDoc.exists()) {
+           await setDoc(doc(db, 'students', userId), {
+             name: name || (email ? email.split('@')[0] : 'Student'),
+             avatar: '👤',
+             age: 18,
+             grade: 'College',
+             gender: 'other',
+             createdAt: new Date().toISOString()
+           });
+        }
+      }
+      
+      await fetchUsers(); // refresh the list
+    } catch (err) {
+      console.error("Error updating role:", err);
+      alert("Failed to update user role.");
+    } finally {
+      setEditingUserId(null);
+    }
+  };
 
   const filteredUsers = users.filter(u => 
     (u.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -124,15 +155,46 @@ export default function AdminDashboard() {
               </thead>
               <tbody className="divide-y divide-white/5">
                 {filteredUsers.map((u, i) => (
-                  <tr key={u.id || i} className="hover:bg-white/[0.02] transition-colors">
+                  <tr key={u.id || i} className="hover:bg-white/[0.02] transition-colors group">
                     <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                        u.role === 'student' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 
-                        u.role === 'caretaker' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 
-                        'bg-slate-800 text-slate-300 border border-slate-700'
-                      }`}>
-                        {u.role ? u.role.toUpperCase() : 'UNKNOWN'}
-                      </span>
+                      {editingUserId === u.id ? (
+                        <div className="flex items-center gap-2">
+                          <select 
+                            value={newRole} 
+                            onChange={(e) => setNewRole(e.target.value)}
+                            className="bg-[#020617] text-white border border-white/20 text-xs rounded p-1 focus:border-amber-500 z-50 relative"
+                          >
+                            <option value="student">STUDENT</option>
+                            <option value="caretaker">CARETAKER</option>
+                            <option value="admin">ADMIN</option>
+                            <option value="teacher">TEACHER</option>
+                            <option value="clinician">CLINICIAN</option>
+                          </select>
+                          <button 
+                            onClick={() => handleUpdateRole(u.id, u.email, u.name)} 
+                            className="p-1 bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 rounded z-50 relative"
+                          >
+                             <Check size={14} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                            u.role === 'student' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 
+                            u.role === 'caretaker' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 
+                            'bg-slate-800 text-slate-300 border border-slate-700'
+                          }`}>
+                            {u.role ? u.role.toUpperCase() : 'UNKNOWN'}
+                          </span>
+                          <button 
+                            onClick={() => { setEditingUserId(u.id); setNewRole(u.role); }}
+                            className="p-1 text-slate-500 hover:text-amber-500 opacity-0 group-hover:opacity-100 transition-opacity z-50 relative md:opacity-100"
+                            title="Edit Role"
+                          >
+                            <Edit2 size={12} />
+                          </button>
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col">

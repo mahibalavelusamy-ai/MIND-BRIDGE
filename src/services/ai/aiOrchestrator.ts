@@ -1,36 +1,18 @@
-import { GoogleGenAI } from "@google/genai";
 import { aiPrompts } from "./prompts";
 import { validateEmotions, validateRisk } from "./validation";
 
-// Initialize Gemini client (ensure you have process.env.GEMINI_API_KEY in server-side, but this is client side for now. Given "No direct AI calls inside frontend pages" rule, we should ideally have a server, or simulate the service layer abstraction).
-// For Vite client application, the instructions said: "We should proxy requests", but if the environment has a pre-existing pattern, I will follow it.
-// I will create a centralized service abstraction.
-
-let aiInstance: GoogleGenAI | null = null;
-const getAI = () => {
-    if (!aiInstance) {
-        aiInstance = new GoogleGenAI({ apiKey: (import.meta as any).env.VITE_GEMINI_API_KEY || "placeholder" });
-    }
-    return aiInstance;
-};
-
 export const AIService = {
     async analyzeEmotion(text: string, context: any) {
-        const ai = getAI();
         const prompt = aiPrompts.emotionAnalysis(text, context);
         
         try {
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: prompt,
-                config: {
-                    responseMimeType: "application/json",
-                }
+            const response = await fetch('/api/gemini/analyze-emotion', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt })
             });
-            
-            const rawOutput = response.text || "{}";
-            const json = JSON.parse(rawOutput);
-            
+            if (!response.ok) throw new Error("API Error");
+            const json = await response.json();
             return validateEmotions(json);
         } catch (error) {
             console.error("AI Analysis failed", error);
@@ -45,7 +27,6 @@ export const AIService = {
     },
     
     async analyzeAssessment(childData: any, scores: any, analysisResult: any) {
-        const ai = getAI();
         const prompt = `
             As a child mental health expert, analyze this child's data:
             Child: ${childData.name}, Age: ${childData.age}
@@ -59,12 +40,13 @@ export const AIService = {
         `;
         
         try {
-            const response = await ai.models.generateContent({
-                model: 'gemini-3-flash-preview',
-                contents: prompt,
-                config: { responseMimeType: "application/json" }
+            const response = await fetch('/api/gemini/analyze-assessment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt })
             });
-            const json = JSON.parse(response.text || "{}");
+            if (!response.ok) throw new Error("API Error");
+            const json = await response.json();
             return {
                 primaryFactor: json.primaryFactor || "Unknown",
                 recommendations: Array.isArray(json.recommendations) ? json.recommendations : ["Maintain routine."]
@@ -76,7 +58,6 @@ export const AIService = {
     },
     
     async generateProgressiveQuestions(context: any, numAdaptive: number = 1) {
-        const ai = getAI();
         const numQuestions = numAdaptive;
         
         let trendsStr = "";
@@ -129,13 +110,13 @@ export const AIService = {
         `;
         
         try {
-            const response = await ai.models.generateContent({
-                model: 'gemini-3-flash-preview',
-                contents: prompt,
-                config: { responseMimeType: "application/json" }
+            const response = await fetch('/api/gemini/progressive-questions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt })
             });
-            const text = response.text?.replace(/```json/g, '').replace(/```/g, '').trim() || "[]";
-            return JSON.parse(text);
+            if (!response.ok) throw new Error("API Error");
+            return await response.json();
         } catch(e) {
             console.error("AI question generation error", e);
             return null;
@@ -143,7 +124,6 @@ export const AIService = {
     },
 
     async analyzeProgressiveAssessment(context: any) {
-        const ai = getAI();
         const stage = context.stage;
         
         let instructions = "";
@@ -179,13 +159,13 @@ export const AIService = {
         `;
         
         try {
-            const response = await ai.models.generateContent({
-                model: 'gemini-3-flash-preview',
-                contents: prompt,
-                config: { responseMimeType: "application/json" }
+            const response = await fetch('/api/gemini/analyze-progressive-assessment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt })
             });
-            const text = response.text?.replace(/```json/g, '').replace(/```/g, '').trim() || "{}";
-            return JSON.parse(text);
+            if (!response.ok) throw new Error("API Error");
+            return await response.json();
         } catch(e) {
             console.error("AI analysis error", e);
             throw e;
@@ -193,7 +173,6 @@ export const AIService = {
     },
     
     async parseSyllabus(parts: any[], burnoutContext?: any) {
-        const ai = getAI();
         let burnoutInstruction = '';
         
         if (burnoutContext) {
@@ -249,13 +228,13 @@ export const AIService = {
         `;
         
         try {
-            const response = await ai.models.generateContent({
-                model: 'gemini-3-flash-preview',
-                contents: { parts: [{ text: prompt }, ...parts] }
+            const response = await fetch('/api/gemini/parse-syllabus', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt, parts })
             });
-            let responseText = response.text || "{}";
-            responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-            const json = JSON.parse(responseText);
+            if (!response.ok) throw new Error("API Error");
+            const json = await response.json();
             return {
                 events: Array.isArray(json.events) ? json.events : [],
                 insights: Array.isArray(json.insights) ? json.insights : []

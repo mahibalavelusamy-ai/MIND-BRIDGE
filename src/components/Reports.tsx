@@ -48,12 +48,23 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
       try {
         let assessmentData: any[] = [];
         try {
-          const qA = query(
+          const parentQuery = query(
             collection(db, 'assessments'), 
             where('childId', '==', selectedChild.id),
+            where('parentId', '==', auth.currentUser?.uid || ''),
             orderBy('timestamp', 'asc')
           );
-          const snapA = await getDocs(qA);
+          let snapA;
+          try {
+            snapA = await getDocs(parentQuery);
+          } catch (e) {
+            const defaultQuery = query(
+              collection(db, 'assessments'), 
+              where('childId', '==', selectedChild.id),
+              orderBy('timestamp', 'asc')
+            );
+            snapA = await getDocs(defaultQuery);
+          }
           assessmentData = snapA.docs.map(d => ({ id: d.id, ...d.data() } as any));
           setAssessments(assessmentData);
         } catch (e) {
@@ -70,8 +81,14 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
         }
         
         try {
-          const qSched = query(collection(db, 'schoolSchedules'), where('childId', '==', selectedChild.id));
-          const snapSched = await getDocs(qSched);
+          const parentSchedQuery = query(collection(db, 'schoolSchedules'), where('childId', '==', selectedChild.id), where('parentId', '==', auth.currentUser?.uid || ''));
+          let snapSched;
+          try {
+             snapSched = await getDocs(parentSchedQuery);
+          } catch(e) {
+             const defaultSchedQuery = query(collection(db, 'schoolSchedules'), where('childId', '==', selectedChild.id));
+             snapSched = await getDocs(defaultSchedQuery);
+          }
           setSchedules(snapSched.docs.map(d => ({ id: d.id, ...d.data() } as any)));
         } catch (e) {
           console.warn("Failed to fetch school schedules", e);

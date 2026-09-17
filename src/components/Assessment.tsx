@@ -66,13 +66,23 @@ export default function Assessment({ child, onComplete, onError, onNavigateHome 
       const localStartOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       
       try {
-        const qDailyCheck = query(
+        const qDailyCheckParent = query(
           collection(db, 'assessments'),
           where('childId', '==', child.id),
           where('parentId', '==', auth.currentUser.uid),
           where('timestamp', '>=', localStartOfDay.toISOString())
         );
-        const dailyCheckSnap = await getDocs(qDailyCheck);
+        let dailyCheckSnap;
+        try {
+          dailyCheckSnap = await getDocs(qDailyCheckParent);
+        } catch (e) {
+          const qDailyCheckDefault = query(
+            collection(db, 'assessments'),
+            where('childId', '==', child.id),
+            where('timestamp', '>=', localStartOfDay.toISOString())
+          );
+          dailyCheckSnap = await getDocs(qDailyCheckDefault);
+        }
         if (!dailyCheckSnap.empty) {
           setIsAlreadyCompleted(true);
         }

@@ -47,7 +47,12 @@ service cloud.firestore {
 
     function isTeacherOrClinicianOrCaretaker() {
       let role = getUserRole();
-      return isAuthenticated() && (role == 'teacher' || role == 'clinician' || role == 'caretaker' || role == 'parent' || role == 'school_admin');
+      return isAuthenticated() && (role == 'teacher' || role == 'clinician' || role == 'caretaker' || role == 'parent' || role == 'school_admin' || role == 'admin');
+    }
+
+    function isAdmin() {
+      let role = getUserRole();
+      return isAuthenticated() && role == 'admin';
     }
 
     function isValidUser(data) {
@@ -164,8 +169,8 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if isAuthenticated();
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId);
+      allow create: if isOwner(userId) || isAdmin();
+      allow update: if isOwner(userId) || isAdmin();
     }
 
     match /students/{childId} {
@@ -223,14 +228,14 @@ service cloud.firestore {
     }
 
     match /sessions/{sessionId} {
-      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isTeacherOrClinicianOrCaretaker());
       allow create: if isAuthenticated() && isValidSession(request.resource.data);
       allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && isValidSession(request.resource.data) && request.resource.data.userId == resource.data.userId;
       allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
 
     match /schedules/{scheduleId} {
-      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow read, write: if request.auth != null && (request.auth.uid == resource.data.userId || isTeacherOrClinicianOrCaretaker());
       // Allow creation if the user is setting their own UID
       allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
     }
