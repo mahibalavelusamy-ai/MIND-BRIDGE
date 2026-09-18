@@ -2,6 +2,13 @@ import { aiPrompts } from "./prompts";
 import { validateEmotions, validateRisk } from "./validation";
 
 export const AIService = {
+    /**
+     * Analyzes freeform emotional student text to detect mood, stress level, and escalation requirements.
+     * @param {string} text - Student's written reflection or check-in response.
+     * @param {any} context - Demographic or situational student context.
+     * @returns {Promise<{ mood: number; stressLevel: string; concerns: string[]; supportiveMessage: string; requiresEscalation?: boolean }>}
+     * @sideeffects Calls `/api/gemini/analyze-emotion` and validates outputs via `validateEmotions`.
+     */
     async analyzeEmotion(text: string, context: any) {
         const prompt = aiPrompts.emotionAnalysis(text, context);
         
@@ -26,6 +33,14 @@ export const AIService = {
         }
     },
     
+    /**
+     * Synthesizes multi-category assessment scores into a primary factor and two supportive recommendations.
+     * @param {any} childData - Basic student demographics.
+     * @param {any} scores - Dimension scores (mood, stress, sleep, behavior, social).
+     * @param {any} analysisResult - Weighted score and calculated risk tier.
+     * @returns {Promise<{ primaryFactor: string; recommendations: string[] }>}
+     * @sideeffects Dispatches request to `/api/gemini/analyze-assessment`.
+     */
     async analyzeAssessment(childData: any, scores: any, analysisResult: any) {
         const prompt = `
             As a child mental health expert, analyze this child's data:
@@ -57,6 +72,13 @@ export const AIService = {
         }
     },
     
+    /**
+     * Dynamically generates stage-adapted assessment questions tailored to a student's longitudinal trajectory.
+     * @param {any} context - Student profile, current assessment stage, recent score trends, and active profile.
+     * @param {number} [numAdaptive=1] - Number of adaptive questions to generate.
+     * @returns {Promise<Array<{ category: string; text: string; options: Array<{ label: string; value: number }> }> | null>}
+     * @sideeffects Dispatches request to `/api/gemini/progressive-questions`.
+     */
     async generateProgressiveQuestions(context: any, numAdaptive: number = 1) {
         const numQuestions = numAdaptive;
         
@@ -123,6 +145,12 @@ export const AIService = {
         }
     },
 
+    /**
+     * Conducts stage-dependent intelligence evaluation of a progressive student assessment.
+     * @param {any} context - Assessment scores, stage, student profile, and journal reflections.
+     * @returns {Promise<{ insight: { message: string; recommendations: string[] }; wellnessProfile: string }>}
+     * @sideeffects Dispatches request to `/api/gemini/analyze-progressive-assessment`.
+     */
     async analyzeProgressiveAssessment(context: any) {
         const stage = context.stage;
         
@@ -172,6 +200,14 @@ export const AIService = {
         }
     },
     
+    /**
+     * Parses uploaded syllabi, documents, or schedules to extract deadlines and examinations.
+     * Optionally factors in burnout indicators to inject preventative breaks and recovery blocks.
+     * @param {any[]} parts - Multimodal parts or text contents of the uploaded academic documents.
+     * @param {any} [burnoutContext] - Optional context regarding current student workload and fatigue.
+     * @returns {Promise<{ events: Array<{ title: string; start: string; end?: string; allDay?: boolean; type?: string }>; insights: string[] }>}
+     * @sideeffects Dispatches request to `/api/gemini/parse-syllabus`.
+     */
     async parseSyllabus(parts: any[], burnoutContext?: any) {
         let burnoutInstruction = '';
         

@@ -3,7 +3,15 @@ import { safeJsonParse } from './aiUtils';
 
 /**
  * Behavioral Pattern Detection System
- * Analyzes historical data to find cyclical patterns and statistical anomalies.
+ * Analyzes longitudinal assessment histories using Gemini 3 Flash to identify
+ * repeating cycles, temporal trends, and statistical behavioral anomalies.
+ *
+ * @param {Child} child - The student/child profile record containing id, name, and age.
+ * @param {any[]} assessments - Chronological list of historical assessment records with scores and timestamps.
+ * @returns {Promise<{ patterns: BehavioralPattern[]; anomalies: Anomaly[] }>} Detected behavioral patterns and anomaly events, or empty arrays upon error.
+ * @throws Does not throw; catches errors and falls back to empty arrays with logging.
+ *
+ * @sideeffects Dispatches an asynchronous HTTP POST request to the `/api/gemini/pattern` backend endpoint.
  */
 export async function detectBehavioralPatterns(
   child: Child,
@@ -65,7 +73,14 @@ export async function detectBehavioralPatterns(
 }
 
 /**
- * Pseudocode for local statistical anomaly detection (fallback)
+ * Local statistical anomaly detection engine (offline/fallback calculation).
+ * Computes mean and population standard deviation across core wellness dimensions
+ * (mood, stress, sleep, energy, social, behavior) and flags records deviating > 2 sigma.
+ *
+ * @param {any[]} assessments - Historical array of assessment records with scores. Must contain at least 5 entries.
+ * @returns {Anomaly[]} Array of detected anomalies with deviation metrics, descriptions, and severity ratings.
+ *
+ * @sideeffects Pure function; no external side effects or network operations.
  */
 export function detectLocalAnomalies(assessments: any[]): Anomaly[] {
   if (assessments.length < 5) return [];

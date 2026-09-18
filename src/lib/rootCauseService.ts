@@ -4,7 +4,20 @@ import { safeJsonParse } from './aiUtils';
 
 /**
  * Mind Bridge Root-Cause Analysis Engine
- * Correlates multi-factor data to identify drivers of emotional changes.
+ * Correlates multi-factor data (scores, trend trajectory, academic events) to identify
+ * the underlying drivers of emotional and behavioral changes.
+ *
+ * Analysis Workflow:
+ * 1. Deterministic Rule Correlation: Checks sleep-mood coincidence, academic pressure alignment, and social withdrawal shifts.
+ * 2. AI Synthesis: Translates rule-based findings and multi-factor context into empathetic, parent-accessible explanations.
+ *
+ * @param {Child} child - The student profile record containing id, name, and age.
+ * @param {CategoryScores} currentScores - Latest assessment scores across core dimensions.
+ * @param {any[]} history - Historical assessment records to measure score deltas.
+ * @param {any[]} schedule - School schedule to correlate impending exams and deadlines.
+ * @returns {Promise<Partial<RootCauseAnalysis>>} Synthesized root cause analysis containing primary factor, contributing factors, evidence points, and human-readable explanation.
+ *
+ * @sideeffects Dispatches an HTTP POST request to `/api/gemini/root-cause`. Falls back gracefully on quota or network failures.
  */
 export async function performRootCauseAnalysis(
   child: Child,

@@ -4,7 +4,20 @@ import { analyzeTextRisk } from './scoring';
 
 /**
  * Personalized Recommendation Engine
- * Generates context-aware suggestions for parents and children.
+ * Generates actionable, context-aware suggestions tailored for parents, teachers, and students.
+ * Combines deterministic clinical safety injections (immediate counselor referral or breathing exercise)
+ * with structured AI-generated action plans based on assessment scores, schedule, and focus sessions.
+ *
+ * @param {Child} child - The student profile record containing id, name, and age.
+ * @param {any[]} assessments - Chronological assessments list; returns onboarding recommendation if empty.
+ * @param {any[]} schedule - Upcoming academic schedule and examination commitments.
+ * @param {any[]} [sessions=[]] - Historical focus/mindfulness sessions logged by the student.
+ * @returns {Promise<Recommendation[]>} Array of prioritized recommendations with step-by-step action plans.
+ *
+ * @sideeffects
+ * - Evaluates NLP sentiment risk via `analyzeTextRisk`.
+ * - Dispatches HTTP POST request to `/api/gemini/recommend`.
+ * - Falls back to deterministic safe interventions if remote API fails or quota is exhausted.
  */
 export async function generateRecommendations(
   child: Child,

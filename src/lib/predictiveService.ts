@@ -1,6 +1,25 @@
 import { PredictiveRisk } from "../types";
 import { safeJsonParse } from "./aiUtils";
 
+/**
+ * Predictive Mental Health Risk Forecaster
+ * Evaluates historical assessment trajectory and upcoming academic calendar events
+ * to forecast risk levels (low, medium, high) and identify specific impending triggers
+ * over a 7-day horizon.
+ *
+ * Prediction Rules Applied:
+ * 1. Academic Clustering: 2+ high-difficulty events within 48h increases risk tier.
+ * 2. Sleep Debt: 3+ consecutive days of poor sleep predicts irritability and low energy.
+ * 3. Mood Volatility: >2 point swings in 3 days triggers emotional dysregulation warnings.
+ * 4. Positive Buffering: High social engagement and restorative sleep offset academic pressure.
+ *
+ * @param {string} childId - The unique identifier of the target student.
+ * @param {any[]} historicalAssessments - Trailing 7-day assessment records with dimension scores.
+ * @param {any[]} upcomingSchedule - Forward-looking 7-day school schedule and examination events.
+ * @returns {Promise<PredictiveRisk | null>} Predictive risk assessment object with triggers, preemptive actions, and evidence, or null on failure.
+ *
+ * @sideeffects Initiates an HTTP POST request to `/api/gemini/predict`. Handles 429 quota exhaustion gracefully.
+ */
 export async function predictFutureRisk(
   childId: string,
   historicalAssessments: any[],

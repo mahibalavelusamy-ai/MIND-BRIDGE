@@ -1,5 +1,21 @@
 import { safeJsonParse } from "../lib/aiUtils";
 
+/**
+ * Student Wellbeing Clinical Insights Generator
+ * Generates an executive clinical summary, identifies potential concerns,
+ * and proposes targeted actionable recommendations for caretakers using Gemini 3 Flash.
+ *
+ * @param {Object} childData - The student telemetry payload.
+ * @param {string} childData.name - The child's display name.
+ * @param {number} childData.age - The child's age in years.
+ * @param {string} [childData.gender] - Gender identity used for empathetic pronoun resolution.
+ * @param {number} childData.moodScore - Reported mood score on a 1-10 scale.
+ * @param {string} childData.stressLevel - Reported stress level ('Low', 'Moderate', 'High').
+ * @param {string} [childData.notes] - Freeform journal or self-report notes submitted by student.
+ * @returns {Promise<{ status: string; concerns: string[]; recommendations: string[] }>} Structured insights object containing status overview, concerns list, and 3 clinical recommendations.
+ *
+ * @sideeffects Dispatches an asynchronous HTTP POST request to `/api/gemini/insight`. Falls back to supportive default copy if network or quota errors arise.
+ */
 export async function getAIInsights(childData: any) {
   const pronouns = (() => {
     if (childData.gender === 'male') return { subject: 'he', object: 'him', possessive: 'his' };
