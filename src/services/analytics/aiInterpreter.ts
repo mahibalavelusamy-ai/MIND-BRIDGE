@@ -1,3 +1,5 @@
+import { apiFetch } from '../../lib/apiClient';
+
 export const AIInterpreter = {
   async generateSupportiveSummary(metrics: { emotionalRisk: number; overloadRisk: number; burnoutRisk: number }, role: 'student' | 'parent' | 'teacher'): Promise<string> {
     // As per rules, we must NEVER feel clinical. Always emotionally safe.
@@ -34,9 +36,8 @@ export const AIInterpreter = {
         Return ONLY the text paragraph.
       `;
       
-      const response = await fetch('/api/gemini/supportive-summary', {
+      const response = await apiFetch('/api/gemini/supportive-summary', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt })
       });
       

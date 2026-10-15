@@ -1,5 +1,6 @@
 import { PredictiveRisk } from "../types";
 import { safeJsonParse } from "./aiUtils";
+import { apiFetch } from "./apiClient";
 
 /**
  * Predictive Mental Health Risk Forecaster
@@ -49,9 +50,8 @@ export async function predictFutureRisk(
   `;
 
   try {
-    const response = await fetch('/api/gemini/predict', {
+    const response = await apiFetch('/api/gemini/predict', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt })
     });
 

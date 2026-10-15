@@ -12,6 +12,12 @@ export interface CategoryScores {
   [key: string]: number;
 }
 
+/**
+ * Category Weights Rationale:
+ * - Mood (30%): Adolescent psychological evidence identifies subjective mood dysregulation as the single most predictive leading indicator of acute distress.
+ * - Stress (25%): Academic load clustering and examination friction are the primary environmental stressors for students.
+ * - Sleep (15%), Behavior (15%), Social (15%): Secondary compounding factors that accelerate vulnerability when mood or stress are compromised.
+ */
 export const CATEGORY_WEIGHTS = {
   mood: 0.30,
   stress: 0.25,
@@ -30,7 +36,14 @@ export interface AssessmentResult {
 
 /**
  * Calculates the weighted score and risk level based on category scores.
+ *
+ * Risk Threshold Rationale:
+ * - Score < 2.6 ('low'): Normal developmental fluctuations within healthy adaptive boundaries.
+ * - Score >= 2.6 ('medium'): Early canary signal indicating at least two wellness dimensions are under elevated strain.
+ * - Score >= 3.8 ('high'): Critical clinical threshold where multiple domains (3+) are experiencing severe distress (scores 4-5).
+ *
  * @param scores - Object containing scores (1-5) for each category.
+ * @param textNotes - Optional freeform text analyzed for severe sentiment modifier.
  * @returns AssessmentResult object.
  */
 export function calculateAssessmentResult(scores: CategoryScores, textNotes?: string): AssessmentResult {
@@ -53,7 +66,7 @@ export function calculateAssessmentResult(scores: CategoryScores, textNotes?: st
   // Round to 2 decimal places
   weightedScore = Math.round(weightedScore * 100) / 100;
 
-  // Determine Risk Level
+  // Determine Risk Level using clinically-grounded thresholds
   let riskLevel: RiskLevel = 'low';
   if (weightedScore >= 3.8) {
     riskLevel = 'high';

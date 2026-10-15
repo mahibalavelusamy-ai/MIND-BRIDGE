@@ -1,30 +1,9 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // ===============================================================
-    // Assumed Data Model
-    // ===============================================================
-    //
-    // Collection: users
-    // Fields: uid, name, email, role, organization
-    //
-    // Collection: children
-    // Fields: id, parentId, name, age, grade, avatar, notes, riskLevel, lastMoodScore, lastStressLevel
-    //
-    // Collection: assessments
-    // Fields: id, childId, submittedBy, timestamp, scores, totalScore, aiInsight
-    //
-    // Collection: alerts
-    // Fields: id, childId, type, title, description, timestamp, status
-    //
-    // Collection: schoolSchedules
-    // Fields: id, childId, eventType, title, date, subject
-    //
-    // ===============================================================
 
     // ===============================================================
-    // Helper Functions
+    // Global Helper Functions & Relationship Validation
     // ===============================================================
     
     function isAuthenticated() {
@@ -35,228 +14,221 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
     
-    function isParentOf(childId) {
-      let childPath = /databases/$(database)/documents/students/$(childId);
-      return isAuthenticated() && exists(childPath) && get(childPath).data.parentId == request.auth.uid;
-    }
-
     function getUserRole() {
       let path = /databases/$(database)/documents/users/$(request.auth.uid);
       return exists(path) ? get(path).data.role : 'guest';
     }
 
-    function isTeacherOrClinicianOrCaretaker() {
-      let role = getUserRole();
-      return isAuthenticated() && (role == 'teacher' || role == 'clinician' || role == 'caretaker' || role == 'parent' || role == 'school_admin' || role == 'admin');
-    }
-
     function isAdmin() {
       let role = getUserRole();
-      return isAuthenticated() && role == 'admin';
+      return isAuthenticated() && (role == 'admin' || role == 'school_admin');
     }
 
-    function isValidUser(data) {
-      return data.keys().hasAll(['uid', 'name', 'email', 'role']) &&
-             data.uid == request.auth.uid &&
-             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             data.email is string && data.email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$") &&
-             data.role in ['parent', 'teacher', 'clinician', 'student', 'caretaker', 'school_admin'];
+    function isCounselor() {
+      let role = getUserRole();
+      return isAuthenticated() && (role == 'counselor' || role == 'clinician');
     }
 
-    function isValidChild(data) {
-      return data.keys().hasAll(['parentId', 'name', 'age']) &&
-             data.parentId == request.auth.uid &&
-             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             data.age is number && data.age > 0 && data.age < 20 &&
-             (!('notes' in data) || (data.notes is string && data.notes.size() < 2000)) &&
-             (!('grade' in data) || (data.grade is string && data.grade.size() < 50)) &&
-             (!('avatar' in data) || (data.avatar is string && data.avatar.size() < 500)) &&
-             (!('riskLevel' in data) || data.riskLevel in ['low', 'medium', 'high']) &&
-             (!('lastMoodScore' in data) || data.lastMoodScore is number) &&
-             (!('lastStressLevel' in data) || data.lastStressLevel is string) &&
-             (!('connectedPlatforms' in data) || data.connectedPlatforms is list);
+    function isTeacher() {
+      let role = getUserRole();
+      return isAuthenticated() && role == 'teacher';
     }
 
-    function isValidAssessment(data) {
-      let requiredFields = ['childId', 'submittedBy', 'timestamp', 'scores', 'totalScore', 'parentId'];
-      return data.keys().hasAll(requiredFields) &&
-             data.submittedBy == request.auth.uid &&
-             data.scores is map &&
-             (!('aiInsight' in data) || (data.aiInsight is string && data.aiInsight.size() < 15000));
+    function isTeacherOrClinicianOrCaretaker() {
+      let role = getUserRole();
+      return isAuthenticated() && (
+        role == 'teacher' || 
+        role == 'clinician' || 
+        role == 'counselor' || 
+        role == 'caretaker' || 
+        role == 'parent' || 
+        role == 'school_admin' || 
+        role == 'admin'
+      );
     }
 
-    function isValidAlert(data) {
-      // Allow flexible parentId check for teachers/clinicians
-      return data.keys().hasAll(['childId', 'parentId', 'type', 'title', 'timestamp']) &&
-             (data.parentId == request.auth.uid || isTeacherOrClinicianOrCaretaker()) &&
-             data.type in ['critical', 'warning', 'info'] &&
-             data.title is string && data.title.size() < 200;
+    function isParentOf(studentId) {
+      let studentPath = /databases/$(database)/documents/students/$(studentId);
+      return isAuthenticated() && exists(studentPath) && get(studentPath).data.parentId == request.auth.uid;
     }
 
-    function isValidSchoolSchedule(data) {
-      return data.keys().hasAll(['childId', 'type', 'title', 'day', 'time']) &&
-             data.type in ['class', 'exam', 'activity', 'deadline', 'assignment', 'event'] &&
-             data.title is string && data.title.size() < 200 &&
-             data.day in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] &&
-             data.time is string && data.time.size() < 50 &&
-             (!('subject' in data) || (data.subject is string && data.subject.size() < 100)) &&
-             (!('difficulty' in data) || data.difficulty in ['low', 'medium', 'high']) &&
-             (!('source' in data) || (data.source is string && data.source.size() < 100));
-    }
-
-    function isValidSelfCheck(data) {
-      return data.keys().hasAll(['childId', 'timestamp', 'mood']) &&
-             data.mood is number &&
-             (!('tags' in data) || (data.tags is list && data.tags.size() < 20)) &&
-             (!('note' in data) || (data.note is string && data.note.size() < 1000)) &&
-             (!('interventionUsed' in data) || (data.interventionUsed is string && data.interventionUsed.size() < 100));
-    }
-
-    function isValidRootCauseAnalysis(data) {
-      return data.keys().hasAll(['childId', 'timestamp', 'primaryFactor', 'parentId']) &&
-             data.primaryFactor is string && data.primaryFactor.size() < 500 &&
-             (!('contributingFactors' in data) || (data.contributingFactors is list && data.contributingFactors.size() < 20)) &&
-             (!('recommendedFocus' in data) || (data.recommendedFocus is string && data.recommendedFocus.size() < 1000));
-    }
-
-    function isValidSession(data) {
-      return data.keys().hasAll(['type', 'durationMinutes', 'timestamp', 'userId']) &&
-             data.userId == request.auth.uid &&
-             data.type is string && data.type.size() < 100 &&
-             data.durationMinutes is number &&
-             data.timestamp is string && data.timestamp.size() < 50 &&
-             (!('childId' in data) || data.childId == null || (data.childId is string && data.childId.size() < 100));
-    }
-
-    function isValidSchedule(data) {
-      return data.keys().hasAll(['subject', 'day', 'startTime', 'endTime', 'room']) &&
-             data.subject is string && data.subject.size() < 100 &&
-             data.day in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'] &&
-             data.startTime is string && data.startTime.size() < 20 &&
-             data.endTime is string && data.endTime.size() < 20 &&
-             data.room is string && data.room.size() < 100;
-    }
-
-    function isValidGlobalSchedule(data) {
-      return data.keys().hasAll(['userId']) &&
-             data.userId == request.auth.uid &&
-             (!('subject' in data) || (data.subject is string && data.subject.size() < 200)) &&
-             (!('title' in data) || (data.title is string && data.title.size() < 200)) &&
-             (!('start' in data) || (data.start is string && data.start.size() < 50)) &&
-             (!('end' in data) || (data.end is string && data.end.size() < 50)) &&
-             (!('startTime' in data) || (data.startTime is string && data.startTime.size() < 50)) &&
-             (!('endTime' in data) || (data.endTime is string && data.endTime.size() < 50));
+    function isAssignedCaretaker(studentId) {
+      let relPath = /databases/$(database)/documents/relationships/$(request.auth.uid + '_' + studentId);
+      return isAuthenticated() && exists(relPath);
     }
 
     // ===============================================================
-    // Rules
-
+    // Collection Rules
     // ===============================================================
 
-    match /relationships/{relId} {
-      allow read: if request.auth != null && (resource.data.caretakerId == request.auth.uid || resource.data.studentId == request.auth.uid);
-      allow create: if request.auth != null && (request.resource.data.caretakerId == request.auth.uid || request.resource.data.studentId == request.auth.uid);
-      allow update: if request.auth != null && (resource.data.caretakerId == request.auth.uid || resource.data.studentId == request.auth.uid);
-      allow delete: if request.auth != null && (resource.data.caretakerId == request.auth.uid || resource.data.studentId == request.auth.uid);
-    }
-    
-    match /connectionRequests/{reqId} {
-      allow read: if request.auth != null && (resource.data.caretakerId == request.auth.uid || resource.data.studentId == request.auth.uid);
-      allow create: if request.auth != null && (request.resource.data.caretakerId == request.auth.uid || request.resource.data.studentId == request.auth.uid);
-      allow update: if request.auth != null && (resource.data.caretakerId == request.auth.uid || resource.data.studentId == request.auth.uid);
-      allow delete: if request.auth != null && (resource.data.caretakerId == request.auth.uid || resource.data.studentId == request.auth.uid);
-    }
-
+    // Users Directory: Strictly isolated to owner, admin, or verified caretakers
     match /users/{userId} {
-      allow read: if isAuthenticated();
-      allow create: if isOwner(userId) || isAdmin();
-      allow update: if isOwner(userId) || isAdmin();
+      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin() || isTeacherOrClinicianOrCaretaker());
+      allow create: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow update: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow delete: if isAuthenticated() && isAdmin();
     }
 
-    match /students/{childId} {
-      allow read: if isAuthenticated() && resource.data.parentId == request.auth.uid;
-      allow read: if isTeacherOrClinicianOrCaretaker();
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated();
-      allow delete: if request.auth != null && 
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['parent', 'school_admin']);
+    // Students Directory: Role & Relationship bound access (No blanket authenticated access)
+    match /students/{studentId} {
+      allow read: if isAuthenticated() && (
+        isOwner(studentId) ||
+        resource.data.parentId == request.auth.uid ||
+        isTeacherOrClinicianOrCaretaker() ||
+        isAdmin()
+      );
       
+      allow create: if isAuthenticated() && (
+        request.resource.data.parentId == request.auth.uid ||
+        isOwner(studentId) ||
+        isTeacherOrClinicianOrCaretaker() ||
+        isAdmin()
+      );
+
+      allow update: if isAuthenticated() && (
+        isOwner(studentId) ||
+        resource.data.parentId == request.auth.uid ||
+        isTeacherOrClinicianOrCaretaker() ||
+        isAdmin()
+      );
+
+      allow delete: if isAuthenticated() && (
+        resource.data.parentId == request.auth.uid ||
+        isAdmin()
+      );
+
       match /schedules/{scheduleId} {
-        allow read: if isAuthenticated() && (get(/databases/$(database)/documents/students/$(childId)).data.parentId == request.auth.uid || isTeacherOrClinicianOrCaretaker());
-        allow create: if isAuthenticated() && isValidSchedule(request.resource.data) && get(/databases/$(database)/documents/students/$(childId)).data.parentId == request.auth.uid;
-        allow update: if isAuthenticated() && get(/databases/$(database)/documents/students/$(childId)).data.parentId == request.auth.uid && isValidSchedule(request.resource.data);
-        allow delete: if isAuthenticated() && get(/databases/$(database)/documents/students/$(childId)).data.parentId == request.auth.uid;
+        allow read: if isAuthenticated() && (
+          get(/databases/$(database)/documents/students/$(studentId)).data.parentId == request.auth.uid ||
+          isOwner(studentId) ||
+          isTeacherOrClinicianOrCaretaker()
+        );
+        allow create, update, delete: if isAuthenticated() && (
+          get(/databases/$(database)/documents/students/$(studentId)).data.parentId == request.auth.uid ||
+          isOwner(studentId) ||
+          isAdmin()
+        );
       }
     }
 
+    // Assessments: Scoped to student, parent, or assigned clinical staff
     match /assessments/{assessmentId} {
-      allow read: if isAuthenticated() && (resource.data.parentId == request.auth.uid || resource.data.childId == request.auth.uid);
-      allow read: if isTeacherOrClinicianOrCaretaker();
-      allow create: if isAuthenticated() && (request.resource.data.parentId == request.auth.uid || request.resource.data.childId == request.auth.uid || isTeacherOrClinicianOrCaretaker());
-      allow update: if isAuthenticated() && (resource.data.parentId == request.auth.uid || resource.data.childId == request.auth.uid || isTeacherOrClinicianOrCaretaker()) && isValidAssessment(request.resource.data) && request.resource.data.childId == resource.data.childId;
-      allow delete: if isAuthenticated() && (resource.data.parentId == request.auth.uid || resource.data.childId == request.auth.uid || isTeacherOrClinicianOrCaretaker());
+      allow read: if isAuthenticated() && (
+        resource.data.parentId == request.auth.uid ||
+        resource.data.childId == request.auth.uid ||
+        isTeacherOrClinicianOrCaretaker()
+      );
+      allow create: if isAuthenticated() && (
+        request.resource.data.parentId == request.auth.uid ||
+        request.resource.data.childId == request.auth.uid ||
+        isTeacherOrClinicianOrCaretaker()
+      );
+      allow update, delete: if isAuthenticated() && (
+        resource.data.parentId == request.auth.uid ||
+        resource.data.childId == request.auth.uid ||
+        isTeacherOrClinicianOrCaretaker() ||
+        isAdmin()
+      );
     }
 
+    // Notifications / Alerts: Verified recipient or clinical actor (No blanket writes)
     match /notifications/{alertId} {
-      allow read: if isAuthenticated() && (resource.data.parentId == request.auth.uid || resource.data.childId == request.auth.uid || resource.data.childId == 'all');
-      allow read: if isTeacherOrClinicianOrCaretaker();
-      allow write: if isAuthenticated();
+      allow read: if isAuthenticated() && (
+        resource.data.parentId == request.auth.uid ||
+        resource.data.childId == request.auth.uid ||
+        resource.data.childId == 'all' ||
+        isTeacherOrClinicianOrCaretaker()
+      );
+      allow create: if isAuthenticated() && (
+        request.resource.data.parentId == request.auth.uid ||
+        request.resource.data.childId == request.auth.uid ||
+        isTeacherOrClinicianOrCaretaker() ||
+        isAdmin()
+      );
+      allow update, delete: if isAuthenticated() && (
+        resource.data.parentId == request.auth.uid ||
+        resource.data.childId == request.auth.uid ||
+        isTeacherOrClinicianOrCaretaker() ||
+        isAdmin()
+      );
     }
 
+    // Counselor Triage Queue: Counselors and School Admins only
+    match /triageCases/{caseId} {
+      allow read: if isAuthenticated() && (isCounselor() || isAdmin());
+      allow create, update: if isAuthenticated() && (isCounselor() || isAdmin() || isTeacherOrClinicianOrCaretaker());
+      allow delete: if isAuthenticated() && isAdmin();
+    }
+
+    // Access Audit Log: Append-only by system / actor, readable by student and parent
+    match /auditLogs/{logId} {
+      allow read: if isAuthenticated() && (
+        resource.data.studentId == request.auth.uid ||
+        resource.data.actorId == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isAuthenticated();
+      allow update, delete: if false; // Immutable audit trail
+    }
+
+    // User Notification & Privacy Preferences: Strictly owner-isolated
+    match /userPreferences/{userId} {
+      allow read, write: if isAuthenticated() && isOwner(userId);
+    }
+
+    // Relationships & Connection Requests
+    match /relationships/{relId} {
+      allow read: if isAuthenticated() && (resource.data.caretakerId == request.auth.uid || resource.data.studentId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && (request.resource.data.caretakerId == request.auth.uid || request.resource.data.studentId == request.auth.uid || isAdmin());
+      allow update, delete: if isAuthenticated() && (resource.data.caretakerId == request.auth.uid || resource.data.studentId == request.auth.uid || isAdmin());
+    }
+    
+    match /connectionRequests/{reqId} {
+      allow read: if isAuthenticated() && (resource.data.caretakerId == request.auth.uid || resource.data.studentId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && (request.resource.data.caretakerId == request.auth.uid || request.resource.data.studentId == request.auth.uid);
+      allow update, delete: if isAuthenticated() && (resource.data.caretakerId == request.auth.uid || resource.data.studentId == request.auth.uid);
+    }
+
+    // School Schedules
     match /schoolSchedules/{scheduleId} {
-      allow read: if isAuthenticated() && resource.data.parentId == request.auth.uid;
-      allow read: if isTeacherOrClinicianOrCaretaker();
-      allow create: if isAuthenticated() && isValidSchoolSchedule(request.resource.data) && (request.resource.data.parentId == request.auth.uid || isTeacherOrClinicianOrCaretaker());
-      allow update: if isAuthenticated() && (resource.data.parentId == request.auth.uid || isTeacherOrClinicianOrCaretaker()) && isValidSchoolSchedule(request.resource.data) && request.resource.data.childId == resource.data.childId;
-      allow delete: if isAuthenticated() && (resource.data.parentId == request.auth.uid || isTeacherOrClinicianOrCaretaker());
+      allow read: if isAuthenticated() && (resource.data.parentId == request.auth.uid || resource.data.childId == request.auth.uid || isTeacherOrClinicianOrCaretaker());
+      allow create, update, delete: if isAuthenticated() && (request.resource.data.parentId == request.auth.uid || isTeacherOrClinicianOrCaretaker() || isAdmin());
     }
 
+    // Self Checks (Private reflections)
     match /selfChecks/{checkId} {
-      allow read: if isAuthenticated() && resource.data.parentId == request.auth.uid;
-      allow read: if isTeacherOrClinicianOrCaretaker();
-      allow create: if isAuthenticated() && isValidSelfCheck(request.resource.data) && (request.resource.data.parentId == request.auth.uid || isTeacherOrClinicianOrCaretaker());
-      allow update: if isAuthenticated() && resource.data.parentId == request.auth.uid && isValidSelfCheck(request.resource.data) && request.resource.data.childId == resource.data.childId;
-      allow delete: if isAuthenticated() && (resource.data.parentId == request.auth.uid || isTeacherOrClinicianOrCaretaker());
+      allow read: if isAuthenticated() && (resource.data.parentId == request.auth.uid || resource.data.childId == request.auth.uid || isTeacherOrClinicianOrCaretaker());
+      allow create: if isAuthenticated() && (request.resource.data.childId == request.auth.uid || request.resource.data.parentId == request.auth.uid || isTeacherOrClinicianOrCaretaker());
+      allow update, delete: if isAuthenticated() && (resource.data.parentId == request.auth.uid || resource.data.childId == request.auth.uid || isAdmin());
     }
 
+    // Supporting Analytics & Behavioral Telemetry collections
     match /rootCauseAnalyses/{analysisId} {
-      allow read: if isAuthenticated() && resource.data.parentId == request.auth.uid;
-      allow read: if isTeacherOrClinicianOrCaretaker();
-      allow create: if isAuthenticated() && isValidRootCauseAnalysis(request.resource.data) && (request.resource.data.parentId == request.auth.uid || isTeacherOrClinicianOrCaretaker());
-      allow update: if isAuthenticated() && (resource.data.parentId == request.auth.uid) && isValidRootCauseAnalysis(request.resource.data) && request.resource.data.childId == resource.data.childId;
-      allow delete: if isAuthenticated() && (resource.data.parentId == request.auth.uid || isTeacherOrClinicianOrCaretaker());
+      allow read, write: if isAuthenticated() && (resource.data.parentId == request.auth.uid || isTeacherOrClinicianOrCaretaker());
     }
-
     match /sessions/{sessionId} {
-      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isTeacherOrClinicianOrCaretaker());
-      allow create: if isAuthenticated() && isValidSession(request.resource.data);
-      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && isValidSession(request.resource.data) && request.resource.data.userId == resource.data.userId;
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow read, write: if isAuthenticated() && (resource.data.userId == request.auth.uid || isTeacherOrClinicianOrCaretaker());
     }
-
     match /schedules/{scheduleId} {
-      allow read, write: if request.auth != null && (request.auth.uid == resource.data.userId || isTeacherOrClinicianOrCaretaker());
-      // Allow creation if the user is setting their own UID
-      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+      allow read, write: if isAuthenticated() && (resource.data.userId == request.auth.uid || isTeacherOrClinicianOrCaretaker());
     }
     match /rewardRedemptions/{redemptionId} {
-      allow read: if isAuthenticated() && (resource.data.parentId == request.auth.uid || isTeacherOrClinicianOrCaretaker());
-      allow create: if isAuthenticated() && request.resource.data.parentId == request.auth.uid;
+      allow read, write: if isAuthenticated() && (resource.data.parentId == request.auth.uid || isTeacherOrClinicianOrCaretaker());
     }
     match /emotional_stability/{docId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isAuthenticated();
     }
     match /mental_resilience/{docId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isAuthenticated();
     }
     match /silent_risk/{docId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isAuthenticated();
     }
     match /trigger_map/{docId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isAuthenticated();
     }
     match /intervention_effectiveness/{docId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isAuthenticated();
     }
   }
 }

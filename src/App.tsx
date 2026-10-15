@@ -33,7 +33,9 @@ import {
   ShoppingCart,
   CalendarDays,
   Wind,
-  Share2
+  Share2,
+  PhoneCall,
+  Inbox
 } from 'lucide-react';
 import { cn, getGradientForChild } from './lib/utils';
 import { Child, Alert } from './types';
@@ -70,15 +72,22 @@ import Alerts from './components/Alerts';
 import ProfileVaultModal from './components/ProfileVaultModal';
 import Connections from './components/Connections';
 import WellnessShop from './components/WellnessShop';
+import CrisisEscalationModal from './components/CrisisEscalationModal';
+import StudentPrivacySettingsModal from './components/StudentPrivacySettingsModal';
+import NotificationPreferencesModal from './components/NotificationPreferencesModal';
+import OfflineBanner from './components/OfflineBanner';
+import RoleDemoSwitcher from './components/RoleDemoSwitcher';
+import { useAppStore } from './store/useAppStore';
 
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const Reports = lazy(() => import('./components/Reports'));
 const ScheduleAI = lazy(() => import('./components/ScheduleAI'));
 const CaretakerDashboard = lazy(() => import('./components/CaretakerDashboard'));
 const AdminDashboard = lazy(() => import('./components/AdminDashboard'));
+const CounselorTriageQueue = lazy(() => import('./components/CounselorTriageQueue'));
 
 type Page = 'landing' | 'user-type' | 'login' | 'app';
-export type Tab = 'home' | 'profile' | 'assessment' | 'reports' | 'notifications' | 'shop' | 'schedule' | 'connections' | 'admin';
+export type Tab = 'home' | 'profile' | 'assessment' | 'reports' | 'notifications' | 'shop' | 'schedule' | 'connections' | 'admin' | 'triage';
 
 const APP_VERSION = "1.2.0";
 
@@ -160,6 +169,22 @@ export default function App() {
   
 
   const [privacyBlur, setPrivacyBlur] = useState(false);
+  const [isCrisisModalOpen, setIsCrisisModalOpen] = useState(false);
+  const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
+  const [isNotifPrefsModalOpen, setIsNotifPrefsModalOpen] = useState(false);
+
+  const storeUser = useAppStore(state => state.user);
+  const storeChildren = useAppStore(state => state.children);
+  const storeAlerts = useAppStore(state => state.alerts);
+  const storeSelectedChild = useAppStore(state => state.selectedChild);
+  const isDemoMode = useAppStore(state => state.isDemoMode);
+  const activeCrisis = useAppStore(state => state.activeCrisis);
+  const dismissCrisis = useAppStore(state => state.dismissCrisis);
+
+  const effectiveUser = isDemoMode && storeUser ? storeUser : user;
+  const effectiveChildren = isDemoMode && storeChildren.length > 0 ? storeChildren : children;
+  const effectiveAlerts = isDemoMode ? storeAlerts : alerts;
+  const effectiveSelectedChild = isDemoMode && storeSelectedChild ? storeSelectedChild : selectedChild;
 
   // Profile Creation UI state
   const [isCreatingProfile, setIsCreatingProfile] = useState(false);
@@ -839,7 +864,15 @@ export default function App() {
   }
 
   return (
-    <div className="h-screen overflow-hidden flex flex-row bg-bg text-text-main">
+    <div className="h-screen overflow-hidden flex flex-col bg-bg text-text-main">
+      <OfflineBanner />
+      <a 
+        href="#main-content" 
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:p-2.5 focus:bg-accent focus:text-bg focus:font-bold focus:rounded-xl shadow-lg"
+      >
+        Skip to main content
+      </a>
+      <div className="flex-1 flex flex-row overflow-hidden relative">
       {/* Sidebar - Fixed Position Navigation */}
       <aside className={cn(
         "fixed lg:sticky top-0 left-0 z-40 w-64 h-full border-r flex flex-col transition-transform duration-300 lg:translate-x-0 shadow-xl overflow-hidden",
@@ -899,6 +932,20 @@ export default function App() {
                    />
                  )}
                </nav>
+            </div>
+          )}
+
+          {['counselor', 'school_admin', 'admin'].includes(effectiveUser?.role) && (
+            <div>
+              <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2 px-3">Clinical Care</p>
+              <nav className="space-y-1">
+                <SidebarLink
+                  icon={<Inbox size={18} />}
+                  label="Triage Queue"
+                  active={activeTab === 'triage'}
+                  onClick={() => { setActiveTab('triage'); setIsSidebarOpen(false); }}
+                />
+              </nav>
             </div>
           )}
 
@@ -997,6 +1044,7 @@ export default function App() {
 
       {/* Main Content Workspace */}
       <main 
+        id="main-content"
         ref={mainScrollRef}
         onScroll={(e) => setShowScrollTop(e.currentTarget.scrollTop > 200)}
         className={cn(
@@ -1015,15 +1063,46 @@ export default function App() {
                </button>
             </div>
             
-            <div className="flex items-center gap-3">
-                 {user?.role !== 'admin' && (
+            <div className="flex items-center gap-2.5 sm:gap-3">
+                 <RoleDemoSwitcher />
+
+                 <button
+                   onClick={() => setIsCrisisModalOpen(true)}
+                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-alert-500/15 border border-alert-500/40 text-alert-400 hover:bg-alert-500/25 text-xs font-semibold transition-colors shadow-sm"
+                   title="24/7 National Helplines (Tele-MANAS)"
+                   aria-label="Open emergency crisis helplines"
+                 >
+                   <PhoneCall size={13} className="text-alert-500 animate-pulse-soft" />
+                   <span className="hidden sm:inline">Helpline</span> 14416
+                 </button>
+
+                 <button
+                   onClick={() => setIsPrivacyModalOpen(true)}
+                   className="p-2 bg-surface-2 border border-border rounded-xl text-text-muted hover:text-accent hover:border-accent/40 transition-colors"
+                   title="Student Privacy & Consent Settings"
+                   aria-label="Open student privacy and consent settings"
+                 >
+                   <Shield size={18} />
+                 </button>
+
+                 <button
+                   onClick={() => setIsNotifPrefsModalOpen(true)}
+                   className="p-2 bg-surface-2 border border-border rounded-xl text-text-muted hover:text-accent hover:border-accent/40 transition-colors"
+                   title="Notification Preferences & Quiet Hours"
+                   aria-label="Open notification preferences and quiet hours"
+                 >
+                   <Settings size={18} />
+                 </button>
+
+                 {effectiveUser?.role !== 'admin' && (
                  <button 
                   onClick={() => setActiveTab('notifications')}
-                  className="relative p-2.5 bg-surface-2 border border-border rounded-full text-text-muted hover:text-text-main hover:bg-surface transition-colors"
-                  title={user?.role === 'student' ? 'Inbox' : 'Alerts'}
+                  className="relative p-2 bg-surface-2 border border-border rounded-xl text-text-muted hover:text-text-main hover:bg-surface transition-colors"
+                  title={effectiveUser?.role === 'student' ? 'Inbox' : 'Alerts'}
+                  aria-label="View notifications"
                  >
-                   <Bell size={20} />
-                   {alerts.filter(a => !a.read).length > 0 && (
+                   <Bell size={18} />
+                   {effectiveAlerts.filter(a => !a.read).length > 0 && (
                      <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-alert-500 rounded-full border-2 border-surface animate-pulse-soft" />
                    )}
                  </button>
@@ -1130,7 +1209,10 @@ export default function App() {
                   child={selectedChild}
                 />
               )}
-              {!selectedChild && activeTab !== 'home' && activeTab !== 'reports' && activeTab !== 'notifications' && activeTab !== 'assessment' && activeTab !== 'shop' && activeTab !== 'schedule' && (
+              {activeTab === 'triage' && (
+                <CounselorTriageQueue />
+              )}
+              {!selectedChild && activeTab !== 'home' && activeTab !== 'reports' && activeTab !== 'notifications' && activeTab !== 'assessment' && activeTab !== 'shop' && activeTab !== 'schedule' && activeTab !== 'triage' && activeTab !== 'admin' && activeTab !== 'connections' && (
                 <div className="text-center py-20">
                   <p className="text-text-muted">Please add a child first from the dashboard.</p>
                   <button onClick={() => setActiveTab('home')} className="text-accent font-medium mt-2">Go to Dashboard</button>
@@ -1253,6 +1335,30 @@ export default function App() {
           />
         )}
       </AnimatePresence>
+
+      {/* Feature 1: Crisis Escalation Modal with Indian Helplines */}
+      <CrisisEscalationModal
+        isOpen={isCrisisModalOpen || Boolean(activeCrisis)}
+        onClose={() => {
+          setIsCrisisModalOpen(false);
+          dismissCrisis();
+        }}
+        incident={activeCrisis}
+        userRole={effectiveUser?.role}
+      />
+
+      {/* Feature 2: Student Privacy & Data Sovereignty Settings Modal */}
+      <StudentPrivacySettingsModal
+        isOpen={isPrivacyModalOpen}
+        onClose={() => setIsPrivacyModalOpen(false)}
+      />
+
+      {/* Feature 4: Notification Preferences & Quiet Hours Modal */}
+      <NotificationPreferencesModal
+        isOpen={isNotifPrefsModalOpen}
+        onClose={() => setIsNotifPrefsModalOpen(false)}
+      />
+      </div>
     </div>
   );
 }

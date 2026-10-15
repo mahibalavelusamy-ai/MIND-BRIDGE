@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import ErrorBoundary from './ErrorBoundary';
 
@@ -15,7 +15,6 @@ describe('ErrorBoundary Component', () => {
   let originalConsoleError: typeof console.error;
 
   beforeEach(() => {
-    // Suppress console.error output in test runner from React error boundary logs
     originalConsoleError = console.error;
     console.error = vi.fn();
   });
@@ -87,5 +86,75 @@ describe('ErrorBoundary Component', () => {
     );
 
     expect(screen.getByText('The application has reached its usage limit. Please try again later.')).toBeInTheDocument();
+  });
+
+  it('renders a custom fallback element when provided', () => {
+    render(
+      <ErrorBoundary fallback={<div data-testid="custom-fallback">Custom Error Recovery View</div>}>
+        <ProblemChild shouldThrow={true} message="Crash" />
+      </ErrorBoundary>
+    );
+
+    expect(screen.getByTestId('custom-fallback')).toBeInTheDocument();
+    expect(screen.getByText('Custom Error Recovery View')).toBeInTheDocument();
+  });
+
+  it('renders a custom fallback render-prop function and calls reset', () => {
+    const onResetMock = vi.fn();
+    render(
+      <ErrorBoundary 
+        onReset={onResetMock}
+        fallback={(error, reset) => (
+          <div>
+            <span>Error: {error.message}</span>
+            <button onClick={reset}>Try Reset</button>
+          </div>
+        )}
+      >
+        <ProblemChild shouldThrow={true} message="Render prop failure" />
+      </ErrorBoundary>
+    );
+
+    expect(screen.getByText('Error: Render prop failure')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Try Reset'));
+    expect(onResetMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('handles window error events via handleWindowError', () => {
+    render(
+      <ErrorBoundary>
+        <div>Passive Child</div>
+      </ErrorBoundary>
+    );
+
+    act(() => {
+      const errorEvent = new ErrorEvent('error', {
+        error: new Error('Uncaught script runtime failure'),
+        message: 'Uncaught script runtime failure'
+      });
+      window.dispatchEvent(errorEvent);
+    });
+
+    expect(screen.getByText('Oops! Something went wrong.')).toBeInTheDocument();
+    expect(screen.getByText(/Uncaught script runtime failure/)).toBeInTheDocument();
+  });
+
+  it('handles unhandled promise rejections via handleUnhandledRejection', () => {
+    render(
+      <ErrorBoundary>
+        <div>Passive Child</div>
+      </ErrorBoundary>
+    );
+
+    act(() => {
+      const rejectionEvent = new CustomEvent('unhandledrejection', {
+        detail: { reason: new Error('Network async task rejected') }
+      }) as any;
+      rejectionEvent.reason = new Error('Network async task rejected');
+      window.dispatchEvent(rejectionEvent);
+    });
+
+    expect(screen.getByText('Oops! Something went wrong.')).toBeInTheDocument();
+    expect(screen.getByText(/Network async task rejected/)).toBeInTheDocument();
   });
 });

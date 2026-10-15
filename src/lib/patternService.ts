@@ -1,4 +1,5 @@
 import { BehavioralPattern, Anomaly, Child } from '../types';
+import { apiFetch } from './apiClient';
 import { safeJsonParse } from './aiUtils';
 
 /**
@@ -42,9 +43,8 @@ export async function detectBehavioralPatterns(
         Format your response as a JSON object. Do not include markdown code blocks.
       `;
 
-    const response = await fetch('/api/gemini/pattern', {
+    const response = await apiFetch('/api/gemini/pattern', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt })
     });
 

@@ -1,4 +1,5 @@
 import { safeJsonParse } from "../lib/aiUtils";
+import { apiFetch } from "../lib/apiClient";
 
 /**
  * Student Wellbeing Clinical Insights Generator
@@ -42,9 +43,8 @@ export async function getAIInsights(childData: any) {
       Ensure the recommendations are concise and practical. Data processing is strictly for decision-support.
     `;
 
-    const response = await fetch('/api/gemini/insight', {
+    const response = await apiFetch('/api/gemini/insight', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt })
     });
 

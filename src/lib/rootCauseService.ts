@@ -1,6 +1,7 @@
 import { CategoryScores } from './scoring';
 import { RootCauseAnalysis, Child } from '../types';
 import { safeJsonParse } from './aiUtils';
+import { apiFetch } from './apiClient';
 
 /**
  * Mind Bridge Root-Cause Analysis Engine
@@ -74,9 +75,8 @@ export async function performRootCauseAnalysis(
         Format your response as a JSON object. Do not include markdown code blocks.
       `;
 
-    const response = await fetch('/api/gemini/root-cause', {
+    const response = await apiFetch('/api/gemini/root-cause', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt })
     });
 

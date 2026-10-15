@@ -1,5 +1,6 @@
 import { aiPrompts } from "./prompts";
 import { validateEmotions, validateRisk } from "./validation";
+import { apiFetch } from "../../lib/apiClient";
 
 export const AIService = {
     /**
@@ -13,7 +14,7 @@ export const AIService = {
         const prompt = aiPrompts.emotionAnalysis(text, context);
         
         try {
-            const response = await fetch('/api/gemini/analyze-emotion', {
+            const response = await apiFetch('/api/gemini/analyze-emotion', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ prompt })
@@ -55,7 +56,7 @@ export const AIService = {
         `;
         
         try {
-            const response = await fetch('/api/gemini/analyze-assessment', {
+            const response = await apiFetch('/api/gemini/analyze-assessment', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ prompt })
@@ -132,7 +133,7 @@ export const AIService = {
         `;
         
         try {
-            const response = await fetch('/api/gemini/progressive-questions', {
+            const response = await apiFetch('/api/gemini/progressive-questions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ prompt })
@@ -187,7 +188,7 @@ export const AIService = {
         `;
         
         try {
-            const response = await fetch('/api/gemini/analyze-progressive-assessment', {
+            const response = await apiFetch('/api/gemini/analyze-progressive-assessment', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ prompt })
@@ -264,7 +265,7 @@ export const AIService = {
         `;
         
         try {
-            const response = await fetch('/api/gemini/parse-syllabus', {
+            const response = await apiFetch('/api/gemini/parse-syllabus', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ prompt, parts })

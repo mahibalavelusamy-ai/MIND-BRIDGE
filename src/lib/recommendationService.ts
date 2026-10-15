@@ -1,6 +1,7 @@
 import { Recommendation, Child } from '../types';
 import { safeJsonParse } from './aiUtils';
 import { analyzeTextRisk } from './scoring';
+import { apiFetch } from './apiClient';
 
 /**
  * Personalized Recommendation Engine
@@ -79,9 +80,8 @@ export async function generateRecommendations(
       Format your response as a JSON object. Do not include markdown code blocks.
     `;
 
-    const response = await fetch('/api/gemini/recommend', {
+    const response = await apiFetch('/api/gemini/recommend', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt })
     });
 

@@ -23,8 +23,10 @@ import {
   Layers,
   Zap,
   Target,
-  AlertTriangle
+  AlertTriangle,
+  Printer
 } from 'lucide-react';
+import WeeklyWellbeingPrintView from './WeeklyWellbeingPrintView';
 
 interface ReportsProps {
   children: Child[];
@@ -39,6 +41,7 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
   const [schedules, setSchedules] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [timeframe, setTimeframe] = useState<Timeframe>('30d');
+  const [showPrintView, setShowPrintView] = useState(false);
 
   useEffect(() => {
     if (!selectedChild) return;
@@ -277,6 +280,14 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
     return null;
   };
 
+  if (showPrintView) {
+    return (
+      <div className="flex-1 w-full max-w-7xl mx-auto p-4 overflow-y-auto">
+        <WeeklyWellbeingPrintView student={selectedChild} onBack={() => setShowPrintView(false)} />
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 w-full max-w-7xl mx-auto flex flex-col gap-6 animate-fade-in p-4 overflow-y-auto text-text-main pb-24 lg:pb-4 h-full">
       {/* Top Banner */}
@@ -295,19 +306,30 @@ export default function Reports({ children, selectedChild }: ReportsProps) {
             </div>
           </div>
           
-          <div className="hidden md:flex bg-[#020617] border border-white/5 rounded-xl p-1 shrink-0 shadow-inner">
-             {(['7d', '30d', '365d'] as Timeframe[]).map((tf) => (
-                <button
-                  key={tf}
-                  onClick={() => setTimeframe(tf)}
-                  className={cn(
-                    "px-4 py-2 rounded-lg text-sm font-bold uppercase tracking-wider transition-colors",
-                    timeframe === tf ? "bg-[#2563EB]/20 text-[#22D3EE] border border-[#2563EB]/40 shadow-[0_2px_10px_rgba(37,99,235,0.2)]" : "text-slate-500 hover:text-slate-300 hover:bg-white/5"
-                  )}
-                >
-                  {tf === '7d' ? 'Weekly View' : tf === '30d' ? 'Monthly View' : 'Yearly View'}
-                </button>
-             ))}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowPrintView(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-accent text-bg font-bold text-xs hover:bg-accent-hover transition-colors shadow-sm"
+              title="Print or export weekly report to PDF"
+            >
+              <Printer size={15} />
+              Print / PDF
+            </button>
+
+            <div className="hidden md:flex bg-[#020617] border border-white/5 rounded-xl p-1 shrink-0 shadow-inner">
+               {(['7d', '30d', '365d'] as Timeframe[]).map((tf) => (
+                  <button
+                    key={tf}
+                    onClick={() => setTimeframe(tf)}
+                    className={cn(
+                      "px-4 py-2 rounded-lg text-sm font-bold uppercase tracking-wider transition-colors",
+                      timeframe === tf ? "bg-[#2563EB]/20 text-[#22D3EE] border border-[#2563EB]/40 shadow-[0_2px_10px_rgba(37,99,235,0.2)]" : "text-slate-500 hover:text-slate-300 hover:bg-white/5"
+                    )}
+                  >
+                    {tf === '7d' ? 'Weekly View' : tf === '30d' ? 'Monthly View' : 'Yearly View'}
+                  </button>
+               ))}
+            </div>
           </div>
         </div>
       </div>

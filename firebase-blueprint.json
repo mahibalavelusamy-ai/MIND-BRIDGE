@@ -2,20 +2,21 @@
   "entities": {
     "users": {
       "title": "User",
-      "description": "Application users (parents, teachers, clinicians)",
+      "description": "Application users (student, parent, teacher, school_admin, counselor)",
       "type": "object",
       "properties": {
         "uid": { "type": "string" },
         "name": { "type": "string" },
         "email": { "type": "string" },
-        "role": { "type": "string", "enum": ["parent", "teacher", "clinician"] },
-        "organization": { "type": "string" }
+        "role": { "type": "string", "enum": ["student", "parent", "teacher", "school_admin", "counselor"] },
+        "organization": { "type": "string" },
+        "creditsEarned": { "type": "number" }
       },
       "required": ["uid", "name", "email", "role"]
     },
-    "children": {
-      "title": "Child",
-      "description": "Children being monitored",
+    "students": {
+      "title": "Student",
+      "description": "Student wellness telemetry, profile, and engagement metrics",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
@@ -24,16 +25,25 @@
         "age": { "type": "number" },
         "grade": { "type": "string" },
         "avatar": { "type": "string" },
+        "gender": { "type": "string", "enum": ["male", "female", "other"] },
         "notes": { "type": "string" },
         "riskLevel": { "type": "string", "enum": ["low", "medium", "high"] },
-        "lastMoodScore": { "type": "number" },
-        "lastStressLevel": { "type": "string" }
+        "moodScore": { "type": "number" },
+        "stressLevel": { "type": "string", "enum": ["Low", "Moderate", "High"] },
+        "gems": { "type": "number" },
+        "creditsEarned": { "type": "number" },
+        "streak": { "type": "number" },
+        "level": { "type": "number" },
+        "pinSet": { "type": "boolean" },
+        "pin": { "type": "string" },
+        "privacyLevel": { "type": "string", "enum": ["full", "summary"] },
+        "consentToSchoolSharing": { "type": "boolean" }
       },
-      "required": ["parentId", "name", "age"]
+      "required": ["name", "age"]
     },
     "assessments": {
       "title": "Assessment",
-      "description": "Mental health check-ins",
+      "description": "Periodic and progressive mental wellbeing assessments",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
@@ -44,20 +54,22 @@
           "type": "object",
           "properties": {
             "mood": { "type": "number" },
-            "energy": { "type": "number" },
+            "stress": { "type": "number" },
             "sleep": { "type": "number" },
+            "behavior": { "type": "number" },
             "social": { "type": "number" },
-            "stress": { "type": "number" }
+            "energy": { "type": "number" }
           }
         },
         "totalScore": { "type": "number" },
-        "aiInsight": { "type": "string" }
+        "aiInsight": { "type": "string" },
+        "parentId": { "type": "string" }
       },
       "required": ["childId", "submittedBy", "timestamp", "scores"]
     },
     "alerts": {
       "title": "Alert",
-      "description": "System-generated alerts",
+      "description": "Behavioral alerts and crisis escalation notices",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
@@ -67,13 +79,14 @@
         "title": { "type": "string" },
         "description": { "type": "string" },
         "timestamp": { "type": "string", "format": "date-time" },
-        "status": { "type": "string", "enum": ["active", "dismissed"] }
+        "status": { "type": "string", "enum": ["active", "resolved", "dismissed"] },
+        "read": { "type": "boolean" }
       },
-      "required": ["childId", "parentId", "type", "title", "timestamp"]
+      "required": ["childId", "type", "title", "timestamp"]
     },
     "schoolSchedules": {
       "title": "School Schedule",
-      "description": "Academic events and schedules",
+      "description": "Academic schedule and upcoming examination dates",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
@@ -83,93 +96,120 @@
         "day": { "type": "string", "enum": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] },
         "time": { "type": "string" },
         "subject": { "type": "string" },
-        "difficulty": { "type": "string", "enum": ["low", "medium", "high"] },
-        "source": { "type": "string" }
+        "difficulty": { "type": "string", "enum": ["low", "medium", "high"] }
       },
       "required": ["childId", "type", "title", "day", "time"]
     },
     "selfChecks": {
       "title": "Self Check",
-      "description": "Child's self-reported mood and check-in",
+      "description": "Student quick mood check-in and reflection",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
         "childId": { "type": "string" },
         "timestamp": { "type": "string", "format": "date-time" },
         "mood": { "type": "number" },
-        "tags": { "type": "array", "items": { "type": "string" } },
         "note": { "type": "string" },
-        "interventionUsed": { "type": "string" }
+        "tags": { "type": "array", "items": { "type": "string" } }
       },
       "required": ["childId", "timestamp", "mood"]
     },
-    "rootCauseAnalyses": {
-      "title": "Root Cause Analysis",
-      "description": "AI-generated root cause analysis",
+    "triageCases": {
+      "title": "Counselor Triage Case",
+      "description": "Clinical counselor triage tracking for escalating student concerns",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "childId": { "type": "string" },
-        "parentId": { "type": "string" },
-        "timestamp": { "type": "string", "format": "date-time" },
-        "primaryFactor": { "type": "string" },
-        "contributingFactors": { "type": "array", "items": { "type": "string" } },
-        "recommendedFocus": { "type": "string" },
-        "explanation": { "type": "string" },
-        "confidence": { "type": "number" },
-        "evidence": { "type": "array", "items": { "type": "string" } }
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "status": { "type": "string", "enum": ["new", "in_progress", "resolved"] },
+        "severity": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+        "assignedCounselorId": { "type": "string" },
+        "notes": { "type": "string" },
+        "followUpDate": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["childId", "parentId", "timestamp", "primaryFactor"]
+      "required": ["studentId", "status", "severity", "createdAt"]
     },
-    "schedules": {
-      "title": "Schedule Event",
-      "description": "Calendar schedule events",
+    "auditLogs": {
+      "title": "Access Audit Log",
+      "description": "Immutable log of student privacy record access and sharing events",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "actorId": { "type": "string" },
+        "actorRole": { "type": "string" },
+        "action": { "type": "string", "enum": ["view_summary", "view_assessment", "export_data", "consent_change", "delete_request"] },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "details": { "type": "string" }
+      },
+      "required": ["studentId", "actorId", "actorRole", "action", "timestamp"]
+    },
+    "userPreferences": {
+      "title": "User Preferences",
+      "description": "Notification settings, quiet hours, and privacy preferences",
+      "type": "object",
+      "properties": {
         "userId": { "type": "string" },
-        "subject": { "type": "string" },
-        "title": { "type": "string" },
-        "start": { "type": "string", "format": "date-time" },
-        "end": { "type": "string", "format": "date-time" },
-        "startTime": { "type": "string" },
-        "endTime": { "type": "string" }
+        "channels": {
+          "type": "object",
+          "properties": {
+            "inApp": { "type": "boolean" },
+            "email": { "type": "boolean" },
+            "sms": { "type": "boolean" }
+          }
+        },
+        "quietHours": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "startTime": { "type": "string" },
+            "endTime": { "type": "string" }
+          }
+        },
+        "criticalBypassQuietHours": { "type": "boolean" }
       },
       "required": ["userId"]
     }
   },
   "firestore": {
-    "/users/{uid}": {
+    "/users/{userId}": {
       "schema": "users",
-      "description": "User profiles"
+      "description": "User profile directory"
     },
-    "/children/{childId}": {
-      "schema": "children",
-      "description": "Child records"
+    "/students/{childId}": {
+      "schema": "students",
+      "description": "Student wellness profiles"
     },
     "/assessments/{assessmentId}": {
       "schema": "assessments",
-      "description": "Assessment history"
+      "description": "Longitudinal student assessments"
     },
-    "/alerts/{alertId}": {
+    "/notifications/{alertId}": {
       "schema": "alerts",
-      "description": "Active and past alerts"
+      "description": "Alerts and proactive notifications"
     },
     "/schoolSchedules/{scheduleId}": {
       "schema": "schoolSchedules",
-      "description": "School related events"
+      "description": "Academic timetable and exams"
     },
     "/selfChecks/{checkId}": {
       "schema": "selfChecks",
-      "description": "Self check records"
+      "description": "Student self-reported mood checks"
     },
-    "/rootCauseAnalyses/{analysisId}": {
-      "schema": "rootCauseAnalyses",
-      "description": "Root cause analysis records"
+    "/triageCases/{caseId}": {
+      "schema": "triageCases",
+      "description": "Counselor triage management queue"
     },
-    "/schedules/{scheduleId}": {
-      "schema": "schedules",
-      "description": "Schedules collection"
+    "/auditLogs/{logId}": {
+      "schema": "auditLogs",
+      "description": "Student privacy access audit trail"
+    },
+    "/userPreferences/{userId}": {
+      "schema": "userPreferences",
+      "description": "User notification and privacy preferences"
     }
   }
 }
