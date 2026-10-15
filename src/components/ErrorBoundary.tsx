@@ -46,6 +46,10 @@ export default class ErrorBoundary extends React.Component<Props, State> {
   }
 
   private handleWindowError = (event: ErrorEvent) => {
+    const errorMsg = event.error?.message || event.message || '';
+    if (typeof errorMsg === 'string' && (errorMsg.includes('WebSocket') || errorMsg.includes('closed without opened'))) {
+      return; // Ignore Vite HMR WebSocket closed in preview container
+    }
     // Only capture genuine error instances
     if (event.error instanceof Error) {
       this.setState({ hasError: true, error: event.error });
@@ -56,6 +60,10 @@ export default class ErrorBoundary extends React.Component<Props, State> {
 
   private handleUnhandledRejection = (event: PromiseRejectionEvent) => {
     const reason = event.reason;
+    const msg = reason instanceof Error ? reason.message : (typeof reason === 'string' ? reason : '');
+    if (msg.includes('WebSocket') || msg.includes('closed without opened')) {
+      return; // Ignore Vite HMR WebSocket closed in preview container
+    }
     const error = reason instanceof Error ? reason : new Error(typeof reason === 'string' ? reason : 'Unhandled Promise Rejection');
     this.setState({ hasError: true, error });
   };

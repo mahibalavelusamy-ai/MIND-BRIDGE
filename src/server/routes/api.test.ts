@@ -2,12 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app';
 import { ServerGeminiService } from '../services/geminiService';
+import { admin } from '../middleware/auth';
 
 describe('Mind Bridge Backend API Routes', () => {
   const app = createApp();
   const validAuthHeader = 'Bearer test-token';
 
   beforeEach(() => {
+    process.env.NODE_ENV = 'test';
     vi.restoreAllMocks();
 
     vi.spyOn(ServerGeminiService, 'generateInsight').mockResolvedValue({
@@ -110,6 +112,71 @@ describe('Mind Bridge Backend API Routes', () => {
 
       expect(res.status).toBe(401);
       expect(res.body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('rejects forged JWT tokens with 401 UNAUTHORIZED', async () => {
+      vi.spyOn(admin, 'auth').mockReturnValue({
+        verifyIdToken: vi.fn().mockRejectedValue(new Error('Firebase ID token has invalid signature.'))
+      } as any);
+
+      const res = await request(app)
+        .post('/api/gemini/insight')
+        .set('Authorization', 'Bearer forged.header.payload')
+        .send({ prompt: 'Forged JWT simulation' });
+
+      expect(res.status).toBe(401);
+      expect(res.body.error.code).toBe('UNAUTHORIZED');
+      expect(res.body.error.message).toContain('invalid signature');
+    });
+
+    it('rejects expired or invalid tokens with 401 UNAUTHORIZED (mock firebase-admin)', async () => {
+      vi.spyOn(admin, 'auth').mockReturnValue({
+        verifyIdToken: vi.fn().mockRejectedValue(new Error('Firebase ID token has expired.'))
+      } as any);
+
+      const res = await request(app)
+        .post('/api/gemini/insight')
+        .set('Authorization', 'Bearer expired-firebase-token')
+        .send({ prompt: 'Expired token simulation' });
+
+      expect(res.status).toBe(401);
+      expect(res.body.error.code).toBe('UNAUTHORIZED');
+      expect(res.body.error.message).toContain('expired');
+    });
+
+    it('accepts valid Firebase ID token with 200 OK (mock firebase-admin)', async () => {
+      vi.spyOn(admin, 'auth').mockReturnValue({
+        verifyIdToken: vi.fn().mockResolvedValue({
+          uid: 'verified-user-123',
+          email: 'student@mindbridge.edu',
+          role: 'student'
+        })
+      } as any);
+
+      const res = await request(app)
+        .post('/api/gemini/insight')
+        .set('Authorization', 'Bearer verified-real-jwt-token')
+        .send({ prompt: 'Valid verified session' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBeDefined();
+    });
+
+    it('strictly rejects demo-token in production environments with 401 UNAUTHORIZED', async () => {
+      const origEnv = process.env.NODE_ENV;
+      try {
+        process.env.NODE_ENV = 'production';
+        const res = await request(app)
+          .post('/api/gemini/insight')
+          .set('Authorization', 'Bearer demo-token')
+          .send({ prompt: 'Attempt demo token in prod' });
+
+        expect(res.status).toBe(401);
+        expect(res.body.error.code).toBe('UNAUTHORIZED');
+        expect(res.body.error.message).toContain('production');
+      } finally {
+        process.env.NODE_ENV = origEnv || 'test';
+      }
     });
   });
 

@@ -183,3 +183,23 @@ The Mind Bridge test suite includes **13 distinct test files** covering backend 
 
 ### 3. `FirebaseError: Firebase: Need to provide options, when not being deployed to hosting`
 **Fix**: Provide mock configuration or verify that `firebase-applet-config.json` exists in the project root.
+
+---
+
+## 8. Firestore Security Rules Unit Testing Status (@firebase/rules-unit-testing)
+
+### Status: Documented (Not Executed Locally in Minimal Container)
+Running `@firebase/rules-unit-testing` against `firestore.rules` requires a local Java Firestore Emulator instance (`firebase emulators:start --only firestore`, requiring Java JRE/JDK 11+). Because this lightweight Cloud container environment does not bundle a Java runtime:
+- **Application & Service Rule Testing (Active & Fully Covered)**:
+  All Firestore relationship rules (`isOwner`, `isParentOf`, `isTeacherOrClinicianOrCaretaker`, `isAdmin`), parent-child linkage checks, and raw diary entry privacy redactions are validated directly in unit tests via `src/lib/permissions.test.ts` (14 tests) and `src/services/analytics/permissionFilter.test.ts` (4 tests).
+- **Running Emulator Tests in Environments With Java**:
+  To run live rule unit tests against the Firestore emulator in an external CI or developer workstation with Java installed:
+  ```bash
+  # 1. Install Java and Firebase CLI
+  sudo apt-get install -y default-jre
+  npm install -D @firebase/rules-unit-testing firebase-tools
+
+  # 2. Start emulator and run tests
+  npx firebase emulators:exec --only firestore "npx vitest run"
+  ```
+

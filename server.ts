@@ -14,7 +14,8 @@ dotenv.config();
  */
 async function startServer() {
   const app = createApp();
-  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  // AI Studio requires the dev server to run on port 3000
+  const PORT = 3000;
 
   // Mount Vite dev server in non-production environments
   if (process.env.NODE_ENV !== 'production') {

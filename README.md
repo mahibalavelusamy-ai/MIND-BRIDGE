@@ -463,9 +463,16 @@ cp .env.example .env
 | Variable | Description | Required? |
 | :--- | :--- | :---: |
 | `GEMINI_API_KEY` | Google Gemini API Key for server-side inference | Yes (In production) |
+| `FIREBASE_SERVICE_ACCOUNT` | JSON string or path to Firebase Admin service account key | Recommended (Production Auth) |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Standard GCP service account credentials file path | Optional |
+| `DEMO_MODE` | Set to `"true"` to enable sandbox demo shortcuts (rejected in prod) | No |
 | `PORT` | Express server port (Default: `3000`) | No |
 | `NODE_ENV` | Environment mode (`development`, `production`, `test`) | No |
 | `APP_URL` | Domain URL for CORS allowlist | No |
+
+### Firestore Security Rules Testing Status
+Rule permissions (`isOwner`, `isParentOf`, `isTeacherOrClinicianOrCaretaker`, `isAdmin`) and raw student reflection privacy protections are directly validated in `src/lib/permissions.test.ts` (14 tests) and `src/services/analytics/permissionFilter.test.ts`. Execution of live `@firebase/rules-unit-testing` against the Firestore Emulator requires a host with Java JRE 11+ installed (`sudo apt install default-jre && firebase emulators:exec --only firestore "vitest run"`). Full emulator testing instructions are detailed in `TESTING.md`.
+
 
 ---
 

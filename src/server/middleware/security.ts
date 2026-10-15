@@ -51,7 +51,7 @@ export const helmetMiddleware = helmet({
  */
 export const apiRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'test' ? 10000 : 200, // relaxed in test
+  max: process.env.NODE_ENV === 'test' ? 10000 : 120, // 120 requests per 15 minutes
   standardHeaders: true,
   legacyHeaders: false,
   message: {
